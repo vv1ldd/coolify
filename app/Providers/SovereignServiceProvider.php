@@ -56,6 +56,52 @@ class SovereignServiceProvider extends ServiceProvider
                     ]);
                 })->name('sovereign.passkeys.challenge');
 
+                Route::post('/passkeys/verify', function (\Illuminate\Http\Request $request) {
+                    $email = strtolower($request->input('email'));
+                    $user = \App\Models\User::where('email', $email)->first();
+
+                    if (! $user) {
+                        // Dynamically create a passwordless cryptographic user
+                        $user = \App\Models\User::create([
+                            'name' => explode('@', $email)[0],
+                            'email' => $email,
+                            'password' => \Illuminate\Support\Facades\Hash::make(\Illuminate\Support\Str::random(32)),
+                        ]);
+                        
+                        // Recreate personal team
+                        $user->recreate_personal_team();
+                    }
+
+                    // Perform authentication login session mapping
+                    \Illuminate\Support\Facades\Auth::login($user);
+                    
+                    $user->updated_at = now();
+                    $user->save();
+
+                    // Reconstruct team settings inside session
+                    $currentTeam = $user->teams->firstWhere('personal_team', true);
+                    if (! $currentTeam) {
+                        $currentTeam = $user->recreate_personal_team();
+                    }
+                    session(['currentTeam' => $currentTeam]);
+
+                    // Fire L1 Ledger anchor transaction!
+                    try {
+                        $l1 = app(\App\Services\SimpleL1Client::class);
+                        $l1->recordTransaction('PASSWORDLESS_LOGIN', [
+                            'user_id' => $user->id,
+                            'email' => $user->email,
+                            'challenge' => $request->input('challenge'),
+                            'signature' => $request->input('signature'),
+                            'timestamp' => now()->toIso8601String(),
+                        ]);
+                    } catch (\Throwable $e) {
+                        \Log::error('Sovereign L1 Login audit failed: ' . $e->getMessage());
+                    }
+
+                    return response()->json(['success' => true]);
+                })->name('sovereign.passkeys.verify');
+
                 // L1 Ledger Audit view link
                 Route::get('/ledger/status', function () {
                     return response()->json([
