@@ -40,6 +40,34 @@
 
 <!-- Describe how you tested these changes. -->
 
+## Mutation Surface Audit
+
+<!-- REQUIRED for mutation-domain changes. Leave "N/A" only when this PR cannot mutate runtime state. -->
+
+Mutation Domain:
+
+Theorem:
+
+Forbidden Bridges:
+
+Negative Invariants:
+
+Surface Enumeration:
+
+- [ ] completed
+
+Surface Classification:
+
+- [ ] DIRECT GRAPH MUTATION handled
+- [ ] AUTHORITY-ADJACENT tested
+- [ ] LEGACY BRIDGES neutralized
+- [ ] TRANSPORT surfaces inert
+- [ ] FUTURE ZONES marked
+
+Lineage Gate:
+
+- [ ] mutation can be explained as reconstructed bounded authority lineage
+
 ## Contributor Agreement
 
 <!-- Do not remove this section. PRs without the contributor agreement will be closed. -->

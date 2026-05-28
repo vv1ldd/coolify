@@ -1,0 +1,22 @@
+name: Constitutional Preflight
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  pull_request:
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run constitutional preflight
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          CONSTITUTIONAL_PREFLIGHT_PHASE: "1"
+        run: bash scripts/check-constitutional-preflight.sh
