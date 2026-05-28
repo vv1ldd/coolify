@@ -5,6 +5,8 @@ namespace App\Livewire\Project\Application;
 use App\Actions\Application\StopApplication;
 use App\Actions\Docker\GetContainersStatus;
 use App\Models\Application;
+use App\Services\InfraLedgerService;
+use App\Services\PolicyEngine;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 use Visus\Cuid2\Cuid2;
@@ -70,9 +72,27 @@ class Heading extends Component
         $this->deploy(force_rebuild: true);
     }
 
-    public function deploy(bool $force_rebuild = false)
+    public function deploy(bool $force_rebuild = false, bool $mandateApproved = false)
     {
         $this->authorize('deploy', $this->application);
+
+        // 🏛️ Sovereign operational approval interception for deploying production workloads
+        if (! $mandateApproved && app(PolicyEngine::class)->requiresApproval('application.deploy')) {
+            app(PolicyEngine::class)->stage(
+                eventType: 'application.deploy',
+                entity: $this->application,
+                payload: [
+                    'application_id' => $this->application->id,
+                    'application_name' => $this->application->name,
+                    'force_rebuild' => $force_rebuild,
+                ],
+                teamId: $this->application->team_id
+            );
+
+            $this->dispatch('success', 'Deployment Intent staged in Pending Pool for cryptographic clearance.');
+
+            return;
+        }
 
         if ($this->application->build_pack === 'dockercompose' && is_null($this->application->docker_compose_raw)) {
             $this->dispatch('error', 'Failed to deploy', 'Please load a Compose file first.');
@@ -111,6 +131,21 @@ class Heading extends Component
             return;
         }
 
+        // ⚓ Sovereign Ledger: Record Execution Intent
+        app(InfraLedgerService::class)->record(
+            eventType: 'application.deploy',
+            entity: $this->application,
+            payload: [
+                'deployment_uuid' => (string) $this->deploymentUuid,
+                'force_rebuild' => $force_rebuild,
+                'server_uuid' => $this->application->destination?->server?->uuid,
+                'build_pack' => $this->application->build_pack,
+            ],
+            inputState: [
+                'status' => $this->application->status,
+            ],
+        );
+
         return $this->redirectRoute('project.application.deployment.show', [
             'project_uuid' => $this->parameters['project_uuid'],
             'application_uuid' => $this->parameters['application_uuid'],
@@ -125,9 +160,39 @@ class Heading extends Component
         $this->parameters['deployment_uuid'] = $this->deploymentUuid;
     }
 
-    public function stop()
+    public function stop(bool $mandateApproved = false)
     {
         $this->authorize('deploy', $this->application);
+
+        // 🏛️ Sovereign operational approval interception for terminating container workloads
+        if (! $mandateApproved && app(PolicyEngine::class)->requiresApproval('application.stop')) {
+            app(PolicyEngine::class)->stage(
+                eventType: 'application.stop',
+                entity: $this->application,
+                payload: [
+                    'application_id' => $this->application->id,
+                    'application_name' => $this->application->name,
+                ],
+                teamId: $this->application->team_id
+            );
+
+            $this->dispatch('success', 'Termination Intent staged in Pending Pool for cryptographic clearance.');
+
+            return;
+        }
+
+        // ⚓ Sovereign Ledger: Record Stop Intent
+        app(InfraLedgerService::class)->record(
+            eventType: 'application.stop',
+            entity: $this->application,
+            payload: [
+                'docker_cleanup' => $this->docker_cleanup,
+                'server_uuid' => $this->application->destination?->server?->uuid,
+            ],
+            inputState: [
+                'status' => $this->application->status,
+            ],
+        );
 
         $this->dispatch('info', 'Gracefully stopping application.<br/>It could take a while depending on the application.');
         StopApplication::dispatch($this->application, false, $this->docker_cleanup);
@@ -159,6 +224,19 @@ class Heading extends Component
 
             return;
         }
+
+        // ⚓ Sovereign Ledger: Record Restart Intent
+        app(InfraLedgerService::class)->record(
+            eventType: 'application.restart',
+            entity: $this->application,
+            payload: [
+                'deployment_uuid' => (string) $this->deploymentUuid,
+                'server_uuid' => $this->application->destination?->server?->uuid,
+            ],
+            inputState: [
+                'status' => $this->application->status,
+            ],
+        );
 
         return $this->redirectRoute('project.application.deployment.show', [
             'project_uuid' => $this->parameters['project_uuid'],

@@ -7,8 +7,20 @@
         <x-server.sidebar :server="$server" activeMenu="general" />
         <div class="w-full">
             <form wire:submit.prevent='submit' class="flex flex-col">
-                <div class="flex gap-2">
+                <div class="flex gap-2 items-center">
                     <h2>General</h2>
+                    <div class="flex items-center ml-2">
+                        @if ($isSovereignShielded)
+                            <div title="Sovereign infrastructure hardening is active: Firewall, Fail2Ban, and Docker protection enabled." class="flex items-center gap-1.5 px-2 py-1 text-[10px] uppercase font-extrabold tracking-widest rounded border border-green-500/30 bg-green-500/10 text-green-500 cursor-help transition-all">
+                                🛡️ SHIELDED
+                            </div>
+                        @elseif($server->isFunctional())
+                            <x-forms.button wire:click.prevent="shieldSovereignServer" wire:target="shieldSovereignServer" wire:loading.attr="disabled" title="Harden this node using Sovereign protection scripts" class="!bg-red-500/10 !text-red-500 !border-red-500/30 hover:!bg-red-500/20 text-[10px] py-1 px-2 uppercase font-extrabold tracking-widest transition-all">
+                                <span wire:loading.remove wire:target="shieldSovereignServer">🛡️ ACTIVATE SHIELD</span>
+                                <span wire:loading wire:target="shieldSovereignServer">⚡ DEPLOYING...</span>
+                            </x-forms.button>
+                        @endif
+                    </div>
                     @if ($server->hetzner_server_id)
                         <div class="flex items-center">
                             <div @class([

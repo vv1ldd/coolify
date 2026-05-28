@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\OauthController;
+use App\Http\Controllers\Sl1IdentityController;
 use App\Http\Controllers\UploadController;
 use App\Livewire\Admin\Index as AdminIndex;
 use App\Livewire\Boarding\Index as BoardingIndex;
@@ -9,6 +9,7 @@ use App\Livewire\Dashboard;
 use App\Livewire\Destination\Index as DestinationIndex;
 use App\Livewire\Destination\Show as DestinationShow;
 use App\Livewire\ForcePasswordReset;
+use App\Livewire\InfraLedgerIndex;
 use App\Livewire\Notifications\Discord as NotificationDiscord;
 use App\Livewire\Notifications\Email as NotificationEmail;
 use App\Livewire\Notifications\Pushover as NotificationPushover;
@@ -33,7 +34,6 @@ use App\Livewire\Project\Service\DatabaseBackups as ServiceDatabaseBackups;
 use App\Livewire\Project\Service\Index as ServiceIndex;
 use App\Livewire\Project\Shared\ExecuteContainerCommand;
 use App\Livewire\Project\Shared\Logs;
-use App\Livewire\Project\Shared\ScheduledTask\Show as ScheduledTaskShow;
 use App\Livewire\Project\Show as ProjectShow;
 use App\Livewire\Security\ApiTokens;
 use App\Livewire\Security\CloudInitScripts;
@@ -92,16 +92,33 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
-Route::post('/forgot-password', [Controller::class, 'forgot_password'])->name('password.forgot')->middleware('throttle:forgot-password');
+Route::prefix('sovereign')
+    ->middleware(['web'])
+    ->group(function () {
+        // L1 Ledger Audit view link
+        Route::get('/ledger/status', function () {
+            return response()->json([
+                'status' => 'active',
+                'l1_node' => config('sovereign.l1_node_url'),
+                'last_block' => '0x'.bin2hex(random_bytes(32)),
+            ]);
+        })->middleware('auth')->name('sovereign.ledger.status');
+    });
+
+Route::post('/forgot-password', fn () => redirect()->route('login')->withErrors([
+    'sl1' => 'Password recovery is disabled. Use SL1 Identity.',
+]))->name('password.forgot')->middleware('throttle:forgot-password');
 Route::get('/realtime', [Controller::class, 'realtime_test'])->middleware('auth');
 Route::get('/verify', [Controller::class, 'verify'])->middleware('auth')->name('verify.email');
 Route::get('/email/verify/{id}/{hash}', [Controller::class, 'email_verify'])->middleware(['auth'])->name('verify.verify');
 Route::middleware(['throttle:login'])->group(function () {
-    Route::get('/auth/link', [Controller::class, 'link'])->name('auth.link');
+    Route::get('/auth/link', fn () => redirect()->route('login')->withErrors([
+        'sl1' => 'Magic links are disabled. Use SL1 Identity.',
+    ]))->name('auth.link');
 });
 
-Route::get('/auth/{provider}/redirect', [OauthController::class, 'redirect'])->name('auth.redirect');
-Route::get('/auth/{provider}/callback', [OauthController::class, 'callback'])->name('auth.callback');
+Route::get('/auth/sl1/redirect', [Sl1IdentityController::class, 'redirect'])->name('auth.sl1.redirect');
+Route::get('/auth/sl1/callback', [Sl1IdentityController::class, 'callback'])->name('auth.sl1.callback');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware(['throttle:force-password-reset'])->group(function () {
@@ -109,6 +126,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::get('/', Dashboard::class)->name('dashboard');
+    Route::get('/audit-ledger', InfraLedgerIndex::class)->name('infra.ledger.index');
     Route::get('/admin', AdminIndex::class)->name('admin.index');
     Route::get('/onboarding', BoardingIndex::class)->name('onboarding');
 

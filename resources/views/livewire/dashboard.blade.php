@@ -6,7 +6,155 @@
         <span x-data x-init="$wire.emit('error', '{{ session('error') }}')" />
     @endif
     <h1>Dashboard</h1>
-    <div class="subtitle">Your self-hosted infrastructure.</div>
+    <div class="subtitle mb-6">Your self-hosted infrastructure.</div>
+
+    <!-- 🚩 Sovereign High-Fidelity Welcome Banner -->
+    <div class="card-neo mb-6 p-6 relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-br from-red-50 to-white dark:from-[rgba(245,48,3,0.06)] dark:to-[#090909] bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg">
+        <div>
+            <div class="flex gap-2 mb-3">
+                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-[#f53003] bg-[#f53003]/10" 
+                      style="box-shadow: 1.5px 1.5px 0px #000000;">
+                    SOVEREIGN SYSTEMS
+                </span>
+                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-[#10b981] bg-[#10b981]/10"
+                      style="box-shadow: 1.5px 1.5px 0px #000000;">
+                    INFRASTRUCTURE SHIELDED
+                </span>
+            </div>
+            <h2 class="text-2xl font-black text-black dark:text-white m-0 tracking-tight" style="font-family: 'Space Grotesk', sans-serif;">
+                SOVEREIGN PORTAL
+            </h2>
+            <p class="text-neutral-600 dark:text-neutral-400 mt-1.5 text-xs font-semibold max-w-2xl leading-relaxed">
+                Добро пожаловать в Sovereign Infrastructure Portal — единую консоль управления автоматическими деплоями, серверами и изолированными крипто-нодами вашей приватной сети.
+            </p>
+        </div>
+        <!-- Right side quick balance/mandate indicator if active -->
+        <div class="flex flex-col gap-1.5">
+            <span class="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Network status</span>
+            <div class="flex items-center gap-1.5 bg-[#fcd452] text-black border-2 border-black px-2 py-1 rounded font-bold uppercase tracking-widest text-[9px]" style="box-shadow: 2px 2px 0px #000000; width: fit-content;">
+                <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse border border-black"></div>
+                <span>CLEARING: ACTIVE</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📊 Sovereign Quick Infrastructure Metrics Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="card-neo p-4 flex flex-col justify-between bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg min-h-[90px]">
+            <div>
+                <div class="text-[10px] font-bold text-neutral-600 dark:text-neutral-400 uppercase tracking-widest">Active Projects</div>
+                <div class="text-xl font-black text-black dark:text-white mt-1" style="font-family: 'Space Grotesk', sans-serif;">
+                    {{ $projects->count() }} <span class="text-neutral-500 text-xs font-semibold">environments</span>
+                </div>
+            </div>
+        </div>
+        <div class="card-neo p-4 flex flex-col justify-between bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg min-h-[90px]">
+            <div>
+                <div class="text-[10px] font-bold text-neutral-600 dark:text-neutral-400 uppercase tracking-widest">Validated Servers</div>
+                <div class="text-xl font-black text-[#f53003] mt-1" style="font-family: 'Space Grotesk', sans-serif;">
+                    {{ $servers->count() }} <span class="text-neutral-500 text-xs font-semibold">nodes online</span>
+                </div>
+            </div>
+        </div>
+        <div class="card-neo p-4 flex flex-col justify-between bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg min-h-[90px]">
+            <div>
+                <div class="text-[10px] font-bold text-neutral-600 dark:text-neutral-400 uppercase tracking-widest">Crypto Identity</div>
+                <div class="text-xl font-black text-[#10b981] mt-1" style="font-family: 'Space Grotesk', sans-serif;">
+                    Touch ID / Passkey <span class="text-neutral-500 text-xs font-semibold">secured</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🏛️ Sovereign Audit Ledger (Крипто-История) Widget -->
+    @if ($successMessage)
+        <div class="card-neo mb-6 p-4 flex justify-between items-center bg-emerald-950/20 text-emerald-400 border-2 border-emerald-500 rounded" 
+             style="box-shadow: 4px 4px 0px #10b981; border: 3px solid #10b981;">
+            <div class="flex items-center gap-2">
+                <svg class="w-5 h-5 text-emerald-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                </svg>
+                <span class="text-xs font-black uppercase tracking-wider">{{ $successMessage }}</span>
+            </div>
+            <button wire:click="dismissMessage" class="text-xs font-black uppercase bg-transparent text-emerald-400 hover:text-white border border-emerald-500 px-2 py-0.5 rounded cursor-pointer transition">
+                Dismiss
+            </button>
+        </div>
+    @endif
+
+    <div class="card-neo mb-8 p-6 bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-4 border-b-2 border-neutral-200 dark:border-neutral-800">
+            <div>
+                <div class="flex items-center gap-2">
+                    <h3 class="text-lg font-black text-black dark:text-white m-0 tracking-tight" style="font-family: 'Space Grotesk', sans-serif;">
+                        SOVEREIGN AUDIT LEDGER
+                    </h3>
+                    <span class="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border border-black text-[#f53003] bg-[#f53003]/10" 
+                          style="box-shadow: 1px 1px 0px #000000;">
+                        Consortium L1 Verified
+                    </span>
+                </div>
+                <p class="text-neutral-600 dark:text-neutral-400 mt-1 text-[11px] font-semibold leading-relaxed">
+                    Deploys, consensus shifts, and server hardening actions recorded onto an immutable, verifiable chain.
+                </p>
+            </div>
+            <button wire:click="auditState" wire:loading.attr="disabled"
+                    class="bg-[#f53003] text-white font-black uppercase tracking-widest text-[10px] px-4 py-2 border-2 border-black rounded transition hover:-translate-y-0.5"
+                    style="box-shadow: 3px 3px 0px #000000; font-family: 'Space Grotesk', sans-serif;">
+                <span wire:loading.remove>Audit State Checkpoint</span>
+                <span wire:loading>Sealing Consensus...</span>
+            </button>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b-2 border-black bg-neutral-100 dark:bg-neutral-900/60">
+                        <th class="p-3 text-[10px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">Timestamp</th>
+                        <th class="p-3 text-[10px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">Event Type</th>
+                        <th class="p-3 text-[10px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">Payload Details</th>
+                        <th class="p-3 text-[10px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">Cryptographic Hash (SHA-256)</th>
+                        <th class="p-3 text-[10px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">L1 Signature</th>
+                        <th class="p-3 text-[10px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-neutral-200 dark:divide-neutral-900">
+                    @foreach (array_slice($auditEvents, 0, 5) as $event)
+                        <tr class="hover:bg-neutral-100 dark:hover:bg-neutral-900/30 transition">
+                            <td class="p-3 text-[11px] font-bold text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
+                                {{ $event['timestamp'] }}
+                            </td>
+                            <td class="p-3">
+                                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-amber-500 bg-amber-500/10" 
+                                      style="box-shadow: 1px 1px 0px #000000;">
+                                    {{ $event['event_type'] }}
+                                </span>
+                            </td>
+                            <td class="p-3 text-xs font-semibold text-neutral-800 dark:text-neutral-200">
+                                {{ $event['details'] }}
+                            </td>
+                            <td class="p-3">
+                                <code class="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-black text-[#f53003] border border-neutral-300 dark:border-neutral-800 text-[10px] font-bold" title="{{ $event['hash'] }}">
+                                    {{ substr($event['hash'], 0, 10) }}...{{ substr($event['hash'], -8) }}
+                                </code>
+                            </td>
+                            <td class="p-3">
+                                <code class="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-black text-emerald-600 dark:text-emerald-400 border border-neutral-300 dark:border-neutral-800 text-[10px] font-bold">
+                                    {{ $event['signature'] }}
+                                </code>
+                            </td>
+                            <td class="p-3">
+                                <div class="flex items-center gap-1.5 text-emerald-500 font-bold uppercase tracking-widest text-[9px]">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse border border-black"></span>
+                                    <span>{{ $event['status'] }}</span>
+                                </div>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <section class="-mt-2">
         <div class="flex items-center gap-2 pb-2">

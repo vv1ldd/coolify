@@ -3,6 +3,7 @@
 namespace App\Actions\Server;
 
 use App\Models\Server;
+use App\Services\InfraLedgerService;
 use Lorisleiva\Actions\Concerns\AsAction;
 
 class ValidateServer
@@ -35,6 +36,21 @@ class ValidateServer
             $server->update([
                 'validation_logs' => $this->error,
             ]);
+
+            // ⚓ Sovereign Ledger: server.validate FAILED
+            rescue(fn () => app(InfraLedgerService::class)->record(
+                eventType: 'server.validate',
+                entity: $server,
+                payload: [
+                    'uuid' => $server->uuid,
+                    'name' => $server->name,
+                    'result' => 'failed',
+                    'reason' => 'connection_refused',
+                ],
+                outputState: ['result' => 'failed', 'error' => 'connection_refused'],
+                teamId: $server->team_id,
+            ));
+
             throw new \Exception($this->error);
         }
         $this->supported_os_type = $server->validateOS();
@@ -68,6 +84,21 @@ class ValidateServer
         $this->docker_version = $server->validateDockerEngineVersion();
 
         if ($this->docker_version) {
+            // ⚓ Sovereign Ledger: server.validated — node is ready to accept workloads
+            rescue(fn () => app(InfraLedgerService::class)->record(
+                eventType: 'server.validated',
+                entity: $server,
+                payload: [
+                    'uuid' => $server->uuid,
+                    'name' => $server->name,
+                    'os_type' => $this->supported_os_type,
+                    'docker_version' => $this->docker_version,
+                    'docker_compose' => (bool) $this->docker_compose_installed,
+                ],
+                outputState: ['result' => 'success', 'uptime' => $this->uptime],
+                teamId: $server->team_id,
+            ));
+
             return 'OK';
         } else {
             $this->error = 'Docker Engine is not installed. Please install Docker manually before continuing: <a target="_blank" class="text-black underline dark:text-white" href="https://docs.docker.com/engine/install/#server">documentation</a>.';

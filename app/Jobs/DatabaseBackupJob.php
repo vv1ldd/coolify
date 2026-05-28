@@ -568,21 +568,29 @@ class DatabaseBackupJob implements ShouldBeEncrypted, ShouldQueue
     {
         try {
             $commands[] = 'mkdir -p '.$this->backup_dir;
-            $backupCommand = 'docker exec';
-            if ($this->postgres_password) {
-                $backupCommand .= ' -e PGPASSWORD='.escapeshellarg($this->postgres_password);
-            }
-            $escapedUsername = escapeshellarg($this->database->postgres_user);
-            if ($this->backup->dump_all) {
-                $backupCommand .= " $this->container_name pg_dumpall --username $escapedUsername | gzip > $this->backup_location";
+            if ($this->database->name === 'coolify-db') {
+                $sqlitePath = database_path('database.sqlite');
+                if (file_exists($sqlitePath)) {
+                    $commands[] = 'sqlite3 '.escapeshellarg($sqlitePath).' ".backup '.escapeshellarg($this->backup_location).'"';
+                } else {
+                    throw new \Exception("SQLite database file not found at: $sqlitePath");
+                }
             } else {
-                // Validate and escape database name to prevent command injection
-                validateShellSafePath($database, 'database name');
-                $escapedDatabase = escapeshellarg($database);
-                $backupCommand .= " $this->container_name pg_dump --format=custom --no-acl --no-owner --username $escapedUsername $escapedDatabase > $this->backup_location";
+                $backupCommand = 'docker exec';
+                if ($this->postgres_password) {
+                    $backupCommand .= ' -e PGPASSWORD='.escapeshellarg($this->postgres_password);
+                }
+                $escapedUsername = escapeshellarg($this->database->postgres_user);
+                if ($this->backup->dump_all) {
+                    $backupCommand .= " $this->container_name pg_dumpall --username $escapedUsername | gzip > $this->backup_location";
+                } else {
+                    // Validate and escape database name to prevent command injection
+                    validateShellSafePath($database, 'database name');
+                    $escapedDatabase = escapeshellarg($database);
+                    $backupCommand .= " $this->container_name pg_dump --format=custom --no-acl --no-owner --username $escapedUsername $escapedDatabase > $this->backup_location";
+                }
+                $commands[] = $backupCommand;
             }
-
-            $commands[] = $backupCommand;
             $this->backup_output = instant_remote_process($commands, $this->server, true, false, $this->timeout, disableMultiplexing: true);
             $this->backup_output = trim($this->backup_output);
             if ($this->backup_output === '') {

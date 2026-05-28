@@ -80,20 +80,22 @@ return new class extends Migration
             ]);
 
         // After successful migration, we can drop the old foreign key columns
-        Schema::table('environment_variables', function (Blueprint $table) {
-            $table->dropColumn([
-                'application_id',
-                'service_id',
-                'standalone_postgresql_id',
-                'standalone_redis_id',
-                'standalone_mongodb_id',
-                'standalone_mysql_id',
-                'standalone_mariadb_id',
-                'standalone_keydb_id',
-                'standalone_dragonfly_id',
-                'standalone_clickhouse_id',
-            ]);
-        });
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            Schema::table('environment_variables', function (Blueprint $table) {
+                $table->dropColumn([
+                    'application_id',
+                    'service_id',
+                    'standalone_postgresql_id',
+                    'standalone_redis_id',
+                    'standalone_mongodb_id',
+                    'standalone_mysql_id',
+                    'standalone_mariadb_id',
+                    'standalone_keydb_id',
+                    'standalone_dragonfly_id',
+                    'standalone_clickhouse_id',
+                ]);
+            });
+        }
     }
 
     /**

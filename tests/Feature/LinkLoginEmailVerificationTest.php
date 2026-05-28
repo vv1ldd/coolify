@@ -6,7 +6,6 @@ use App\Models\InstanceSettings;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Once;
 
@@ -23,7 +22,7 @@ beforeEach(function () {
 });
 
 describe('invitation link login', function () {
-    test('does not auto-verify the email address', function () {
+    test('magic link delivery does not auto-verify the email address', function () {
         $team = Team::factory()->create();
         $password = 'test-password-123';
         $user = User::factory()->create([
@@ -33,15 +32,13 @@ describe('invitation link login', function () {
         ]);
         $user->teams()->attach($team->id, ['role' => 'member']);
 
-        $token = Crypt::encryptString("{$user->email}@@@{$password}");
-
-        $this->get(route('auth.link', ['token' => $token]));
+        $this->get(route('auth.link', ['token' => 'legacy-token']))->assertRedirect(route('login'));
 
         $user->refresh();
         expect($user->email_verified_at)->toBeNull();
     });
 
-    test('still logs the user in', function () {
+    test('magic link delivery cannot authenticate a user', function () {
         $team = Team::factory()->create();
         $password = 'test-password-123';
         $user = User::factory()->create([
@@ -51,10 +48,8 @@ describe('invitation link login', function () {
         ]);
         $user->teams()->attach($team->id, ['role' => 'member']);
 
-        $token = Crypt::encryptString("{$user->email}@@@{$password}");
+        $this->get(route('auth.link', ['token' => 'legacy-token']))->assertRedirect(route('login'));
 
-        $this->get(route('auth.link', ['token' => $token]));
-
-        expect(auth()->id())->toBe($user->id);
+        expect(auth()->id())->toBeNull();
     });
 });

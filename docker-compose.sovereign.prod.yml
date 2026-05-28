@@ -1,0 +1,8 @@
+services:
+  coolify:
+    image: "${COOLIFY_IMAGE:-ghcr.io/vv1ldd/coolify:sovereign}"
+    pull_policy: always
+
+  soketi:
+    image: "${SOVEREIGN_REALTIME_IMAGE:-ghcr.io/coollabsio/coolify-realtime:1.0.13}"
+    pull_policy: always

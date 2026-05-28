@@ -1,0 +1,23 @@
+# documentation: https://github.com/vv1ldd/simple-l1
+# slogan: Sovereign Simple L1 Consensus Node & Validator Runner.
+# category: blockchain
+# tags: blockchain, consensus, validator, sovereign, l1
+# logo: svgs/bitcoin.svg
+
+services:
+  simple-l1-node:
+    image: 'vv1ldd/simple-l1:latest'
+    environment:
+      - SERVICE_FQDN_SIMPLE_L1_NODE_8000
+      - L1_NETWORK=mainnet
+      - L1_PORT=8000
+      - L1_VALIDATOR_NAME=${L1_VALIDATOR_NAME:-sovereign-node}
+      - L1_PASSKEY_IDENTITY=${L1_PASSKEY_IDENTITY:-}
+    volumes:
+      - 'l1-data:/app/data'
+      - 'l1-keys:/app/keys'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

@@ -6,19 +6,11 @@ use App\Events\TestEvent;
 use App\Models\TeamInvitation;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
-use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Str;
-use Laravel\Fortify\Contracts\FailedPasswordResetLinkRequestResponse;
-use Laravel\Fortify\Contracts\SuccessfulPasswordResetLinkRequestResponse;
-use Laravel\Fortify\Fortify;
 
 class Controller extends BaseController
 {
@@ -36,98 +28,37 @@ class Controller extends BaseController
 
     public function verify()
     {
-        return view('auth.verify-email');
+        return redirect()->route('dashboard')->withErrors([
+            'sl1' => 'Email verification is disabled. Identity is verified through SL1.',
+        ]);
     }
 
     public function email_verify(Request $request)
     {
-        if (! $request->hasValidSignature()) {
-            abort(403);
-        }
-
-        $user = auth()->user();
-        if (! $user) {
-            abort(403);
-        }
-
-        if (! hash_equals((string) $request->route('id'), (string) $user->getKey())) {
-            abort(403);
-        }
-
-        if (! hash_equals((string) $request->route('hash'), hash('sha256', $user->getEmailForVerification()))) {
-            abort(403);
-        }
-
-        if (! $user->hasVerifiedEmail()) {
-            $user->markEmailAsVerified();
-            event(new Verified($user));
-        }
-
-        return redirect(RouteServiceProvider::HOME);
+        abort(410, 'Email verification is constitutionally disabled. Use SL1 Identity.');
     }
 
     public function forgot_password(Request $request)
     {
-        if (is_transactional_emails_enabled()) {
-            $arrayOfRequest = $request->only(Fortify::email());
-            $request->merge([
-                'email' => Str::lower($arrayOfRequest['email']),
-            ]);
-            $type = set_transanctional_email_settings();
-            if (blank($type)) {
-                return response()->json(['message' => 'Transactional emails are not active'], 400);
-            }
-            $request->validate([Fortify::email() => 'required|email']);
-            $status = Password::broker(config('fortify.passwords'))->sendResetLink(
-                $request->only(Fortify::email())
-            );
-            if ($status == Password::RESET_LINK_SENT) {
-                return app(SuccessfulPasswordResetLinkRequestResponse::class, ['status' => $status]);
-            }
-            if ($status == Password::RESET_THROTTLED) {
-                return response('Already requested a password reset in the past minutes.', 400);
-            }
-
-            return app(FailedPasswordResetLinkRequestResponse::class, ['status' => $status]);
-        }
-
-        return response()->json(['message' => 'Transactional emails are not active'], 400);
+        return redirect()->route('login')->withErrors([
+            'sl1' => 'Password recovery is disabled. Use SL1 Identity.',
+        ]);
     }
 
     public function link()
     {
-        $token = request()->get('token');
-        if ($token) {
-            $decrypted = Crypt::decryptString($token);
-            $email = str($decrypted)->before('@@@');
-            $password = str($decrypted)->after('@@@');
-            $user = User::whereEmail($email)->first();
-            if (! $user) {
-                return redirect()->route('login');
-            }
-            if (Hash::check($password, $user->password)) {
-                $invitation = TeamInvitation::whereEmail($email);
-                if ($invitation->exists()) {
-                    $team = $invitation->first()->team;
-                    $user->teams()->attach($team->id, ['role' => $invitation->first()->role]);
-                    $invitation->delete();
-                } else {
-                    $team = $user->teams()->first();
-                }
-                Auth::login($user);
-                session(['currentTeam' => $team]);
-
-                return redirect()->route('dashboard');
-            }
-        }
-
-        return redirect()->route('login')->with('error', 'Invalid credentials.');
+        return redirect()->route('login')->withErrors([
+            'sl1' => 'Magic links are disabled. Use SL1 Identity.',
+        ]);
     }
 
     public function showInvitation()
     {
         $invitationUuid = request()->route('uuid');
         $invitation = TeamInvitation::whereUuid($invitationUuid)->firstOrFail();
+        if ($invitation->artifact_version === 'team.invitation.v1') {
+            abort(409, 'SL1 join flow is required for this invitation.');
+        }
         $user = User::whereEmail($invitation->email)->firstOrFail();
 
         if (Auth::id() !== $user->id) {
@@ -152,6 +83,9 @@ class Controller extends BaseController
         $invitationUuid = request()->route('uuid');
 
         $invitation = TeamInvitation::whereUuid($invitationUuid)->firstOrFail();
+        if ($invitation->artifact_version === 'team.invitation.v1') {
+            abort(409, 'SL1 join flow is required for this invitation.');
+        }
         $user = User::whereEmail($invitation->email)->firstOrFail();
 
         if (Auth::id() !== $user->id) {

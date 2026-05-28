@@ -4305,6 +4305,21 @@
         "minversion": "0.0.0",
         "port": "3000"
     },
+    "simple-l1": {
+        "documentation": "https://github.com/vv1ldd/simple-l1?utm_source=coolify.io",
+        "slogan": "Sovereign Simple L1 Consensus Node & Validator Runner.",
+        "compose": "c2VydmljZXM6CiAgc2ltcGxlLWwxLW5vZGU6CiAgICBpbWFnZTogJ3Z2MWxkZC9zaW1wbGUtbDE6bGF0ZXN0JwogICAgZW52aXJvbm1lbnQ6CiAgICAgIC0gU0VSVklDRV9GUUROX1NJTVBMRV9MMV9OT0RFXzgwMDAKICAgICAgLSBMMV9ORVRXT1JLPW1haW5uZXQKICAgICAgLSBMMV9QT1JUPTgwMDAKICAgICAgLSAnTDFfVkFMSURBVE9SX05BTUU9JHtMMV9WQUxJREFUT1JfTkFNRTotc292ZXJlaWduLW5vZGV9JwogICAgICAtICdMMV9QQVNTS0VZX0lERU5USVRZPSR7TDFfUEFTU0tFWV9JREVOVElUWTotfScKICAgIHZvbHVtZXM6CiAgICAgIC0gJ2wxLWRhdGE6L2FwcC9kYXRhJwogICAgICAtICdsMS1rZXlzOi9hcHAva2V5cycKICAgIGhlYWx0aGNoZWNrOgogICAgICB0ZXN0OgogICAgICAgIC0gQ01ECiAgICAgICAgLSBjdXJsCiAgICAgICAgLSAnLWYnCiAgICAgICAgLSAnaHR0cDovLzEyNy4wLjAuMTo4MDAwL2hlYWx0aCcKICAgICAgaW50ZXJ2YWw6IDEwcwogICAgICB0aW1lb3V0OiA1cwogICAgICByZXRyaWVzOiAzCg==",
+        "tags": [
+            "blockchain",
+            "consensus",
+            "validator",
+            "sovereign",
+            "l1"
+        ],
+        "category": "blockchain",
+        "logo": "svgs/bitcoin.svg",
+        "minversion": "0.0.0"
+    },
     "siyuan": {
         "documentation": "https://github.com/siyuan-note/siyuan?utm_source=coolify.io",
         "slogan": "A privacy-first, self-hosted, fully open source personal knowledge management software, written in typescript and golang.",

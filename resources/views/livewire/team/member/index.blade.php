@@ -17,7 +17,7 @@
                                 <tr>
                                     <th class="px-5 py-3 text-xs font-medium text-left uppercase">Name
                                     </th>
-                                    <th class="px-5 py-3 text-xs font-medium text-left uppercase">Email</th>
+                                    <th class="px-5 py-3 text-xs font-medium text-left uppercase">Identity</th>
                                     <th class="px-5 py-3 text-xs font-medium text-left uppercase">Role</th>
                                     <th class="px-5 py-3 text-xs font-medium text-left uppercase">Actions</th>
                                 </tr>

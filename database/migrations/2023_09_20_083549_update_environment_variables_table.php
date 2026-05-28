@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('environment_variables', function (Blueprint $table) {
-            $table->foreignId('service_id')->nullable();
+            if (! Schema::hasColumn('environment_variables', 'service_id')) {
+                $table->foreignId('service_id')->nullable();
+            }
         });
     }
 

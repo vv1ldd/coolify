@@ -3,10 +3,9 @@
 namespace App\Actions\Fortify;
 
 use App\Models\User;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 use Laravel\Fortify\Contracts\UpdatesUserProfileInformation;
+use LogicException;
 
 class UpdateUserProfileInformation implements UpdatesUserProfileInformation
 {
@@ -19,42 +18,14 @@ class UpdateUserProfileInformation implements UpdatesUserProfileInformation
     {
         Validator::make($input, [
             'name' => ['required', 'string', 'max:255'],
-
-            'email' => [
-                'required',
-                'string',
-                'email',
-                'max:255',
-                Rule::unique('users')->ignore($user->id),
-            ],
         ])->validateWithBag('updateProfileInformation');
 
-        if (
-            $input['email'] !== $user->email &&
-            $user instanceof MustVerifyEmail
-        ) {
-            $this->updateVerifiedUser($user, $input);
-        } else {
-            $user->fill([
-                'name' => $input['name'],
-                'email' => $input['email'],
-            ])->save();
+        if (array_key_exists('email', $input) && $input['email'] !== $user->email) {
+            throw new LogicException('Email is an SL1 identity projection and cannot mutate identity authority.');
         }
-    }
 
-    /**
-     * Update the given verified user's profile information.
-     *
-     * @param  array<string, string>  $input
-     */
-    protected function updateVerifiedUser(User $user, array $input): void
-    {
         $user->fill([
             'name' => $input['name'],
-            'email' => $input['email'],
-            'email_verified_at' => null,
         ])->save();
-
-        $user->sendEmailVerificationNotification();
     }
 }

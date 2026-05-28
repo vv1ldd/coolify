@@ -21,7 +21,7 @@ beforeEach(function () {
 });
 
 describe('email verification hash', function () {
-    test('sha256 hash is accepted and marks the user verified', function () {
+    test('sha256 signed email verification cannot mutate identity state', function () {
         $user = User::factory()->create([
             'email' => 'verify-me@example.com',
             'email_verified_at' => null,
@@ -32,13 +32,13 @@ describe('email verification hash', function () {
             'hash' => hash('sha256', $user->getEmailForVerification()),
         ]);
 
-        $this->actingAs($user)->get($url)->assertRedirect();
+        $this->actingAs($user)->get($url)->assertStatus(410);
 
         $user->refresh();
-        expect($user->email_verified_at)->not->toBeNull();
+        expect($user->email_verified_at)->toBeNull();
     });
 
-    test('legacy sha1 hash is rejected', function () {
+    test('legacy sha1 hash cannot mutate identity state', function () {
         $user = User::factory()->create([
             'email' => 'legacy-sha1@example.com',
             'email_verified_at' => null,
@@ -49,13 +49,13 @@ describe('email verification hash', function () {
             'hash' => sha1($user->getEmailForVerification()),
         ]);
 
-        $this->actingAs($user)->get($url)->assertStatus(403);
+        $this->actingAs($user)->get($url)->assertStatus(410);
 
         $user->refresh();
         expect($user->email_verified_at)->toBeNull();
     });
 
-    test('tampered signature is rejected', function () {
+    test('tampered email verification still cannot mutate identity state', function () {
         $user = User::factory()->create([
             'email' => 'tampered@example.com',
             'email_verified_at' => null,
@@ -68,6 +68,9 @@ describe('email verification hash', function () {
 
         $tampered = $url.'x';
 
-        $this->actingAs($user)->get($tampered)->assertStatus(403);
+        $this->actingAs($user)->get($tampered)->assertStatus(410);
+
+        $user->refresh();
+        expect($user->email_verified_at)->toBeNull();
     });
 });

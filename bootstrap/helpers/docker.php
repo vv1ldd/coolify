@@ -86,7 +86,7 @@ function format_docker_command_output_to_json($rawOutput): Collection
         return $outputLines
             ->reject(fn ($line) => empty($line))
             ->map(fn ($outputLine) => json_decode($outputLine, true, flags: JSON_THROW_ON_ERROR));
-    } catch (\Throwable) {
+    } catch (Throwable) {
         return collect([]);
     }
 }
@@ -123,7 +123,7 @@ function format_docker_envs_to_json($rawOutput)
 
             return [$env[0] => $env[1]];
         });
-    } catch (\Throwable) {
+    } catch (Throwable) {
         return collect([]);
     }
 }
@@ -255,12 +255,12 @@ function defaultLabels($id, $name, string $projectName, string $resourceName, st
 
 function generateServiceSpecificFqdns(ServiceApplication|Application $resource)
 {
-    if ($resource->getMorphClass() === \App\Models\ServiceApplication::class) {
+    if ($resource->getMorphClass() === ServiceApplication::class) {
         $uuid = data_get($resource, 'uuid');
         $server = data_get($resource, 'service.server');
         $environment_variables = data_get($resource, 'service.environment_variables');
         $type = $resource->serviceType();
-    } elseif ($resource->getMorphClass() === \App\Models\Application::class) {
+    } elseif ($resource->getMorphClass() === Application::class) {
         $uuid = data_get($resource, 'uuid');
         $server = data_get($resource, 'destination.server');
         $environment_variables = data_get($resource, 'environment_variables');
@@ -411,10 +411,257 @@ function fqdnLabelsForCaddy(string $network, string $uuid, Collection $domains, 
     return $labels->sort();
 }
 
+function normalizeTrafficFilterSourceRanges(array|string|null $sourceRanges): Collection
+{
+    if (is_string($sourceRanges)) {
+        $sourceRanges = explode(',', $sourceRanges);
+    }
+
+    return collect($sourceRanges ?? [])
+        ->map(fn ($sourceRange) => trim((string) $sourceRange))
+        ->filter(fn (string $sourceRange) => isValidTrafficFilterSourceRange($sourceRange))
+        ->unique()
+        ->values();
+}
+
+function isValidTrafficFilterSourceRange(string $sourceRange): bool
+{
+    if ($sourceRange === '') {
+        return false;
+    }
+
+    if (filter_var($sourceRange, FILTER_VALIDATE_IP)) {
+        return true;
+    }
+
+    if (! str_contains($sourceRange, '/')) {
+        return false;
+    }
+
+    [$ip, $prefix] = explode('/', $sourceRange, 2);
+    if (! filter_var($ip, FILTER_VALIDATE_IP) || ! is_numeric($prefix)) {
+        return false;
+    }
+
+    $prefix = (int) $prefix;
+
+    return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+        ? $prefix >= 0 && $prefix <= 32
+        : $prefix >= 0 && $prefix <= 128;
+}
+
+function traefikTrafficFilterSettings(?Server $server = null): array
+{
+    $defaults = config('sovereign.traffic_filter', []);
+    $serverSettings = data_get($server?->proxy, 'traffic_filter', []);
+
+    $settings = array_merge($defaults, is_array($serverSettings) ? $serverSettings : []);
+    $settings['allowed_source_ranges'] = normalizeTrafficFilterSourceRanges(data_get($settings, 'allowed_source_ranges'))->all();
+
+    return $settings;
+}
+
+function traefikTrafficFilterLabels(string $uuid, ?Server $server = null): Collection
+{
+    $settings = traefikTrafficFilterSettings($server);
+    if (! data_get($settings, 'enabled', true)) {
+        return collect();
+    }
+
+    $labels = collect([]);
+    $prefix = "coolify-edge-{$uuid}";
+    $rateLimitAverage = max((int) data_get($settings, 'rate_limit_average', 0), 0);
+    $rateLimitBurst = max((int) data_get($settings, 'rate_limit_burst', 0), 0);
+    $inFlightLimit = max((int) data_get($settings, 'in_flight_request_limit', 0), 0);
+    $sourceRanges = normalizeTrafficFilterSourceRanges(data_get($settings, 'allowed_source_ranges'));
+
+    if ($sourceRanges->isNotEmpty()) {
+        $labels->push("traefik.http.middlewares.{$prefix}-ipallowlist.ipallowlist.sourcerange=".$sourceRanges->join(','));
+    }
+
+    if ($rateLimitAverage > 0) {
+        $labels->push("traefik.http.middlewares.{$prefix}-ratelimit.ratelimit.average={$rateLimitAverage}");
+        $labels->push("traefik.http.middlewares.{$prefix}-ratelimit.ratelimit.burst={$rateLimitBurst}");
+        $labels->push("traefik.http.middlewares.{$prefix}-ratelimit.ratelimit.period=1s");
+    }
+
+    if ($inFlightLimit > 0) {
+        $labels->push("traefik.http.middlewares.{$prefix}-inflight.inflightreq.amount={$inFlightLimit}");
+    }
+
+    if (data_get($settings, 'security_headers_enabled', true)) {
+        $labels->push("traefik.http.middlewares.{$prefix}-headers.headers.contenttypenosniff=true");
+        $labels->push("traefik.http.middlewares.{$prefix}-headers.headers.browserxssfilter=true");
+        $labels->push("traefik.http.middlewares.{$prefix}-headers.headers.referrerpolicy=no-referrer");
+    }
+
+    return $labels;
+}
+
+function traefikTrafficFilterMiddlewares(string $uuid, ?Server $server = null): Collection
+{
+    $settings = traefikTrafficFilterSettings($server);
+    if (! data_get($settings, 'enabled', true)) {
+        return collect();
+    }
+
+    $prefix = "coolify-edge-{$uuid}";
+    $middlewares = collect([]);
+
+    if (normalizeTrafficFilterSourceRanges(data_get($settings, 'allowed_source_ranges'))->isNotEmpty()) {
+        $middlewares->push("{$prefix}-ipallowlist");
+    }
+
+    if ((int) data_get($settings, 'rate_limit_average', 0) > 0) {
+        $middlewares->push("{$prefix}-ratelimit");
+    }
+
+    if ((int) data_get($settings, 'in_flight_request_limit', 0) > 0) {
+        $middlewares->push("{$prefix}-inflight");
+    }
+
+    if (data_get($settings, 'security_headers_enabled', true)) {
+        $middlewares->push("{$prefix}-headers");
+    }
+
+    return $middlewares;
+}
+
+function normalizeTrafficFilterUserAgentPatterns(array|string|null $patterns): Collection
+{
+    if (is_string($patterns)) {
+        $patterns = explode(',', $patterns);
+    }
+
+    return collect($patterns ?? [])
+        ->map(fn ($pattern) => trim((string) $pattern))
+        ->filter()
+        ->map(fn (string $pattern) => preg_quote($pattern, '/'))
+        ->unique()
+        ->values();
+}
+
+function traefikTrafficFilterUserAgentRegex(?Server $server = null): ?string
+{
+    $settings = traefikTrafficFilterSettings($server);
+    $patterns = normalizeTrafficFilterUserAgentPatterns(data_get($settings, 'suspicious_user_agent_patterns'));
+
+    if ($patterns->isEmpty()) {
+        return null;
+    }
+
+    return '(?i)('.$patterns->join('|').')';
+}
+
+function traefikTrafficFilterUserAgentRouterLabels(string $labelPrefix, string $host, string $path, string $schema, ?Server $server = null): Collection
+{
+    $settings = traefikTrafficFilterSettings($server);
+    if (! data_get($settings, 'enabled', true) || ! data_get($settings, 'user_agent_filter_enabled', true)) {
+        return collect();
+    }
+
+    $labels = collect([]);
+    $rules = collect([]);
+    if (data_get($settings, 'block_empty_user_agent', true)) {
+        $rules->put('empty-ua', "Host(`{$host}`) && PathPrefix(`{$path}`) && !HeaderRegexp(`User-Agent`, `.+`)");
+    }
+
+    $suspiciousUserAgentRegex = traefikTrafficFilterUserAgentRegex($server);
+    if ($suspiciousUserAgentRegex) {
+        $rules->put('bad-ua', "Host(`{$host}`) && PathPrefix(`{$path}`) && HeaderRegexp(`User-Agent`, `{$suspiciousUserAgentRegex}`)");
+    }
+
+    if ($rules->isEmpty()) {
+        return $labels;
+    }
+
+    $entrypoints = $schema === 'https'
+        ? ['http', 'https']
+        : ['http'];
+
+    foreach ($rules as $ruleName => $rule) {
+        foreach ($entrypoints as $entrypoint) {
+            $routerName = "{$labelPrefix}-{$ruleName}-{$entrypoint}";
+            $labels->push("traefik.http.routers.{$routerName}.rule={$rule}");
+            $labels->push("traefik.http.routers.{$routerName}.entryPoints={$entrypoint}");
+            $labels->push("traefik.http.routers.{$routerName}.priority=100000");
+            $labels->push("traefik.http.routers.{$routerName}.service=noop@internal");
+
+            if ($entrypoint === 'https') {
+                $labels->push("traefik.http.routers.{$routerName}.tls=true");
+                $labels->push("traefik.http.routers.{$routerName}.tls.certresolver=letsencrypt");
+            }
+        }
+    }
+
+    return $labels;
+}
+
+function normalizeTrafficFilterPathPrefixes(array|string|null $paths): Collection
+{
+    if (is_string($paths)) {
+        $paths = explode(',', $paths);
+    }
+
+    return collect($paths ?? [])
+        ->map(fn ($path) => trim((string) $path))
+        ->filter()
+        ->map(fn (string $path) => str_starts_with($path, '/') ? $path : "/{$path}")
+        ->filter(fn (string $path) => preg_match('#^/[a-zA-Z0-9._~/%+-]+$#', $path) === 1)
+        ->unique()
+        ->values();
+}
+
+function traefikTrafficFilterProbeRouterLabels(string $labelPrefix, string $host, string $schema, ?Server $server = null): Collection
+{
+    $settings = traefikTrafficFilterSettings($server);
+    if (! data_get($settings, 'enabled', true) || ! data_get($settings, 'probe_path_filter_enabled', true)) {
+        return collect();
+    }
+
+    $paths = normalizeTrafficFilterPathPrefixes(data_get($settings, 'suspicious_path_prefixes'));
+    if ($paths->isEmpty()) {
+        return collect();
+    }
+
+    $rule = "Host(`{$host}`) && (".$paths
+        ->map(fn (string $path) => "PathPrefix(`{$path}`)")
+        ->join(' || ').')';
+
+    $labels = collect([]);
+    $entrypoints = $schema === 'https'
+        ? ['http', 'https']
+        : ['http'];
+
+    foreach ($entrypoints as $entrypoint) {
+        $routerName = "{$labelPrefix}-probe-{$entrypoint}";
+        $labels->push("traefik.http.routers.{$routerName}.rule={$rule}");
+        $labels->push("traefik.http.routers.{$routerName}.entryPoints={$entrypoint}");
+        $labels->push("traefik.http.routers.{$routerName}.priority=100000");
+        $labels->push("traefik.http.routers.{$routerName}.service=noop@internal");
+
+        if ($entrypoint === 'https') {
+            $labels->push("traefik.http.routers.{$routerName}.tls=true");
+            $labels->push("traefik.http.routers.{$routerName}.tls.certresolver=letsencrypt");
+        }
+    }
+
+    return $labels;
+}
+
+function appendTraefikTrafficFilterMiddlewares(Collection $middlewares, string $uuid, ?Server $server = null): Collection
+{
+    traefikTrafficFilterMiddlewares($uuid, $server)
+        ->each(fn (string $middleware) => $middlewares->push($middleware));
+
+    return $middlewares;
+}
+
 function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_https_enabled = false, $onlyPort = null, ?Collection $serviceLabels = null, ?bool $is_gzip_enabled = true, ?bool $is_stripprefix_enabled = true, ?string $service_name = null, bool $generate_unique_uuid = false, ?string $image = null, string $redirect_direction = 'both', bool $is_http_basic_auth_enabled = false, ?string $http_basic_auth_username = null, ?string $http_basic_auth_password = null)
 {
     $labels = collect([]);
     $labels->push('traefik.enable=true');
+    $labels = $labels->merge(traefikTrafficFilterLabels($uuid));
     if ($is_gzip_enabled) {
         $labels->push('traefik.http.middlewares.gzip.compress=true');
     }
@@ -476,6 +723,21 @@ function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_
                 $http_label = "http-{$loop}-{$uuid}-{$service_name}";
                 $https_label = "https-{$loop}-{$uuid}-{$service_name}";
             }
+            $filter_label_prefix = "coolify-edge-{$loop}-{$uuid}";
+            if ($service_name) {
+                $filter_label_prefix = "{$filter_label_prefix}-{$service_name}";
+            }
+            $labels = $labels->merge(traefikTrafficFilterUserAgentRouterLabels(
+                labelPrefix: $filter_label_prefix,
+                host: $host,
+                path: $path,
+                schema: $schema,
+            ));
+            $labels = $labels->merge(traefikTrafficFilterProbeRouterLabels(
+                labelPrefix: $filter_label_prefix,
+                host: $host,
+                schema: $schema,
+            ));
             if (str($image)->contains('ghost')) {
                 $labels->push("traefik.http.middlewares.redir-ghost-{$uuid}.redirectregex.regex=^{$path}/(.*)");
                 $labels->push("traefik.http.middlewares.redir-ghost-{$uuid}.redirectregex.replacement=/$1");
@@ -528,6 +790,7 @@ function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_
                     if ($is_http_basic_auth_enabled) {
                         $middlewares->push($http_basic_auth_label);
                     }
+                    $middlewares = appendTraefikTrafficFilterMiddlewares($middlewares, $uuid);
                     $middlewares_from_labels->each(function ($middleware_name) use ($middlewares) {
                         $middlewares->push($middleware_name);
                     });
@@ -554,6 +817,7 @@ function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_
                     if ($is_http_basic_auth_enabled) {
                         $middlewares->push($http_basic_auth_label);
                     }
+                    $middlewares = appendTraefikTrafficFilterMiddlewares($middlewares, $uuid);
                     $middlewares_from_labels->each(function ($middleware_name) use ($middlewares) {
                         $middlewares->push($middleware_name);
                     });
@@ -573,7 +837,8 @@ function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_
                     $labels->push("traefik.http.routers.{$http_label}.service={$http_label}");
                 }
                 if ($is_force_https_enabled) {
-                    $labels->push("traefik.http.routers.{$http_label}.middlewares=redirect-to-https");
+                    $middlewares = appendTraefikTrafficFilterMiddlewares(collect(['redirect-to-https']), $uuid);
+                    $labels->push("traefik.http.routers.{$http_label}.middlewares=".$middlewares->join(','));
                 }
             } else {
                 // Set labels for http
@@ -606,6 +871,7 @@ function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_
                     if ($is_http_basic_auth_enabled) {
                         $middlewares->push($http_basic_auth_label);
                     }
+                    $middlewares = appendTraefikTrafficFilterMiddlewares($middlewares, $uuid);
                     $middlewares_from_labels->each(function ($middleware_name) use ($middlewares) {
                         $middlewares->push($middleware_name);
                     });
@@ -632,6 +898,7 @@ function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_
                     if ($is_http_basic_auth_enabled) {
                         $middlewares->push($http_basic_auth_label);
                     }
+                    $middlewares = appendTraefikTrafficFilterMiddlewares($middlewares, $uuid);
                     $middlewares_from_labels->each(function ($middleware_name) use ($middlewares) {
                         $middlewares->push($middleware_name);
                     });
@@ -641,7 +908,7 @@ function fqdnLabelsForTraefik(string $uuid, Collection $domains, bool $is_force_
                     }
                 }
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             continue;
         }
     }
@@ -1219,7 +1486,7 @@ function validateComposeFile(string $compose, int $server_id): string|Throwable
     $server = Server::ownedByCurrentTeam()->find($server_id);
     try {
         if (! $server) {
-            throw new \Exception('Server not found');
+            throw new Exception('Server not found');
         }
         $yaml_compose = Yaml::parse($compose);
 
@@ -1235,7 +1502,7 @@ function validateComposeFile(string $compose, int $server_id): string|Throwable
         ], $server);
 
         return 'OK';
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
         return $e->getMessage();
     } finally {
         if (filled($server)) {
@@ -1351,10 +1618,10 @@ function escapeBashDoubleQuoted(?string $value): string
  * Generate Docker build arguments from environment variables collection
  * Returns only keys (no values) since values are sourced from environment via export
  *
- * @param  \Illuminate\Support\Collection|array  $variables  Collection of variables with 'key', 'value', and optionally 'is_multiline'
- * @return \Illuminate\Support\Collection Collection of formatted --build-arg strings (keys only)
+ * @param  Collection|array  $variables  Collection of variables with 'key', 'value', and optionally 'is_multiline'
+ * @return Collection Collection of formatted --build-arg strings (keys only)
  */
-function generateDockerBuildArgs($variables): \Illuminate\Support\Collection
+function generateDockerBuildArgs($variables): Collection
 {
     $variables = collect($variables);
 
@@ -1369,7 +1636,7 @@ function generateDockerBuildArgs($variables): \Illuminate\Support\Collection
 /**
  * Generate Docker environment flags from environment variables collection
  *
- * @param  \Illuminate\Support\Collection|array  $variables  Collection of variables with 'key', 'value', and optionally 'is_multiline'
+ * @param  Collection|array  $variables  Collection of variables with 'key', 'value', and optionally 'is_multiline'
  * @return string Space-separated environment flags
  */
 function generateDockerEnvFlags($variables): string

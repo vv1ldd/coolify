@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -12,8 +13,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('environment_variables', function (Blueprint $table) {
-            $table->dropColumn('service_id');
-            $table->dropColumn('database_id');
+            if (DB::connection()->getDriverName() !== 'sqlite') {
+                $table->dropColumn('service_id');
+                $table->dropColumn('database_id');
+            }
             $table->foreignId('standalone_postgresql_id')->nullable();
         });
     }

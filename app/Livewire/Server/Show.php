@@ -40,6 +40,8 @@ class Show extends Component
 
     public bool $isUsable;
 
+    public bool $isSovereignShielded = false;
+
     public bool $isSwarmManager;
 
     public bool $isSwarmWorker;
@@ -170,6 +172,9 @@ class Show extends Component
             // Load Hetzner tokens for linking
             $this->loadHetznerTokens();
 
+            // Check Sovereign Node Protection status
+            $this->checkSovereignShieldStatus();
+
         } catch (\Throwable $e) {
             return handleError($e, $this);
         }
@@ -261,6 +266,83 @@ class Show extends Component
     public function refresh()
     {
         $this->syncData();
+        $this->checkSovereignShieldStatus();
+    }
+
+    public function checkSovereignShieldStatus()
+    {
+        try {
+            if ($this->server->isFunctional()) {
+                $output = instant_remote_process(['test -f /etc/sysctl.d/99-wildflow-hardened.conf && echo "SHIELDED" || echo "UNSHIELDED"'], $this->server, false);
+                $this->isSovereignShielded = trim($output) === 'SHIELDED';
+            }
+        } catch (\Throwable $e) {
+            // Silently fail if not reachable yet
+        }
+    }
+
+    public function shieldSovereignServer()
+    {
+        try {
+            $this->authorize('update', $this->server);
+
+            $bashScript = <<<'BASH'
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y > /dev/null
+apt-get install -y ufw fail2ban unattended-upgrades jq > /dev/null
+
+cat << 'EOF' > /etc/sysctl.d/99-wildflow-hardened.conf
+net.ipv4.tcp_syncookies = 1
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.all.secure_redirects = 0
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+EOF
+sysctl -p /etc/sysctl.d/99-wildflow-hardened.conf > /dev/null || true
+
+ufw --force reset > /dev/null
+ufw default deny incoming > /dev/null
+ufw default allow outgoing > /dev/null
+ufw allow 22/tcp > /dev/null
+ufw allow 80/tcp > /dev/null
+ufw allow 443/tcp > /dev/null
+ufw --force enable > /dev/null
+
+cat << 'EOF' > /etc/fail2ban/jail.d/wildflow.local
+[sshd]
+enabled = true
+port = 22
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+findtime = 600
+bantime = 3600
+EOF
+systemctl restart fail2ban > /dev/null || true
+systemctl enable fail2ban > /dev/null || true
+systemctl enable unattended-upgrades > /dev/null || true
+systemctl start unattended-upgrades > /dev/null || true
+
+mkdir -p /etc/docker
+if [ ! -f /etc/docker/daemon.json ]; then
+  echo '{"log-driver": "json-file", "log-opts": {"max-size": "10m", "max-file": "3"}}' > /etc/docker/daemon.json
+else
+  cat /etc/docker/daemon.json | jq '. + {"log-driver": "json-file", "log-opts": {"max-size": "10m", "max-file": "3"}}' > /etc/docker/daemon.json.tmp && mv /etc/docker/daemon.json.tmp /etc/docker/daemon.json
+fi
+systemctl reload docker > /dev/null || systemctl restart docker > /dev/null || true
+BASH;
+
+            $encoded = base64_encode($bashScript);
+            instant_remote_process(["echo {$encoded} | base64 -d | bash"], $this->server, false);
+
+            $this->isSovereignShielded = true;
+            $this->dispatch('success', 'Sovereign Node Shield deployed successfully! Node is now hardened.');
+        } catch (\Throwable $e) {
+            return handleError($e, $this);
+        }
     }
 
     public function handleSentinelRestarted($event)
@@ -407,7 +489,7 @@ class Show extends Component
                 return;
             }
 
-            $hetznerService = new \App\Services\HetznerService($this->server->cloudProviderToken->token);
+            $hetznerService = new HetznerService($this->server->cloudProviderToken->token);
             $serverData = $hetznerService->getServer($this->server->hetzner_server_id);
 
             $this->hetznerServerStatus = $serverData['status'] ?? null;
@@ -471,7 +553,7 @@ class Show extends Component
                 return;
             }
 
-            $hetznerService = new \App\Services\HetznerService($this->server->cloudProviderToken->token);
+            $hetznerService = new HetznerService($this->server->cloudProviderToken->token);
             $hetznerService->powerOnServer($this->server->hetzner_server_id);
 
             $this->hetznerServerStatus = 'starting';

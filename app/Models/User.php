@@ -2,10 +2,7 @@
 
 namespace App\Models;
 
-use App\Jobs\UpdateStripeCustomerEmailJob;
 use App\Notifications\Channels\SendsEmail;
-use App\Notifications\TransactionalEmails\EmailChangeVerification;
-use App\Notifications\TransactionalEmails\ResetPassword as TransactionalEmailsResetPassword;
 use App\Services\ChangelogService;
 use App\Traits\DeletesUserSessions;
 use DateTimeInterface;
@@ -13,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -49,9 +47,6 @@ class User extends Authenticatable implements SendsEmail
         'password',
         'force_password_reset',
         'marketing_emails',
-        'pending_email',
-        'email_change_code',
-        'email_change_code_expires_at',
     ];
 
     protected $hidden = [
@@ -209,6 +204,11 @@ class User extends Authenticatable implements SendsEmail
         return $new_team;
     }
 
+    public function sl1IdentityBinding(): HasOne
+    {
+        return $this->hasOne(Sl1IdentityBinding::class);
+    }
+
     public function createToken(string $name, array $abilities = ['*'], ?DateTimeInterface $expiresAt = null)
     {
         $plainTextToken = sprintf(
@@ -269,7 +269,7 @@ class User extends Authenticatable implements SendsEmail
 
     public function sendPasswordResetNotification($token): void
     {
-        $this?->notify(new TransactionalEmailsResetPassword($token));
+        // Password reset is constitutionally disabled under SL1-only identity.
     }
 
     public function isAdmin()
@@ -407,59 +407,17 @@ class User extends Authenticatable implements SendsEmail
 
     public function requestEmailChange(string $newEmail): void
     {
-        // Generate 6-digit code
-        $code = sprintf('%06d', random_int(0, 999999));
-
-        // Set expiration using config value
-        $expiryMinutes = config('constants.email_change.verification_code_expiry_minutes', 10);
-        $expiresAt = Carbon::now()->addMinutes($expiryMinutes);
-
-        $this->fill([
-            'pending_email' => $newEmail,
-            'email_change_code' => $code,
-            'email_change_code_expires_at' => $expiresAt,
-        ])->save();
-
-        // Send verification email to new address
-        $this->notify(new EmailChangeVerification($this, $code, $newEmail, $expiresAt));
+        throw new \LogicException('Email is an SL1 identity projection and cannot mutate identity authority.');
     }
 
     public function isEmailChangeCodeValid(string $code): bool
     {
-        return $this->email_change_code === $code
-            && $this->email_change_code_expires_at
-            && Carbon::now()->lessThan($this->email_change_code_expires_at);
+        return false;
     }
 
     public function confirmEmailChange(string $code): bool
     {
-        if (! $this->isEmailChangeCodeValid($code)) {
-            return false;
-        }
-
-        $oldEmail = $this->email;
-        $newEmail = $this->pending_email;
-
-        // Update email and clear change request fields
-        $this->update([
-            'email' => $newEmail,
-            'pending_email' => null,
-            'email_change_code' => null,
-            'email_change_code_expires_at' => null,
-        ]);
-
-        // For cloud users, dispatch job to update Stripe customer email asynchronously
-        $currentTeam = $this->currentTeam();
-        if (isCloud() && $currentTeam?->subscription) {
-            dispatch(new UpdateStripeCustomerEmailJob(
-                $currentTeam,
-                $this->id,
-                $newEmail,
-                $oldEmail
-            ));
-        }
-
-        return true;
+        return false;
     }
 
     public function clearEmailChangeRequest(): void
@@ -473,10 +431,7 @@ class User extends Authenticatable implements SendsEmail
 
     public function hasEmailChangeRequest(): bool
     {
-        return ! is_null($this->pending_email)
-            && ! is_null($this->email_change_code)
-            && $this->email_change_code_expires_at
-            && Carbon::now()->lessThan($this->email_change_code_expires_at);
+        return false;
     }
 
     /**

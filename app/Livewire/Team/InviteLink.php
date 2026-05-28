@@ -2,13 +2,13 @@
 
 namespace App\Livewire\Team;
 
+use App\Models\PolicyDecision;
 use App\Models\TeamInvitation;
-use App\Models\User;
+use App\Services\PolicyEngine;
+use App\Services\Sl1NotificationEnvelopeService;
+use App\Services\TeamInvitationArtifactService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Livewire\Component;
 use Visus\Cuid2\Cuid2;
 
@@ -46,15 +46,6 @@ class InviteLink extends Component
             $this->authorize('manageInvitations', currentTeam());
             $this->validate();
 
-            // Prevent privilege escalation: users cannot invite someone with higher privileges
-            $userRole = auth()->user()->role();
-            if (is_null($userRole) || ($userRole === 'member' && in_array($this->role, ['admin', 'owner']))) {
-                throw new \Exception('Members cannot invite admins or owners.');
-            }
-            if ($userRole === 'admin' && $this->role === 'owner') {
-                throw new \Exception('Admins cannot invite owners.');
-            }
-
             $this->email = strtolower($this->email);
 
             $member_emails = currentTeam()->members()->get()->pluck('email');
@@ -63,20 +54,8 @@ class InviteLink extends Component
             }
             $uuid = new Cuid2(32);
             $link = url('/').config('constants.invitation.link.base_url').$uuid;
-            $user = User::whereEmail($this->email)->first();
 
-            if (is_null($user)) {
-                $password = Str::password();
-                $user = User::create([
-                    'name' => str($this->email)->before('@'),
-                    'email' => $this->email,
-                    'password' => Hash::make($password),
-                    'force_password_reset' => true,
-                ]);
-                $token = Crypt::encryptString("{$user->email}@@@$password");
-                $link = route('auth.link', ['token' => $token]);
-            }
-            $invitation = TeamInvitation::whereEmail($this->email)->first();
+            $invitation = TeamInvitation::whereTeamId(currentTeam()->id)->whereEmail($this->email)->first();
             if (! is_null($invitation)) {
                 $invitationValid = $invitation->isValid();
                 if ($invitationValid) {
@@ -86,28 +65,43 @@ class InviteLink extends Component
                 }
             }
 
-            $invitation = TeamInvitation::firstOrCreate([
+            $decision = PolicyDecision::create(app(PolicyEngine::class)->evaluateTeamMemberInvite(
+                issuer: auth()->user(),
+                team: currentTeam(),
+                requestedRole: $this->role,
+                deliveryEmail: $this->email,
+            ));
+            $artifact = app(TeamInvitationArtifactService::class)->issueFromDecision($decision);
+
+            $invitation = TeamInvitation::create([
                 'team_id' => currentTeam()->id,
                 'uuid' => $uuid,
                 'email' => $this->email,
-                'role' => $this->role,
+                'role' => $artifact->role_scope,
                 'link' => $link,
                 'via' => $sendEmail ? 'email' : 'link',
+                'artifact_version' => $artifact->artifact_version,
+                'team_invitation_artifact_id' => $artifact->id,
             ]);
+            app(Sl1NotificationEnvelopeService::class)->publishTeamInvitationDiscovery(
+                artifact: $artifact,
+                deliveryChannels: $sendEmail ? ['email.discovery'] : ['manual.discovery'],
+                actor: auth()->user(),
+            );
             if ($sendEmail) {
                 $mail = new MailMessage;
                 $mail->view('emails.invitation-link', [
                     'team' => currentTeam()->name,
-                    'invitation_link' => $link,
+                    'discovery_link' => route('login'),
                 ]);
-                $mail->subject('You have been invited to '.currentTeam()->name.' on '.config('app.name').'.');
+                $mail->subject('SL1 discovery notice for '.currentTeam()->name.' on '.config('app.name').'.');
                 send_user_an_email($mail, $this->email);
-                $this->dispatch('success', 'Invitation sent via email.');
+                $this->dispatch('success', 'Discovery notice sent via email.');
                 $this->dispatch('refreshInvitations');
 
                 return;
             } else {
-                $this->dispatch('success', 'Invitation link generated.');
+                $this->dispatch('success', 'Invitation artifact and discovery pointer generated.');
                 $this->dispatch('refreshInvitations');
             }
         } catch (\Throwable $e) {

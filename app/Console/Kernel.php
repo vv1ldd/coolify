@@ -87,6 +87,22 @@ class Kernel extends ConsoleKernel
 
             // Cleanup orphaned PR preview containers daily
             $this->scheduleInstance->job(new CleanupOrphanedPreviewContainersJob)->daily()->onOneServer();
+
+            // ─── SOVEREIGN GOVERNANCE ───────────────────────────────────
+            // Verify infra ledger chain integrity every 6 hours
+            $this->scheduleInstance
+                ->command('sovereign:verify-infra-ledger')
+                ->everySixHours()
+                ->onOneServer()
+                ->withoutOverlapping();
+
+            // Merkle root anchor: every 15 min (dry-run until LEDGER_L1_ANCHOR_ENABLED=true)
+            $this->scheduleInstance
+                ->command('sovereign:anchor-ledger')
+                ->everyFifteenMinutes()
+                ->onOneServer()
+                ->withoutOverlapping();
+            // ────────────────────────────────────────────────────────────
         }
     }
 

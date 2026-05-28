@@ -4,6 +4,7 @@ namespace App\Livewire\Team;
 
 use App\Models\TeamInvitation;
 use App\Models\User;
+use App\Services\TeamInvitationArtifactService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 
@@ -21,9 +22,15 @@ class Invitations extends Component
             $this->authorize('manageInvitations', currentTeam());
 
             $invitation = TeamInvitation::ownedByCurrentTeam()->findOrFail($invitation_id);
-            $user = User::whereEmail($invitation->email)->first();
-            if (filled($user)) {
-                $user->deleteIfNotVerifiedAndForcePasswordReset();
+            if ($invitation->artifact_version === TeamInvitationArtifactService::ARTIFACT_VERSION) {
+                if ($invitation->artifact) {
+                    app(TeamInvitationArtifactService::class)->revoke($invitation->artifact, auth()->user());
+                }
+            } else {
+                $user = User::whereEmail($invitation->email)->first();
+                if (filled($user)) {
+                    $user->deleteIfNotVerifiedAndForcePasswordReset();
+                }
             }
 
             $invitation->delete();

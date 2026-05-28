@@ -6,7 +6,7 @@
         {{ $member->name }}
     </td>
     <td class="px-5 py-4 text-sm whitespace-nowrap">
-        {{ $member->email }}
+        {{ $this->identityLabel() }}
     </td>
     <td class="px-5 py-4 text-sm whitespace-nowrap">
         {{ data_get($member, 'pivot.role') }}

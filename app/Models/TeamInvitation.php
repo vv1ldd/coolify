@@ -13,6 +13,8 @@ class TeamInvitation extends Model
         'role',
         'link',
         'via',
+        'artifact_version',
+        'team_invitation_artifact_id',
     ];
 
     /**
@@ -26,6 +28,11 @@ class TeamInvitation extends Model
     public function team()
     {
         return $this->belongsTo(Team::class);
+    }
+
+    public function artifact()
+    {
+        return $this->belongsTo(TeamInvitationArtifact::class, 'team_invitation_artifact_id');
     }
 
     public static function ownedByCurrentTeam()

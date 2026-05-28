@@ -2,15 +2,10 @@
 
 namespace App\Providers;
 
-use App\Actions\Fortify\CreateNewUser;
-use App\Actions\Fortify\ResetUserPassword;
-use App\Actions\Fortify\UpdateUserPassword;
 use App\Actions\Fortify\UpdateUserProfileInformation;
-use App\Models\OauthSetting;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Fortify\Contracts\RegisterResponse;
@@ -42,14 +37,8 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Fortify::createUsersUsing(CreateNewUser::class);
         Fortify::registerView(function () {
             $isFirstUser = User::count() === 0;
-
-            $settings = instanceSettings();
-            if (! $settings->is_registration_enabled) {
-                return redirect()->route('login');
-            }
 
             return view('auth.register', [
                 'isFirstUser' => $isFirstUser,
@@ -58,68 +47,38 @@ class FortifyServiceProvider extends ServiceProvider
 
         Fortify::loginView(function () {
             $settings = instanceSettings();
-            $enabled_oauth_providers = OauthSetting::where('enabled', true)->get();
-            $users = User::count();
-            if ($users == 0) {
-                // If there are no users, redirect to registration
-                return redirect()->route('register');
-            }
 
             return view('auth.login', [
                 'is_registration_enabled' => $settings->is_registration_enabled,
-                'enabled_oauth_providers' => $enabled_oauth_providers,
             ]);
         });
 
         Fortify::authenticateUsing(function (Request $request) {
-            $email = strtolower($request->email);
-            $user = User::where('email', $email)->with('teams')->first();
-            if (
-                $user &&
-                Hash::check($request->password, $user->password)
-            ) {
-                $user->updated_at = now();
-                $user->save();
-
-                // Check if user has a pending invitation they haven't accepted yet
-                $invitation = \App\Models\TeamInvitation::whereEmail($email)->first();
-                if ($invitation && $invitation->isValid()) {
-                    // User is logging in for the first time after being invited
-                    // Attach them to the invited team if not already attached
-                    if (! $user->teams()->where('team_id', $invitation->team->id)->exists()) {
-                        $user->teams()->attach($invitation->team->id, ['role' => $invitation->role]);
-                    }
-                    $user->currentTeam = $invitation->team;
-                    $invitation->delete();
-                } else {
-                    // Normal login - use personal team
-                    $user->currentTeam = $user->teams->firstWhere('personal_team', true);
-                    if (! $user->currentTeam) {
-                        $user->currentTeam = $user->recreate_personal_team();
-                    }
-                }
-                session(['currentTeam' => $user->currentTeam]);
-
-                return $user;
-            }
+            return null;
         });
         Fortify::requestPasswordResetLinkView(function () {
-            return view('auth.forgot-password');
+            return redirect()->route('login')->withErrors([
+                'sl1' => 'Password recovery is disabled. Use SL1 Identity.',
+            ]);
         });
         Fortify::resetPasswordView(function ($request) {
-            return view('auth.reset-password', ['request' => $request]);
+            return redirect()->route('login')->withErrors([
+                'sl1' => 'Password reset is disabled. Use SL1 Identity.',
+            ]);
         });
-        Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
 
         Fortify::updateUserProfileInformationUsing(UpdateUserProfileInformation::class);
-        Fortify::updateUserPasswordsUsing(UpdateUserPassword::class);
 
         Fortify::confirmPasswordView(function () {
-            return view('auth.confirm-password');
+            return redirect()->route('login')->withErrors([
+                'sl1' => 'Password confirmation is disabled. Use SL1 Identity.',
+            ]);
         });
 
         Fortify::twoFactorChallengeView(function () {
-            return view('auth.two-factor-challenge');
+            return redirect()->route('login')->withErrors([
+                'sl1' => 'Two-factor challenge is disabled. Use SL1 Identity.',
+            ]);
         });
 
         RateLimiter::for('force-password-reset', function (Request $request) {

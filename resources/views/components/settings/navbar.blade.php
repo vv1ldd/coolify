@@ -15,10 +15,7 @@
                 href="{{ route('settings.email') }}">
                 Transactional Email
             </a>
-            <a class="{{ request()->routeIs('settings.oauth') ? 'dark:text-white' : '' }}" {{ wireNavigate() }}
-                href="{{ route('settings.oauth') }}">
-                OAuth
-            </a>
+
             <a class="{{ request()->routeIs('settings.scheduled-jobs') ? 'dark:text-white' : '' }}" {{ wireNavigate() }}
                 href="{{ route('settings.scheduled-jobs') }}">
                 Scheduled Jobs

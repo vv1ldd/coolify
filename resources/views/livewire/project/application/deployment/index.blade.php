@@ -1,11 +1,11 @@
 <div>
-    <x-slot:title>{{ data_get_str($application, 'name')->limit(10) }} > Deployments | Coolify</x-slot>
-    <h1>Deployments</h1>
+    <x-slot:title>{{ data_get_str($application, 'name')->limit(10) }} > Execution Intents | Sovereign</x-slot>
+    <h1>Execution Intents</h1>
     <livewire:project.shared.configuration-checker :resource="$application" />
     <livewire:project.application.heading :application="$application" />
     <div class="flex flex-col gap-2 pb-10" @if (!$skip) wire:poll.5000ms='reloadDeployments' @endif>
         <div class="flex items-end gap-2">
-            <h2>Deployments <span class="text-xs">({{ $deployments_count }})</span></h2>
+            <h2>Execution Intents <span class="text-xs">({{ $deployments_count }})</span></h2>
             @if ($deployments_count > 0)
                 <div class="flex items-center gap-2">
                     <x-forms.button disabled="{{ !$showPrev }}" wire:click="previousPage('{{ $defaultTake }}')">
@@ -177,7 +177,7 @@
                 </a>
             </div>
         @empty
-            <div>No deployments found</div>
+            <div>No execution intents found</div>
         @endforelse
     </div>
 </div>

@@ -1,182 +1,59 @@
 <x-layout-simple>
-    <section class="bg-gray-50 dark:bg-base">
-        <div class="flex flex-col items-center justify-center px-6 py-8 mx-auto md:h-screen lg:py-0">
-            <div class="w-full max-w-md space-y-8">
-                <div class="text-center space-y-2">
-                    <h1 class="!text-5xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-                        Coolify
-                    </h1>
-                </div>
+    <div class="min-h-screen w-full flex items-center justify-center relative bg-white dark:bg-[#090909] overflow-hidden" style="font-family: 'Space Grotesk', sans-serif;">
+        <div class="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+            <div class="absolute top-[-10%] left-[20%] w-[60vw] h-[60vw] rounded-full blur-[80px] bg-[radial-gradient(circle,rgba(245,48,3,0.06)_0%,rgba(0,0,0,0)_70%)]"></div>
+            <div class="absolute top-[30%] right-[-10%] w-[50vw] h-[50vw] rounded-full blur-[100px] bg-[radial-gradient(circle,rgba(79,70,229,0.06)_0%,rgba(0,0,0,0)_75%)]"></div>
+        </div>
 
-                <div class="space-y-6">
-                    @if (session('status'))
-                        <div class="mb-6 p-4 bg-success/10 border border-success rounded-lg">
-                            <p class="text-sm text-success">{{ session('status') }}</p>
-                        </div>
-                    @endif
+        <div class="relative z-10 bg-white dark:bg-[#090909] border-[4px] border-black shadow-[8px_8px_0px_#000000] rounded-xl p-8 sm:p-10 mx-4" style="width: min(460px, calc(100vw - 2rem));">
+            <div class="flex items-center justify-center gap-3 mb-8">
+                <div class="w-4 h-4 bg-[#f53003] border-2 border-black rounded-[3px] shadow-[2px_2px_0px_#000000]"></div>
+                <h1 class="text-3xl font-black text-black dark:text-white tracking-tight uppercase m-0">Sovereign Coolify</h1>
+            </div>
 
-                    @if (session('error'))
-                        <div class="mb-6 p-4 bg-error/10 border border-error rounded-lg">
-                            <p class="text-sm text-error">{{ session('error') }}</p>
-                        </div>
-                    @endif
+            <div class="text-center mb-8 space-y-3">
+                <p class="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+                    Вход только через SL1 Identity. Coolify не хранит пароль и не становится источником вашей личности.
+                </p>
+                <p class="text-xs text-neutral-500 dark:text-neutral-500">
+                    SL1 Connect подтвердит passkey и вернет в панель уже с проверенной identity.
+                </p>
+            </div>
 
-                    @if ($errors->any())
-                        <div class="mb-6 p-4 bg-error/10 border border-error rounded-lg">
-                            @foreach ($errors->all() as $error)
-                                <p class="text-sm text-error">{{ $error }}</p>
-                            @endforeach
-                        </div>
-                    @endif
-
-                    <!-- 🔑 Sovereign Passkey Cryptographic Login -->
-                    <div class="mb-4" id="passkey-login-wrapper">
-                        <button type="button" id="btn-passkey-login" class="w-full py-4 text-center justify-center font-extrabold uppercase tracking-wider flex items-center gap-2 justify-center border-3 border-black text-black bg-[#7c3aed] text-white hover:bg-[#9060fa] cursor-pointer shadow-[4px_4px_0px_#000000] rounded-md transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-[1px_1px_0px_#000000]">
-                            🔑 ВОЙТИ ПО КРИПТО-КЛЮЧУ (PASSKEY)
-                        </button>
-                        <div class="relative my-6">
-                            <div class="absolute inset-0 flex items-center">
-                                <div class="w-full border-t border-neutral-300 dark:border-coolgray-400"></div>
-                            </div>
-                            <div class="relative flex justify-center text-sm">
-                                <span class="px-2 bg-gray-50 dark:bg-base text-neutral-500 dark:text-neutral-400">или стандартный вход</span>
-                            </div>
-                        </div>
+            <div class="space-y-6">
+                @if (session('status'))
+                    <div class="p-4 bg-green-500/10 border-[3px] border-green-500 rounded-lg shadow-[4px_4px_0px_#10b981]">
+                        <p class="text-sm font-bold text-green-600 dark:text-green-400">{{ session('status') }}</p>
                     </div>
+                @endif
 
-                    <form action="/login" method="POST" class="flex flex-col gap-4">
-                        @csrf
-                        @env('local')
-                            <x-forms.input value="test@example.com" type="email" autocomplete="email" name="email" required
-                                label="{{ __('input.email') }}" />
-                            <x-forms.input value="password" type="password" autocomplete="current-password" name="password"
-                                required label="{{ __('input.password') }}" />
-                        @else
-                            <x-forms.input type="email" name="email" autocomplete="email" required
-                                label="{{ __('input.email') }}" />
-                            <x-forms.input type="password" name="password" autocomplete="current-password" required
-                                label="{{ __('input.password') }}" />
-                        @endenv
+                @if (session('error'))
+                    <div class="p-4 bg-red-500/10 border-[3px] border-red-500 rounded-lg shadow-[4px_4px_0px_#f53003]">
+                        <p class="text-sm font-bold text-red-600 dark:text-red-400">{{ session('error') }}</p>
+                    </div>
+                @endif
 
-                        <div class="flex items-center justify-between">
-                            <a href="/forgot-password"
-                                class="text-sm dark:text-neutral-400 hover:text-coollabs dark:hover:text-warning hover:underline transition-colors">
-                                {{ __('auth.forgot_password_link') }}
-                            </a>
-                        </div>
+                @if ($errors->any())
+                    <div class="p-4 bg-red-500/10 border-[3px] border-red-500 rounded-lg shadow-[4px_4px_0px_#f53003]">
+                        @foreach ($errors->all() as $error)
+                            <p class="text-sm font-bold text-red-600 dark:text-red-400">{{ $error }}</p>
+                        @endforeach
+                    </div>
+                @endif
 
-                        <x-forms.button class="w-full justify-center py-3 box-boarding" type="submit" isHighlighted>
-                            {{ __('auth.login') }}
-                        </x-forms.button>
-                    </form>
+                <a href="{{ route('auth.sl1.redirect') }}" class="flex items-center justify-center gap-2 bg-[#f53003] hover:bg-[#ff451a] text-white border-[3px] border-black shadow-[4px_4px_0px_#000000] hover:shadow-[2px_2px_0px_#000000] hover:translate-y-[2px] transition-all rounded-lg py-4 px-6 font-black uppercase tracking-widest text-sm mx-auto" style="width: min(360px, 100%);">
+                    Войти через SL1 Identity
+                </a>
 
-                    @if ($is_registration_enabled)
-                        <div class="relative my-6">
-                            <div class="absolute inset-0 flex items-center">
-                                <div class="w-full border-t border-neutral-300 dark:border-coolgray-400"></div>
-                            </div>
-                            <div class="relative flex justify-center text-sm">
-                                <span class="px-2 bg-gray-50 dark:bg-base text-neutral-500 dark:text-neutral-400 ">
-                                    Don't have an account?
-                                </span>
-                            </div>
-                        </div>
-                        <a href="/register"
-                            class="block w-full text-center py-3 px-4 rounded-lg border border-neutral-300 dark:border-coolgray-400 font-medium hover:border-coollabs dark:hover:border-warning transition-colors">
-                            {{ __('auth.register_now') }}
-                        </a>
-                    @else
-                        <div class="mt-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                            {{ __('auth.registration_disabled') }}
-                        </div>
-                    @endif
-
-                    @if ($enabled_oauth_providers->isNotEmpty())
-                        <div class="relative my-6">
-                            <div class="absolute inset-0 flex items-center">
-                                <div class="w-full border-t border-neutral-300 dark:border-coolgray-400"></div>
-                            </div>
-                            <div class="relative flex justify-center text-sm">
-                                <span class="px-2 bg-gray-50 dark:bg-base text-neutral-500 dark:text-neutral-400">or
-                                    continue with</span>
-                            </div>
-                        </div>
-                        <div class="flex flex-col gap-3">
-                            @foreach ($enabled_oauth_providers as $provider_setting)
-                                <x-forms.button class="w-full justify-center" type="button"
-                                    onclick="document.location.href='/auth/{{ $provider_setting->provider }}/redirect'">
-                                    {{ __("auth.login.$provider_setting->provider") }}
-                                </x-forms.button>
-                            @endforeach
-                        </div>
-                    @endif
+                <div class="border-t-[3px] border-dashed border-neutral-300 dark:border-neutral-800 pt-6 text-center">
+                    <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 border-[2px] border-indigo-500/50 rounded shadow-[2px_2px_0px_#4f46e5]">
+                        <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                        <span class="text-[10px] uppercase tracking-widest font-black text-indigo-600 dark:text-indigo-400">
+                            Bounded Authority Login
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
-    </section>
-
-    <!-- 🔑 Sovereign Passkey Handshake Script -->
-    <script>
-        document.getElementById('btn-passkey-login')?.addEventListener('click', async () => {
-            try {
-                const btn = document.getElementById('btn-passkey-login');
-                btn.disabled = true;
-                btn.innerText = "⏳ ПОДКЛЮЧЕНИЕ УСТРОЙСТВА...";
-
-                // 1. Fetch challenge from our sovereign endpoint
-                const res = await fetch('/sovereign/passkeys/challenge');
-                if (!res.ok) throw new Error("Failed to fetch cryptographic challenge");
-                const data = await res.json();
-                
-                // 2. Request user email for key pairing
-                const email = prompt("Введите ваш Email для крипто-авторизации:", localStorage.getItem('sovereign_last_email') || "test@example.com");
-                if (!email) {
-                    btn.disabled = false;
-                    btn.innerText = "🔑 ВОЙТИ ПО КРИПТО-КЛЮЧУ (PASSKEY)";
-                    return;
-                }
-                localStorage.setItem('sovereign_last_email', email);
-
-                // 3. Emulate biometric hardware key signature validation
-                const mockSignature = '0x_sig_' + btoa(Math.random().toString()).slice(0, 32);
-
-                // 4. Verify assertion on the sovereign backend
-                const verifyRes = await fetch('/sovereign/passkeys/verify', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                    },
-                    body: JSON.stringify({
-                        email: email,
-                        challenge: data.challenge,
-                        signature: mockSignature
-                    })
-                });
-
-                if (!verifyRes.ok) throw new Error("Verification service error");
-                
-                const verifyData = await verifyRes.json();
-                if (verifyData.success) {
-                    btn.style.backgroundColor = '#22C55E';
-                    btn.innerText = "🎉 АВТОРИЗАЦИЯ УСПЕШНА!";
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 800);
-                } else {
-                    alert("❌ Криптографическая подпись недействительна!");
-                    btn.disabled = false;
-                    btn.innerText = "🔑 ВОЙТИ ПО КРИПТО-КЛЮЧУ (PASSKEY)";
-                }
-            } catch (e) {
-                console.error(e);
-                alert("Ошибка крипто-авторизации: " + e.message);
-                const btn = document.getElementById('btn-passkey-login');
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerText = "🔑 ВОЙТИ ПО КРИПТО-КЛЮЧУ (PASSKEY)";
-                }
-            }
-        });
-    </script>
+    </div>
 </x-layout-simple>

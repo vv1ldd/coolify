@@ -16,7 +16,7 @@ class SshMultiplexingHelper
     {
         $privateKey = PrivateKey::findOrFail($server->private_key_id);
         $sshKeyLocation = $privateKey->getKeyLocation();
-        $muxFilename = '/var/www/html/storage/app/ssh/mux/mux_'.$server->uuid;
+        $muxFilename = storage_path('app/ssh/mux/mux_'.$server->uuid);
 
         return [
             'sshKeyLocation' => $sshKeyLocation,
@@ -118,7 +118,7 @@ class SshMultiplexingHelper
         $timeout = config('constants.ssh.command_timeout');
         $muxPersistTime = config('constants.ssh.mux_persist_time');
 
-        $scp_command = "timeout $timeout scp ";
+        $scp_command = self::getTimeoutCommand($timeout).'scp ';
         if ($server->isIpv6()) {
             $scp_command .= '-6 ';
         }
@@ -166,7 +166,7 @@ class SshMultiplexingHelper
         $timeout = config('constants.ssh.command_timeout');
         $muxPersistTime = config('constants.ssh.mux_persist_time');
 
-        $ssh_command = "timeout $timeout ssh ";
+        $ssh_command = self::getTimeoutCommand($timeout).'ssh ';
 
         $multiplexingSuccessful = false;
         if (! $disableMultiplexing && self::isMultiplexingEnabled()) {
@@ -272,7 +272,7 @@ class SshMultiplexingHelper
         $muxSocket = $sshConfig['muxFilename'];
         $healthCheckTimeout = config('constants.ssh.mux_health_check_timeout');
 
-        $healthCommand = "timeout $healthCheckTimeout ssh -o ControlMaster=auto -o ControlPath=$muxSocket ";
+        $healthCommand = self::getTimeoutCommand($healthCheckTimeout)."ssh -o ControlMaster=auto -o ControlPath=$muxSocket ";
         if (data_get($server, 'settings.is_cloudflare_tunnel')) {
             $healthCommand .= '-o ProxyCommand="cloudflared access ssh --hostname %h" ';
         }
@@ -338,5 +338,26 @@ class SshMultiplexingHelper
     {
         $cacheKey = "ssh_mux_connection_time_{$server->uuid}";
         Cache::forget($cacheKey);
+    }
+
+    private static function getTimeoutCommand(int $seconds): string
+    {
+        static $hasTimeout = null;
+        static $hasGtimeout = null;
+
+        if ($hasTimeout === null) {
+            $hasTimeout = ! empty(shell_exec('which timeout'));
+            $hasGtimeout = ! empty(shell_exec('which gtimeout'));
+        }
+
+        if ($hasTimeout) {
+            return "timeout {$seconds} ";
+        }
+
+        if ($hasGtimeout) {
+            return "gtimeout {$seconds} ";
+        }
+
+        return '';
     }
 }

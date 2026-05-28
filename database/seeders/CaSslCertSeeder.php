@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Helpers\SslHelper;
 use App\Models\Server;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Log;
 
 class CaSslCertSeeder extends Seeder
 {
@@ -37,7 +38,11 @@ class CaSslCertSeeder extends Seeder
                     "chmod 644 $caCertPath/coolify-ca.crt",
                 ]);
 
-                remote_process($commands, $server);
+                try {
+                    remote_process($commands, $server);
+                } catch (\Throwable $e) {
+                    Log::warning('Skipped remote process CaSslCertSeeder: '.$e->getMessage());
+                }
             }
         });
     }

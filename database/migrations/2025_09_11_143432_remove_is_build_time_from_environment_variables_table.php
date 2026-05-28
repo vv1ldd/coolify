@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -14,11 +15,9 @@ return new class extends Migration
         Schema::table('environment_variables', function (Blueprint $table) {
             // Check if the column exists before trying to drop it
             if (Schema::hasColumn('environment_variables', 'is_build_time')) {
-                // Drop the is_build_time column
-                // Note: The unique constraints that included is_build_time were tied to old foreign key columns
-                // (application_id, service_id, database_id) which were removed in migration 2024_12_16_134437.
-                // Those constraints should no longer exist in the database.
-                $table->dropColumn('is_build_time');
+                if (DB::connection()->getDriverName() !== 'sqlite') {
+                    $table->dropColumn('is_build_time');
+                }
             }
         });
     }

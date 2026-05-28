@@ -392,3 +392,206 @@ html[data-theme="light"] tbody tr {
 html[data-theme="light"] tbody tr:hover {
     background-color: #f7f8ff !important;
 }
+
+/* ==========================================================================
+   🏛️ SOVEREIGN HIGH-FIDELITY "CONSORTIUM" THEME (DARK NEO-BRUTALISM)
+   ========================================================================== */
+:root, .dark {
+    --brand-primary: #f53003;
+    --brand-bg: #030303;
+    --brand-card: #090909;
+    --brand-border: #1a1a1a;
+    --text-bright: #ffffff;
+    --text-normal: #e0e0e0;
+    --text-muted: #8e8e93;
+    
+    /* Mapping color variables for default layouts */
+    --color-base: #030303;
+    --color-coolgray-100: #090909;
+    --color-coolgray-200: #000000;
+    --color-coolgray-300: #090909;
+    --color-coolgray-400: #1a1a1a;
+    --color-coolgray-500: #2a2a2a;
+    --color-coollabs: #f53003;
+    --color-coollabs-100: #d62700;
+}
+
+/* 🌌 Dark Neo-Brutalist Canvas with Retro Red Grids */
+html, body, html.dark, html.dark body {
+    background-color: var(--brand-bg) !important;
+    color: var(--text-normal) !important;
+    background-image: 
+        radial-gradient(rgba(245, 48, 3, 0.12) 1.5px, transparent 1.5px) !important;
+    background-size: 24px 24px !important;
+    background-attachment: fixed !important;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    font-family: 'Space Grotesk', 'Outfit', 'Inter', sans-serif !important;
+}
+
+/* 🧭 Sidebar Neomorphic Card & Menu Overrides */
+aside, .fi-sidebar, nav, header {
+    background-color: var(--brand-card) !important;
+    border-right: 3px solid #000000 !important;
+    box-shadow: none !important;
+}
+
+/* Ensure Sidebar elements have outstanding contrast on dark background */
+aside a, aside span, aside p, aside svg, nav a, nav span, nav p, nav svg {
+    color: #b0b5c0 !important;
+}
+
+aside a:hover, nav a:hover {
+    color: #ffffff !important;
+}
+
+/* Premium Neo-Brutalist Card Boxes (Thick black borders & flat offset shadows) */
+.box, .box-boarding, .coolbox, .custom-modal, [class*="card"], [class*="stat"] {
+    background-color: var(--brand-card) !important;
+    border: 3px solid #000000 !important;
+    box-shadow: 4px 4px 0px #000000 !important;
+    border-radius: 8px !important;
+    color: var(--text-bright) !important;
+    transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+}
+
+.box:hover, .box-boarding:hover, .coolbox:hover, [class*="card"]:hover {
+    transform: translate(-3px, -3px) !important;
+    box-shadow: 7px 7px 0px var(--brand-primary) !important;
+    border-color: #000000 !important;
+}
+
+/* Sidebar & Navigation Items styling */
+a[href="/"], .logo-text-partner {
+    color: var(--text-bright) !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+}
+
+.menu-item, [class*="sidebar-item"] {
+    border: 2px solid transparent !important;
+    border-radius: 6px !important;
+    transition: all 0.1s ease-in-out !important;
+    font-weight: 600 !important;
+    color: #b0b5c0 !important;
+}
+
+.menu-item:hover, [class*="sidebar-item"]:hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border: 2px solid #000000 !important;
+    box-shadow: 2px 2px 0px #000000 !important;
+    color: #ffffff !important;
+}
+
+.menu-item:hover svg, [class*="sidebar-item"]:hover svg {
+    stroke: #ffffff !important;
+    color: #ffffff !important;
+}
+
+.menu-item-active, [class*="sidebar-item-active"] {
+    background-color: var(--brand-primary) !important;
+    color: #ffffff !important;
+    border: 3px solid #000000 !important;
+    box-shadow: 3px 3px 0px #000000 !important;
+}
+
+.menu-item-active span, .menu-item-active div, .menu-item-active svg {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+}
+
+/* Neo-Brutalist Inputs & Select Fields */
+.input, .select, input, select, textarea {
+    background-color: #000000 !important;
+    color: var(--text-bright) !important;
+    border: 3px solid #000000 !important;
+    box-shadow: 3px 3px 0px #000000 !important;
+    border-radius: 4px !important;
+    font-weight: 600 !important;
+    padding: 8px 12px !important;
+    transition: all 0.12s ease-in-out !important;
+}
+
+.input:focus, .select:focus, input:focus, select:focus, textarea:focus {
+    box-shadow: 4px 4px 0px var(--brand-primary) !important;
+    border-color: #000000 !important;
+    outline: none !important;
+}
+
+/* Premium Neo-Brutalist Action Buttons */
+.button, button:not(.toast), a.button {
+    background-color: var(--brand-primary) !important; /* Sovereign Vivid Red */
+    color: #ffffff !important;
+    border: 3px solid #000000 !important;
+    box-shadow: 4px 4px 0px #000000 !important;
+    border-radius: 4px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    transition: all 0.12s ease-in-out !important;
+}
+
+.button:hover, button:not(.toast):hover, a.button:hover {
+    transform: translate(-2px, -2px) !important;
+    box-shadow: 6px 6px 0px #000000 !important;
+    background-color: #ff451a !important;
+}
+
+.button:active, button:not(.toast):active {
+    transform: translate(2px, 2px) !important;
+    box-shadow: 2px 2px 0px #000000 !important;
+}
+
+/* Neo-Brutalist High-Contrast Tables */
+table {
+    border: 3px solid #000000 !important;
+    background-color: var(--brand-card) !important;
+    box-shadow: 4px 4px 0px #000000 !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+}
+
+thead tr {
+    background-color: var(--brand-primary) !important;
+    border-bottom: 3px solid #000000 !important;
+}
+
+thead tr th {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+}
+
+tbody tr {
+    background-color: var(--brand-card) !important;
+    border-bottom: 2px solid #000000 !important;
+}
+
+tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* Typography elements */
+h1, h2, h3, h4, .text-white, .dark\:text-white {
+    color: var(--text-bright) !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+    font-weight: 800 !important;
+}
+
+label, .text-neutral-400, .dark\:text-neutral-400 {
+    color: var(--text-muted) !important;
+    font-weight: 600 !important;
+}
+
+/* Brand warning and primary accents mapping */
+.text-warning, .dark\:text-warning, [class*="brand-primary"] {
+    color: var(--brand-primary) !important;
+}
+
+.bg-warning, .dark\:bg-warning {
+    background-color: var(--brand-primary) !important;
+    color: #ffffff !important;
+}

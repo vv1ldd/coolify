@@ -8,6 +8,7 @@ use App\Models\ScheduledDatabaseBackup;
 use App\Models\Server;
 use App\Models\StandaloneDocker;
 use App\Models\StandalonePostgresql;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
@@ -78,11 +79,24 @@ class SettingsBackup extends Component
     {
         try {
             $server = Server::findOrFail(0);
-            $out = instant_remote_process(['docker inspect coolify-db'], $server);
-            $envs = format_docker_envs_to_json($out);
-            $postgres_password = $envs['POSTGRES_PASSWORD'];
-            $postgres_user = $envs['POSTGRES_USER'];
-            $postgres_db = $envs['POSTGRES_DB'];
+
+            // Default sqlite/local fallback
+            $postgres_password = 'local-sqlite-password';
+            $postgres_user = 'sqlite';
+            $postgres_db = 'coolify';
+
+            // Try docker inspect first, fall back to SQLite config if it fails
+            try {
+                $out = instant_remote_process(['docker inspect coolify-db'], $server);
+                $envs = format_docker_envs_to_json($out);
+                $postgres_password = $envs['POSTGRES_PASSWORD'] ?? $postgres_password;
+                $postgres_user = $envs['POSTGRES_USER'] ?? $postgres_user;
+                $postgres_db = $envs['POSTGRES_DB'] ?? $postgres_db;
+            } catch (\Throwable $dockerEx) {
+                // Fall back to sqlite config
+                Log::info('addCoolifyDatabase: docker coolify-db not found, falling back to local SQLite config.');
+            }
+
             $this->database = new StandalonePostgresql;
             $this->database->forceFill([
                 'id' => 0,

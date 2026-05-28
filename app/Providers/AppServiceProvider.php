@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\PersonalAccessToken;
+use App\Models\Server;
+use App\Observers\ServerObserver;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +30,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configurePasswords();
         $this->configureSanctumModel();
         $this->configureGitHubHttp();
-
+        $this->configureObservers();
     }
 
     private function configureCommands(): void
@@ -78,5 +80,11 @@ class AppServiceProvider extends ServiceProvider
                 ])->baseUrl($api_url);
             }
         });
+    }
+
+    private function configureObservers(): void
+    {
+        // Sovereign Infrastructure Lifecycle Observers
+        Server::observe(ServerObserver::class);
     }
 }

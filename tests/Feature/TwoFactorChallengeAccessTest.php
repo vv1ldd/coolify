@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\InstanceSettings;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -7,47 +8,45 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    InstanceSettings::unguarded(fn () => InstanceSettings::updateOrCreate(['id' => 0], []));
     $this->user = User::factory()->create();
     $this->team = Team::factory()->personal()->create();
     $this->team->members()->attach($this->user->id, ['role' => 'owner']);
     session(['currentTeam' => $this->team]);
 });
 
-it('allows unauthenticated access to two-factor-challenge page', function () {
-    $response = $this->get('/two-factor-challenge');
-
-    // Fortify returns a redirect to /login if there's no login.id in session,
-    // but the important thing is it does NOT return a 419 or 500
-    expect($response->status())->toBeIn([200, 302]);
+it('does not expose two-factor-challenge as a legacy auth surface', function () {
+    $this->get('/two-factor-challenge')->assertRedirect(route('login'));
 });
 
-it('includes two-factor-challenge in allowed paths for unsubscribed accounts', function () {
+it('does not include two-factor-challenge in allowed paths for unsubscribed accounts', function () {
     $paths = allowedPathsForUnsubscribedAccounts();
 
-    expect($paths)->toContain('two-factor-challenge');
+    expect($paths)->not->toContain('two-factor-challenge');
 });
 
-it('includes two-factor-challenge in allowed paths for invalid accounts', function () {
+it('does not include two-factor-challenge in allowed paths for invalid accounts', function () {
     $paths = allowedPathsForInvalidAccounts();
 
-    expect($paths)->toContain('two-factor-challenge');
+    expect($paths)->not->toContain('two-factor-challenge');
 });
 
-it('includes two-factor-challenge in allowed paths for boarding accounts', function () {
+it('does not include two-factor-challenge in allowed paths for boarding accounts', function () {
     $paths = allowedPathsForBoardingAccounts();
 
-    expect($paths)->toContain('two-factor-challenge');
+    expect($paths)->not->toContain('two-factor-challenge');
 });
 
-it('does not redirect authenticated user with force_password_reset from two-factor-challenge', function () {
+it('clears legacy force_password_reset without redirecting to a password path', function () {
     $this->user->update(['force_password_reset' => true]);
 
-    $response = $this->actingAs($this->user)->get('/two-factor-challenge');
+    $response = $this->actingAs($this->user)->get('/');
+    $this->user->refresh();
 
-    // Should NOT redirect to force-password-reset page
     if ($response->isRedirect()) {
         expect($response->headers->get('Location'))->not->toContain('force-password-reset');
     }
+    expect($this->user->force_password_reset)->toBeFalse();
 });
 
 it('renders 419 error page with login link instead of previous url', function () {

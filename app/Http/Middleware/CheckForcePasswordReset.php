@@ -16,20 +16,8 @@ class CheckForcePasswordReset
     public function handle(Request $request, Closure $next): Response
     {
         if (auth()->user()) {
-            if ($request->path() === 'auth/link') {
-                auth()->logout();
-                request()->session()->invalidate();
-                request()->session()->regenerateToken();
-
-                return $next($request);
-            }
-            $force_password_reset = auth()->user()->force_password_reset;
-            if ($force_password_reset) {
-                if ($request->routeIs('auth.force-password-reset') || $request->path() === 'force-password-reset' || $request->path() === 'two-factor-challenge' || $request->path() === 'livewire/update' || $request->path() === 'logout') {
-                    return $next($request);
-                }
-
-                return redirect()->route('auth.force-password-reset');
+            if (auth()->user()->force_password_reset) {
+                auth()->user()->forceFill(['force_password_reset' => false])->saveQuietly();
             }
         }
 

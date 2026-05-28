@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AgentContainersController;
 use App\Http\Controllers\Api\ApplicationsController;
 use App\Http\Controllers\Api\CloudProviderTokensController;
 use App\Http\Controllers\Api\DatabasesController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ResourcesController;
 use App\Http\Controllers\Api\ScheduledTasksController;
 use App\Http\Controllers\Api\SecurityController;
+use App\Http\Controllers\Api\SecurityObservationsController;
 use App\Http\Controllers\Api\ServersController;
 use App\Http\Controllers\Api\ServicesController;
 use App\Http\Controllers\Api\TeamController;
@@ -43,6 +45,10 @@ Route::group([
 
     Route::get('/version', [OtherController::class, 'version'])->middleware(['api.ability:read']);
 
+    Route::get('/agent/containers', [AgentContainersController::class, 'index'])->middleware(['api.ability:read']);
+    Route::get('/agent/containers/{container}/logs', [AgentContainersController::class, 'logs'])->middleware(['api.ability:read']);
+    Route::post('/agent/containers/{container}/exec', [AgentContainersController::class, 'exec'])->middleware(['api.ability:write']);
+
     Route::get('/teams', [TeamController::class, 'teams'])->middleware(['api.ability:read']);
     Route::get('/teams/current', [TeamController::class, 'current_team'])->middleware(['api.ability:read']);
     Route::get('/teams/current/members', [TeamController::class, 'current_team_members'])->middleware(['api.ability:read']);
@@ -62,6 +68,8 @@ Route::group([
 
     Route::get('/security/keys', [SecurityController::class, 'keys'])->middleware(['api.ability:read']);
     Route::post('/security/keys', [SecurityController::class, 'create_key'])->middleware(['api.ability:write']);
+    Route::get('/security/observations', [SecurityObservationsController::class, 'index'])->middleware(['api.ability:read']);
+    Route::post('/security/observations', [SecurityObservationsController::class, 'store'])->middleware(['api.ability:write']);
 
     Route::get('/security/keys/{uuid}', [SecurityController::class, 'key_by_uuid'])->middleware(['api.ability:read']);
     Route::patch('/security/keys/{uuid}', [SecurityController::class, 'update_key'])->middleware(['api.ability:write']);

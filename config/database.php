@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Str;
+use Pdo\Pgsql;
 
 return [
 
@@ -49,7 +50,7 @@ return [
             'search_path' => 'public',
             'sslmode' => 'prefer',
             'options' => [
-                (defined('Pdo\Pgsql::ATTR_DISABLE_PREPARES') ? \Pdo\Pgsql::ATTR_DISABLE_PREPARES : \PDO::PGSQL_ATTR_DISABLE_PREPARES) => env('DB_DISABLE_PREPARES', false),
+                (defined('Pdo\Pgsql::ATTR_DISABLE_PREPARES') ? Pgsql::ATTR_DISABLE_PREPARES : PDO::PGSQL_ATTR_DISABLE_PREPARES) => env('DB_DISABLE_PREPARES', false),
             ],
         ],
 
@@ -57,6 +58,44 @@ return [
             'driver' => 'sqlite',
             'database' => ':memory:',
             'prefix' => '',
+            'foreign_key_constraints' => true,
+        ],
+
+        /*
+         * ─────────────────────────────────────────────────────────────
+         * SOVEREIGN INFRASTRUCTURE LEDGER — Dedicated Connection
+         * ─────────────────────────────────────────────────────────────
+         *
+         * Stage 1 (current): Falls back to the same operational DB.
+         *                    Just set LEDGER_DB_DATABASE the same as DB_DATABASE.
+         *
+         * Stage 2:           Point LEDGER_DB_* to a dedicated PostgreSQL instance
+         *                    with an append-only role (INSERT only, no UPDATE/DELETE).
+         *                    See: php artisan sovereign:setup-ledger-db
+         *
+         * Stage 3:           Enable async Merkle root anchoring to Simple L1.
+         *                    See: php artisan sovereign:anchor-ledger
+         *
+         * PostgreSQL append-only role (apply on Stage 2 DB):
+         *   CREATE ROLE ledger_writer WITH LOGIN PASSWORD '...';
+         *   GRANT CONNECT ON DATABASE infra_ledger TO ledger_writer;
+         *   GRANT USAGE ON SCHEMA public TO ledger_writer;
+         *   GRANT INSERT, SELECT ON infra_ledger TO ledger_writer;
+         *   -- No UPDATE, no DELETE, no DROP — ever.
+         */
+        'infra_ledger' => [
+            'driver' => env('LEDGER_DB_CONNECTION', env('DB_CONNECTION') === 'testing' ? 'sqlite' : env('DB_CONNECTION', 'pgsql')),
+            'url' => env('LEDGER_DATABASE_URL'),
+            'host' => env('LEDGER_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('LEDGER_DB_PORT', env('DB_PORT', '5432')),
+            'database' => env('LEDGER_DB_DATABASE', env('DB_CONNECTION') === 'testing' ? ':memory:' : env('DB_DATABASE', database_path('database.sqlite'))),
+            'username' => env('LEDGER_DB_USERNAME', env('DB_USERNAME', '')),
+            'password' => env('LEDGER_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('LEDGER_DB_SSLMODE', 'prefer'),
             'foreign_key_constraints' => true,
         ],
 

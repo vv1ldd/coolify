@@ -1,99 +1,48 @@
-<?php
-if (! function_exists('getOldOrLocal')) {
-    function getOldOrLocal($key, $localValue)
-    {
-        return old($key) != '' ? old($key) : (app()->environment('local') ? $localValue : '');
-    }
-}
-
-$name = getOldOrLocal('name', 'test3 normal user');
-$email = getOldOrLocal('email', 'test3@example.com');
-?>
-
 <x-layout-simple>
-    <section class="bg-gray-50 dark:bg-base">
-        <div class="flex flex-col items-center justify-center px-6 py-8 mx-auto md:h-screen lg:py-0">
-            <div class="w-full max-w-md space-y-8">
-                <div class="text-center space-y-2">
-                    <h1 class="!text-5xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-                        Coolify
-                    </h1>
-                    <p class="text-lg dark:text-neutral-400">
-                        Create your account
+    <div class="min-h-screen w-full flex items-center justify-center relative bg-white dark:bg-[#090909] overflow-hidden" style="font-family: 'Space Grotesk', sans-serif;">
+        <div class="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+            <div class="absolute top-[-10%] left-[20%] w-[60vw] h-[60vw] rounded-full blur-[80px] bg-[radial-gradient(circle,rgba(245,48,3,0.06)_0%,rgba(0,0,0,0)_70%)]"></div>
+            <div class="absolute top-[30%] right-[-10%] w-[50vw] h-[50vw] rounded-full blur-[100px] bg-[radial-gradient(circle,rgba(79,70,229,0.06)_0%,rgba(0,0,0,0)_75%)]"></div>
+        </div>
+
+        <div class="relative z-10 bg-white dark:bg-[#090909] border-[4px] border-black shadow-[8px_8px_0px_#000000] rounded-xl p-8 sm:p-10 mx-4" style="width: min(460px, calc(100vw - 2rem));">
+            <div class="flex items-center justify-center gap-3 mb-8">
+                <div class="w-4 h-4 bg-[#f53003] border-2 border-black rounded-[3px] shadow-[2px_2px_0px_#000000]"></div>
+                <h1 class="text-3xl font-black text-black dark:text-white tracking-tight uppercase m-0">Sovereign Coolify</h1>
+            </div>
+
+            <div class="text-center mb-8 space-y-3">
+                @if ($isFirstUser)
+                    <p class="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+                        Первая SL1 Identity станет root-администратором этого Coolify узла.
                     </p>
-                </div>
+                @else
+                    <p class="text-sm font-bold text-neutral-700 dark:text-neutral-300">
+                        Новые пользователи добавляются только через проверенную SL1 Identity.
+                    </p>
+                @endif
+                <p class="text-xs text-neutral-500 dark:text-neutral-500">
+                    Парольная регистрация отключена. Authority приходит из SL1 proof, а не из формы.
+                </p>
+            </div>
 
-                <div class="space-y-6">
-                    @if ($isFirstUser)
-                        <div class="mb-6 p-4 bg-warning/10 border border-warning rounded-lg">
-                            <div class="flex gap-3">
-                                <svg class="size-5 text-warning flex-shrink-0 mt-0.5" xmlns="http://www.w3.org/2000/svg"
-                                    viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd"
-                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                        clip-rule="evenodd" />
-                                </svg>
-                                <div>
-                                    <p class="font-bold text-warning">Root User Setup</p>
-                                    <p class="text-sm dark:text-white text-black">This user will be the root user with full
-                                        admin access.</p>
-                                </div>
-                            </div>
-                        </div>
-                    @endif
+            <div class="space-y-6">
+                @if ($errors->any())
+                    <div class="p-4 bg-red-500/10 border-[3px] border-red-500 rounded-lg shadow-[4px_4px_0px_#f53003]">
+                        @foreach ($errors->all() as $error)
+                            <p class="text-sm font-bold text-red-600 dark:text-red-400">{{ $error }}</p>
+                        @endforeach
+                    </div>
+                @endif
 
-                    @if ($errors->any())
-                        <div class="mb-6 p-4 bg-error/10 border border-error rounded-lg">
-                            @foreach ($errors->all() as $error)
-                                <p class="text-sm text-error">{{ $error }}</p>
-                            @endforeach
-                        </div>
-                    @endif
+                <a href="{{ route('auth.sl1.redirect') }}" class="flex items-center justify-center gap-2 bg-[#f53003] hover:bg-[#ff451a] text-white border-[3px] border-black shadow-[4px_4px_0px_#000000] hover:shadow-[2px_2px_0px_#000000] hover:translate-y-[2px] transition-all rounded-lg py-4 px-6 font-black uppercase tracking-widest text-sm mx-auto" style="width: min(360px, 100%);">
+                    Создать через SL1 Identity
+                </a>
 
-                    <form action="/register" method="POST" class="flex flex-col gap-4">
-                        @csrf
-                        <x-forms.input id="name" required type="text" name="name" value="{{ $name }}"
-                            label="{{ __('input.name') }}" />
-                        <x-forms.input id="email" required type="email" name="email" value="{{ $email }}"
-                            label="{{ __('input.email') }}" />
-                        <x-forms.input id="password" required type="password" name="password"
-                            label="{{ __('input.password') }}" />
-                        <x-forms.input id="password_confirmation" required type="password" name="password_confirmation"
-                            label="{{ __('input.password.again') }}" />
-
-                        <div
-                            class="p-4 bg-neutral-50 dark:bg-coolgray-200 rounded-lg border border-neutral-200 dark:border-coolgray-400">
-                            <p class="text-xs dark:text-neutral-400">
-                                Your password should be min 8 characters long and contain at least one uppercase letter,
-                                one lowercase letter, one number, and one symbol.
-                            </p>
-                        </div>
-
-                        <x-forms.button class="w-full justify-center py-3 box-boarding mt-2" type="submit"
-                            isHighlighted>
-                            Create Account
-                        </x-forms.button>
-                    </form>
-
-                    @if (!$isFirstUser)
-                        <div class="relative my-6">
-                            <div class="absolute inset-0 flex items-center">
-                                <div class="w-full border-t border-neutral-300 dark:border-coolgray-400"></div>
-                            </div>
-                            <div class="relative flex justify-center text-sm">
-                                <span class="px-2 bg-gray-50 dark:bg-base text-neutral-500 dark:text-neutral-400">
-                                    Already have an account?
-                                </span>
-                            </div>
-                        </div>
-
-                        <a href="{{ route('login') }}"
-                            class="block w-full text-center py-3 px-4 rounded-lg border border-neutral-300 dark:border-coolgray-400 font-medium hover:border-coollabs dark:hover:border-warning transition-colors">
-                            {{ __('auth.already_registered') }}
-                        </a>
-                    @endif
-                </div>
+                <a href="{{ route('login') }}" class="block text-center text-xs font-bold uppercase tracking-widest text-neutral-500 hover:text-neutral-900 dark:hover:text-white">
+                    Уже есть SL1 Identity? Войти
+                </a>
             </div>
         </div>
-    </section>
+    </div>
 </x-layout-simple>

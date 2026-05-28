@@ -3,8 +3,6 @@
 namespace App\Livewire;
 
 use DanHarrin\LivewireRateLimiting\WithRateLimiting;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
 use Livewire\Component;
 
 class ForcePasswordReset extends Component
@@ -19,10 +17,7 @@ class ForcePasswordReset extends Component
 
     public function rules(): array
     {
-        return [
-            'email' => ['required', 'email'],
-            'password' => ['required', Password::defaults(), 'confirmed'],
-        ];
+        return [];
     }
 
     public function mount()
@@ -30,7 +25,9 @@ class ForcePasswordReset extends Component
         if (auth()->user()->force_password_reset === false) {
             return redirect()->route('dashboard');
         }
-        $this->email = auth()->user()->email;
+        auth()->user()->forceFill(['force_password_reset' => false])->saveQuietly();
+
+        return redirect()->route('dashboard');
     }
 
     public function render()
@@ -40,25 +37,8 @@ class ForcePasswordReset extends Component
 
     public function submit()
     {
-        if (auth()->user()->force_password_reset === false) {
-            return redirect()->route('dashboard');
-        }
+        auth()->user()->forceFill(['force_password_reset' => false])->saveQuietly();
 
-        try {
-            $this->rateLimit(10);
-            $this->validate();
-            $firstLogin = auth()->user()->created_at == auth()->user()->updated_at;
-            auth()->user()->fill([
-                'password' => Hash::make($this->password),
-                'force_password_reset' => false,
-            ])->save();
-            if ($firstLogin) {
-                send_internal_notification('First login for '.auth()->user()->email);
-            }
-
-            return redirect()->route('dashboard');
-        } catch (\Throwable $e) {
-            return handleError($e, $this);
-        }
+        return redirect()->route('dashboard');
     }
 }

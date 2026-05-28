@@ -3,7 +3,6 @@
 namespace App\Notifications\TransactionalEmails;
 
 use App\Models\InstanceSettings;
-use Exception;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -35,12 +34,7 @@ class ResetPassword extends Notification
 
     public function via($notifiable)
     {
-        $type = set_transanctional_email_settings();
-        if (blank($type)) {
-            throw new Exception('No email settings found.');
-        }
-
-        return ['mail'];
+        return [];
     }
 
     public function toMail($notifiable)
@@ -55,8 +49,9 @@ class ResetPassword extends Notification
     protected function buildMailMessage($url)
     {
         $mail = new MailMessage;
-        $mail->subject('Coolify: Reset Password');
-        $mail->view('emails.reset-password', ['url' => $url, 'count' => config('auth.passwords.'.config('auth.defaults.passwords').'.expire')]);
+        $mail->subject('Coolify: Password Recovery Disabled');
+        $mail->line('Password recovery is disabled. Use SL1 Identity.');
+        $mail->action('Back to Login', $url);
 
         return $mail;
     }
@@ -67,12 +62,8 @@ class ResetPassword extends Notification
             return call_user_func(static::$createUrlCallback, $notifiable, $this->token);
         }
 
-        $path = route('password.reset', [
-            'token' => $this->token,
-            'email' => $notifiable->getEmailForPasswordReset(),
-        ], false);
+        $path = route('login', [], false);
 
-        // Use server-side config (FQDN / public IP) instead of request host
         return rtrim(base_url(), '/').$path;
     }
 }

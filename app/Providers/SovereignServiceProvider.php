@@ -4,7 +4,6 @@ namespace App\Providers;
 
 use App\Services\SimpleL1Client;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 class SovereignServiceProvider extends ServiceProvider
@@ -33,92 +32,47 @@ class SovereignServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // 3. Register custom routes for Passkey challenges and audit logs
-        $this->registerSovereignRoutes();
-
-        // 4. Intercept deployments and connect them to the L1 audit ledger
-        $this->registerDeploymentListeners();
+        // 4. Intercept system actions and connect them to the L1 audit ledger
+        $this->registerSovereignListeners();
     }
 
     /**
-     * Map sovereign routes dynamically
+     * Wire up listeners to intercept standard Coolify actions and sign them to Simple L1
      */
-    protected function registerSovereignRoutes(): void
+    protected function registerSovereignListeners(): void
     {
-        Route::prefix('sovereign')
-            ->middleware(['web'])
-            ->group(function () {
-                // Future WebAuthn / Passkey challenge & assertion points
-                Route::get('/passkeys/challenge', function () {
-                    return response()->json([
-                        'challenge' => bin2hex(random_bytes(32)),
-                        'rp' => config('sovereign.passkeys.relying_party'),
-                    ]);
-                })->name('sovereign.passkeys.challenge');
+        // 1. Audit Server onboarding and validations
+        Event::listen('App\Events\ServerValidated', function ($event) {
+            try {
+                $l1 = app(SimpleL1Client::class);
+                $l1->recordTransaction('SERVER_VALIDATION_INTENT', [
+                    'server_uuid' => $event->serverUuid,
+                    'team_id' => $event->teamId,
+                    'sovereign_mandate_id' => session('sovereign_mandate_id', 'legacy_session'),
+                    'sovereign_mandate_hash' => session('sovereign_mandate_hash', 'legacy_session'),
+                    'timestamp' => now()->toIso8601String(),
+                ]);
+            } catch (\Throwable $e) {
+                \Log::error('Sovereign L1 Audit Server validation failed: '.$e->getMessage());
+            }
+        });
 
-                Route::post('/passkeys/verify', function (\Illuminate\Http\Request $request) {
-                    $email = strtolower($request->input('email'));
-                    $user = \App\Models\User::where('email', $email)->first();
+        // 2. Audit Configuration updates and secret mutations
+        Event::listen('App\Events\ApplicationConfigurationChanged', function ($event) {
+            try {
+                $l1 = app(SimpleL1Client::class);
+                $l1->recordTransaction('CONFIG_MUTATION_INTENT', [
+                    'team_id' => $event->teamId,
+                    'sovereign_mandate_id' => session('sovereign_mandate_id', 'legacy_session'),
+                    'sovereign_mandate_hash' => session('sovereign_mandate_hash', 'legacy_session'),
+                    'timestamp' => now()->toIso8601String(),
+                ]);
+            } catch (\Throwable $e) {
+                \Log::error('Sovereign L1 Audit Config change failed: '.$e->getMessage());
+            }
+        });
 
-                    if (! $user) {
-                        // Dynamically create a passwordless cryptographic user
-                        $user = \App\Models\User::create([
-                            'name' => explode('@', $email)[0],
-                            'email' => $email,
-                            'password' => \Illuminate\Support\Facades\Hash::make(\Illuminate\Support\Str::random(32)),
-                        ]);
-                        
-                        // Recreate personal team
-                        $user->recreate_personal_team();
-                    }
-
-                    // Perform authentication login session mapping
-                    \Illuminate\Support\Facades\Auth::login($user);
-                    
-                    $user->updated_at = now();
-                    $user->save();
-
-                    // Reconstruct team settings inside session
-                    $currentTeam = $user->teams->firstWhere('personal_team', true);
-                    if (! $currentTeam) {
-                        $currentTeam = $user->recreate_personal_team();
-                    }
-                    session(['currentTeam' => $currentTeam]);
-
-                    // Fire L1 Ledger anchor transaction!
-                    try {
-                        $l1 = app(\App\Services\SimpleL1Client::class);
-                        $l1->recordTransaction('PASSWORDLESS_LOGIN', [
-                            'user_id' => $user->id,
-                            'email' => $user->email,
-                            'challenge' => $request->input('challenge'),
-                            'signature' => $request->input('signature'),
-                            'timestamp' => now()->toIso8601String(),
-                        ]);
-                    } catch (\Throwable $e) {
-                        \Log::error('Sovereign L1 Login audit failed: ' . $e->getMessage());
-                    }
-
-                    return response()->json(['success' => true]);
-                })->name('sovereign.passkeys.verify');
-
-                // L1 Ledger Audit view link
-                Route::get('/ledger/status', function () {
-                    return response()->json([
-                        'status' => 'active',
-                        'l1_node' => config('sovereign.l1_node_url'),
-                        'last_block' => '0x'.bin2hex(random_bytes(32)),
-                    ]);
-                })->name('sovereign.ledger.status');
-            });
-    }
-
-    /**
-     * Wire up listeners to intercept standard Coolify actions
-     */
-    protected function registerDeploymentListeners(): void
-    {
-        // Intercept container starting/stopping and log to L1
+        // 3. Audit Deployments
         Event::listen('App\Events\ApplicationDeploymentFinished', function ($event) {
             try {
                 $l1 = app(SimpleL1Client::class);
@@ -126,10 +80,12 @@ class SovereignServiceProvider extends ServiceProvider
                     'application_id' => $event->application->id,
                     'git_commit' => $event->application->git_commit,
                     'docker_image' => $event->application->docker_image,
+                    'sovereign_mandate_id' => session('sovereign_mandate_id', 'legacy_session'),
+                    'sovereign_mandate_hash' => session('sovereign_mandate_hash', 'legacy_session'),
                     'timestamp' => now()->toIso8601String(),
                 ]);
             } catch (\Throwable $e) {
-                \Log::error('Sovereign L1 Audit failed: '.$e->getMessage());
+                \Log::error('Sovereign L1 Audit Deployment failed: '.$e->getMessage());
             }
         });
     }

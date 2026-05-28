@@ -86,4 +86,14 @@ class Member extends Component
     {
         return $this->member->teams()->where('teams.id', currentTeam()->id)->first()?->pivot?->role;
     }
+
+    public function identityLabel(): string
+    {
+        $binding = $this->member->sl1IdentityBinding;
+
+        return $binding?->display_alias
+            ?: $binding?->alias
+            ?: $binding?->entity_address
+            ?: $this->member->email;
+    }
 }

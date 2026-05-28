@@ -9,7 +9,7 @@
             </a>
             <a class="shrink-0 {{ request()->routeIs('project.application.deployment.index') ? 'dark:text-white' : '' }}" {{ wireNavigate() }}
                 href="{{ route('project.application.deployment.index', $parameters) }}">
-                Deployments
+                Execution Intents
             </a>
             <a class="shrink-0 {{ request()->routeIs('project.application.logs') ? 'dark:text-white' : '' }}"
                 href="{{ route('project.application.logs', $parameters) }}">

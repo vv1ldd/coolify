@@ -1,9 +1,11 @@
 <x-emails.layout>
-You have been invited to "{{ $team }}" on "{{ config('app.name') }}".
+A team invitation artifact exists for "{{ $team }}" on "{{ config('app.name') }}".
 
-Please [click here]({{ $invitation_link }}) to accept the invitation.
+This email is only a discovery notice. It does not grant membership or carry authority.
+
+Please [open {{ config('app.name') }}]({{ $discovery_link ?? route('login') }}) and use SL1 Connect to evaluate the invitation with your identity proof.
 
 If you have any questions, please contact the team owner.<br><br>
 
-If it was not you who requested this invitation, please ignore this email.
+If you did not expect this discovery notice, please ignore this email.
 </x-emails.layout>

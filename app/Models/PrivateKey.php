@@ -286,7 +286,7 @@ class PrivateKey extends BaseModel
 
     public function getKeyLocation()
     {
-        return "/var/www/html/storage/app/ssh/keys/ssh_key@{$this->uuid}";
+        return storage_path("app/ssh/keys/ssh_key@{$this->uuid}");
     }
 
     public function updatePrivateKey(array $data)

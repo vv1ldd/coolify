@@ -12,142 +12,40 @@
         <div class="flex flex-col gap-2 lg:flex-row items-end">
             <x-forms.input id="name" label="Name" required />
             <x-forms.input id="email" label="Email" readonly />
-            @if (!$show_email_change && !$show_verification)
-                <x-forms.button wire:click="showEmailChangeForm" type="button">Change Email</x-forms.button>
-            @else
-                <x-forms.button wire:click="showEmailChangeForm" type="button" disabled>Change Email</x-forms.button>
-            @endif
+            <x-forms.button type="button" disabled>Managed by SL1 Identity</x-forms.button>
+        </div>
+        <div class="pt-2 text-xs font-bold dark:text-warning">
+            Email is contact metadata projected from SL1 Identity. It cannot mutate identity authority.
         </div>
     </form>
+    <div class="mt-8 pt-6 border-t-[3px] border-black">
+        <h2 class="mb-4 text-xl font-black uppercase tracking-widest text-black dark:text-white" style="font-family: 'Space Grotesk', sans-serif;">Sovereign Identity</h2>
+        <div class="relative group" title="Sovereign Infrastructure Core - Identity Managed by L1 Ledger">
+            <div class="absolute inset-0 bg-purple-600/10 blur-xl rounded-lg opacity-50"></div>
+            <div class="relative flex flex-col md:flex-row items-start md:items-center justify-between p-6 bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0_#000000] rounded-sm">
 
-    <div class="flex flex-col pt-4">
-        @if ($show_email_change)
-            <form wire:submit='requestEmailChange'>
-                <div class="flex gap-2 items-end">
-                    <x-forms.input id="new_email" label="New Email Address" required type="email" />
-                    <x-forms.button type="submit">Send Verification Code</x-forms.button>
-                    <x-forms.button wire:click="$set('show_email_change', false)" type="button"
-                        isError>Cancel</x-forms.button>
-                </div>
-                <div class="text-xs font-bold dark:text-warning pt-2">A verification code will be sent to your
-                    new email
-                    address.</div>
-            </form>
-        @endif
-
-        @if ($show_verification)
-            <form wire:submit='verifyEmailChange'>
-                <div class="flex gap-2 items-end">
-                    <x-forms.input id="email_verification_code" label="Verification Code (6 digits)" required
-                        maxlength="6" />
-                    <x-forms.button type="submit">Verify & Update Email</x-forms.button>
-                    <x-forms.button wire:click="resendVerificationCode" type="button" isWarning>Resend
-                        Code</x-forms.button>
-                    <x-forms.button wire:click="cancelEmailChange" type="button" isError>Cancel</x-forms.button>
-                </div>
-                <div class="text-xs font-bold dark:text-warning pt-2">
-                    Verification code sent to {{ $new_email ?? auth()->user()->pending_email }}.
-                    The code is valid for {{ config('constants.email_change.verification_code_expiry_minutes', 10) }}
-                    minutes.
+                <div class="flex items-center gap-4 mb-4 md:mb-0">
+                    <div class="w-12 h-12 flex items-center justify-center bg-neutral-900 border-2 border-black rounded shadow-[2px_2px_0_#000000]">
+                        <svg class="w-6 h-6 text-purple-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM11 19.93C7.05 19.43 4 16.05 4 12C4 7.95 7.05 4.57 11 4.07V19.93ZM13 4.07C16.95 4.57 20 7.95 20 12C20 16.05 16.95 19.43 13 19.93V4.07Z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="text-sm font-black text-black dark:text-white uppercase tracking-widest">Passkey & L1 Authentication Active</div>
+                        <div class="text-xs font-bold text-neutral-500 dark:text-neutral-400 mt-1">Passwords and OTP are disabled.</div>
+                    </div>
                 </div>
 
-
-            </form>
-        @endif
+                <div class="flex items-center gap-2 px-3 py-1.5 bg-neutral-900 border border-purple-500/20 rounded-sm">
+                    <div class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
+                    <span class="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Cryptographic Proof Verified</span>
+                </div>
+            </div>
+        </div>
+        <div class="mt-4 text-xs font-bold text-neutral-500 dark:text-neutral-500 leading-relaxed max-w-2xl">
+            This instance is running Sovereign OS. Standard password authentication and Two-Factor Authentication (OTP) have been stripped from the kernel. All identity verification is now anchored to your device Passkeys and L1 cryptographic proofs.
+        </div>
     </div>
-    <form wire:submit='resetPassword' class="flex flex-col pt-4">
-        <div class="flex items-center gap-2 pb-2">
-            <h2>Change Password</h2>
-            <x-forms.button type="submit" label="Save">Save</x-forms.button>
-        </div>
-        <div class="text-xs font-bold dark:text-warning pb-2">Resetting the password will logout all sessions.</div>
-        <div class="flex flex-col gap-2">
-            <x-forms.input id="current_password" label="Current Password" required type="password" />
-            <div class="flex gap-2">
-                <x-forms.input id="new_password" label="New Password" required type="password" />
-                <x-forms.input id="new_password_confirmation" label="New Password Again" required type="password" />
-            </div>
-        </div>
-    </form>
-    <h2 class="py-4">Two-factor Authentication</h2>
-    @if (session('status') == 'two-factor-authentication-enabled')
-        <div class="mb-4 font-medium">
-            Please finish configuring two factor authentication below. Read the QR code or enter the secret key
-            manually.
-        </div>
-        <div class="flex flex-col gap-4">
-            <form action="/user/confirmed-two-factor-authentication" method="POST" class="flex items-end gap-2">
-                @csrf
-                <x-forms.input type="text" inputmode="numeric" pattern="[0-9]*" id="code"
-                    label="One time (OTP) code" required />
-                <x-forms.button type="submit">Validate 2FA</x-forms.button>
-            </form>
-            <div class="flex flex-col items-start">
-                <div
-                    class="flex items-center justify-center w-80 h-80 bg-white p-4 border-4 border-gray-300 rounded-lg shadow-lg">
-                    {!! request()->user()->twoFactorQrCodeSvg() !!}
-                </div>
-                <div x-data="{
-                    showCode: false,
-                }" class="py-4 w-full">
-                    <div class="flex flex-col gap-2 pb-2" x-show="showCode">
-                        <x-forms.copy-button text="{{ decrypt(request()->user()->two_factor_secret) }}" />
-                        <x-forms.copy-button text="{{ request()->user()->twoFactorQrCodeUrl() }}" />
-                    </div>
-                    <x-forms.button x-on:click="showCode = !showCode" class="mt-2">
-                        <span x-text="showCode ? 'Hide Secret Key and OTP URL' : 'Show Secret Key and OTP URL'"></span>
-                    </x-forms.button>
-                </div>
-            </div>
-        </div>
-    @elseif(session('status') == 'two-factor-authentication-confirmed')
-        <div class="mb-4 ">
-            Two factor authentication confirmed and enabled successfully.
-        </div>
-        <div>
-            <div class="pb-6 ">Here are the recovery codes for your account. Please store them in a secure
-                location.
-            </div>
-            <div class="dark:text-white">
-                @foreach (request()->user()->recoveryCodes() as $code)
-                    <div>{{ $code }}</div>
-                @endforeach
-            </div>
-        </div>
-    @else
-        @if (request()->user()->two_factor_confirmed_at)
-            <div class="pb-4 "> Two factor authentication is <span class="text-helper">enabled</span>.</div>
-            <div class="flex gap-2">
-                <form action="/user/two-factor-authentication" method="POST">
-                    @csrf
-                    @method ('DELETE')
-                    <x-forms.button type="submit">Disable</x-forms.button>
-                </form>
-                <form action="/user/two-factor-recovery-codes" method="POST">
-                    @csrf
-                    <x-forms.button type="submit">Regenerate Recovery Codes</x-forms.button>
-                </form>
-            </div>
-            @if (session('status') == 'recovery-codes-generated')
-                <div>
-                    <div class="py-6 ">Here are the recovery codes for your account. Please store them in a
-                        secure
-                        location.
-                    </div>
-                    <div class="dark:text-white">
-                        @foreach (request()->user()->recoveryCodes() as $code)
-                            <div>{{ $code }}</div>
-                        @endforeach
-                    </div>
-                </div>
-            @endif
-        @else
-            <form action="/user/two-factor-authentication" method="POST">
-                @csrf
-                <x-forms.button type="submit">Configure</x-forms.button>
-            </form>
-        @endif
-    @endif
     @if (session()->has('errors'))
         <div class="text-error">
             Something went wrong. Please try again.

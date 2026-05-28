@@ -36,7 +36,7 @@ class CleanupStaleMultiplexedConnections implements ShouldQueue
                 continue;
             }
 
-            $muxSocket = "/var/www/html/storage/app/ssh/mux/{$muxFile}";
+            $muxSocket = storage_path("app/ssh/mux/{$muxFile}");
             $checkCommand = "ssh -O check -o ControlPath={$muxSocket} {$server->user}@{$server->ip} 2>/dev/null";
             $checkProcess = Process::run($checkCommand);
 
@@ -74,7 +74,7 @@ class CleanupStaleMultiplexedConnections implements ShouldQueue
 
     private function removeMultiplexFile($muxFile)
     {
-        $muxSocket = "/var/www/html/storage/app/ssh/mux/{$muxFile}";
+        $muxSocket = storage_path("app/ssh/mux/{$muxFile}");
         $closeCommand = "ssh -O exit -o ControlPath={$muxSocket} localhost 2>/dev/null";
         Process::run($closeCommand);
         Storage::disk('ssh-mux')->delete($muxFile);

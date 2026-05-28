@@ -12,6 +12,7 @@ uses(RefreshDatabase::class);
 beforeEach(function () {
     Cache::forget('instance_settings_fqdn_host');
     Once::flush();
+    InstanceSettings::unguarded(fn () => InstanceSettings::updateOrCreate(['id' => 0], []));
 });
 
 function callResetUrl(ResetPassword $notification, $notifiable): string
@@ -21,7 +22,7 @@ function callResetUrl(ResetPassword $notification, $notifiable): string
     return $method->invoke($notification, $notifiable);
 }
 
-it('generates reset URL using configured FQDN, not request host', function () {
+it('routes reset-password notifications back to login using configured FQDN', function () {
     InstanceSettings::updateOrCreate(
         ['id' => 0],
         ['fqdn' => 'https://coolify.example.com', 'public_ipv4' => '65.21.3.91']
@@ -35,12 +36,13 @@ it('generates reset URL using configured FQDN, not request host', function () {
 
     expect($url)
         ->toStartWith('https://coolify.example.com/')
-        ->toContain('test-token-abc')
-        ->toContain(urlencode($user->email))
+        ->toContain('/login')
+        ->not->toContain('test-token-abc')
+        ->not->toContain(urlencode($user->email))
         ->not->toContain('localhost');
 });
 
-it('generates reset URL using public IP when no FQDN is configured', function () {
+it('routes reset-password notifications back to login using public IP when no FQDN is configured', function () {
     InstanceSettings::updateOrCreate(
         ['id' => 0],
         ['fqdn' => null, 'public_ipv4' => '65.21.3.91']
@@ -54,7 +56,8 @@ it('generates reset URL using public IP when no FQDN is configured', function ()
 
     expect($url)
         ->toContain('65.21.3.91')
-        ->toContain('test-token-abc')
+        ->toContain('/login')
+        ->not->toContain('test-token-abc')
         ->not->toContain('evil.com');
 });
 
@@ -77,7 +80,8 @@ it('is immune to X-Forwarded-Host header poisoning when FQDN is set', function (
 
     expect($url)
         ->toStartWith('https://coolify.example.com/')
-        ->toContain('poisoned-token')
+        ->toContain('/login')
+        ->not->toContain('poisoned-token')
         ->not->toContain('evil.com');
 });
 
@@ -99,11 +103,12 @@ it('is immune to X-Forwarded-Host header poisoning when using IP only', function
 
     expect($url)
         ->toContain('65.21.3.91')
-        ->toContain('poisoned-token')
+        ->toContain('/login')
+        ->not->toContain('poisoned-token')
         ->not->toContain('evil.com');
 });
 
-it('generates reset URL with bracketed IPv6 when no FQDN is configured', function () {
+it('routes reset-password notifications back to login with bracketed IPv6 when no FQDN is configured', function () {
     InstanceSettings::updateOrCreate(
         ['id' => 0],
         ['fqdn' => null, 'public_ipv4' => null, 'public_ipv6' => '2001:db8::1']
@@ -117,8 +122,9 @@ it('generates reset URL with bracketed IPv6 when no FQDN is configured', functio
 
     expect($url)
         ->toContain('[2001:db8::1]')
-        ->toContain('ipv6-token')
-        ->toContain(urlencode($user->email));
+        ->toContain('/login')
+        ->not->toContain('ipv6-token')
+        ->not->toContain(urlencode($user->email));
 });
 
 it('is immune to X-Forwarded-Host header poisoning when using IPv6 only', function () {
@@ -139,7 +145,8 @@ it('is immune to X-Forwarded-Host header poisoning when using IPv6 only', functi
 
     expect($url)
         ->toContain('[2001:db8::1]')
-        ->toContain('poisoned-token')
+        ->toContain('/login')
+        ->not->toContain('poisoned-token')
         ->not->toContain('evil.com');
 });
 
@@ -163,11 +170,12 @@ it('uses APP_URL fallback when no FQDN or public IPs are configured', function (
 
     expect($url)
         ->toStartWith('http://my-coolify.local/')
-        ->toContain('fallback-token')
+        ->toContain('/login')
+        ->not->toContain('fallback-token')
         ->not->toContain('evil.com');
 });
 
-it('generates a valid route path in the reset URL', function () {
+it('does not generate password reset token links', function () {
     InstanceSettings::updateOrCreate(
         ['id' => 0],
         ['fqdn' => 'https://coolify.example.com']
@@ -179,9 +187,9 @@ it('generates a valid route path in the reset URL', function () {
 
     $url = callResetUrl($notification, $user);
 
-    // Should contain the password reset route path with token and email
     expect($url)
-        ->toContain('/reset-password/')
-        ->toContain('my-token')
-        ->toContain(urlencode($user->email));
+        ->toContain('/login')
+        ->not->toContain('/reset-password/')
+        ->not->toContain('my-token')
+        ->not->toContain(urlencode($user->email));
 });
