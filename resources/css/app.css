@@ -345,6 +345,49 @@ a[href="/"], .logo-text-partner {
     stroke: #ffffff !important;
 }
 
+.sub-menu-wrapper {
+    align-self: flex-start;
+    background-color: rgba(13, 7, 24, 0.96) !important;
+    background-image:
+        linear-gradient(180deg, rgba(13, 7, 24, 0.98), rgba(5, 2, 10, 0.98)),
+        radial-gradient(rgba(34, 211, 238, 0.08) 1px, transparent 1px) !important;
+    background-size: auto, 18px 18px !important;
+    border: 3px solid #000000 !important;
+    border-radius: 8px !important;
+    box-shadow: 4px 4px 0px #000000, inset 0 0 0 1px rgba(34, 211, 238, 0.12) !important;
+    padding: 10px !important;
+}
+
+.sub-menu-item {
+    color: var(--text-muted) !important;
+    border: 2px solid transparent !important;
+    border-radius: 5px !important;
+    font-weight: 700 !important;
+}
+
+.sub-menu-item:hover {
+    background-color: rgba(34, 211, 238, 0.08) !important;
+    border-color: #000000 !important;
+    color: var(--text-bright) !important;
+    box-shadow: 2px 2px 0px #000000 !important;
+}
+
+.sub-menu-item.menu-item-active,
+.sub-menu-wrapper .menu-item-active {
+    background: linear-gradient(90deg, var(--brand-primary), #7c3aed) !important;
+    color: #ffffff !important;
+    border: 2px solid #000000 !important;
+    box-shadow: 3px 3px 0px #000000, 0 0 14px rgba(34, 211, 238, 0.14) !important;
+}
+
+.navbar-main {
+    background-color: rgba(13, 7, 24, 0.78) !important;
+    border: 3px solid #000000 !important;
+    border-radius: 8px !important;
+    box-shadow: 4px 4px 0px #000000 !important;
+    padding: 10px !important;
+}
+
 /* Sovereign inputs and select fields */
 .input, .select, input, select, textarea {
     background-color: #000000 !important;
