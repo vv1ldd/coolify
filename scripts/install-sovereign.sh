@@ -17,6 +17,10 @@ APP_PORT="${APP_PORT:-8000}"
 SOKETI_PORT="${SOKETI_PORT:-6001}"
 AUTOUPDATE="${AUTOUPDATE:-false}"
 SOVEREIGN_INSTALL_MODE="${SOVEREIGN_INSTALL_MODE:-auto}"
+SOVEREIGN_HARDENING="${SOVEREIGN_HARDENING:-auto}"
+SOVEREIGN_HARDENING_PROFILE="${SOVEREIGN_HARDENING_PROFILE:-baseline}"
+SOVEREIGN_APP_SCHEME="${SOVEREIGN_APP_SCHEME:-https}"
+SOVEREIGN_HOST_DOMAIN="${SOVEREIGN_HOST_DOMAIN:-}"
 SL1_CONNECT_ISSUER="${SL1_CONNECT_ISSUER:-https://simplel1.online}"
 SL1_CONNECT_CLIENT_ID="${SL1_CONNECT_CLIENT_ID:-coolify.sovereign}"
 SL1_CONNECT_CLIENT_NAME="${SL1_CONNECT_CLIENT_NAME:-Sovereign-Coolify}"
@@ -24,6 +28,9 @@ SL1_CONNECT_CALLBACK_PATH="${SL1_CONNECT_CALLBACK_PATH:-/auth/sl1/callback}"
 SL1_CONNECT_TIMEOUT="${SL1_CONNECT_TIMEOUT:-10}"
 SELECTED_INSTALL_MODE=""
 SELECTED_ADMIN_CLAIM="false"
+SELECTED_HARDENING="false"
+SELECTED_APP_URL=""
+SELECTED_HOST_DOMAIN="$SOVEREIGN_HOST_DOMAIN"
 
 if [ -z "${NO_COLOR:-}" ]; then
     C_RESET="$(printf '\033[0m')"
@@ -107,6 +114,41 @@ format_env_value() {
     fi
 
     printf '%s' "$value"
+}
+
+strip_env_quotes() {
+    local value="$1"
+    value="${value%\"}"
+    value="${value#\"}"
+    value="${value%\'}"
+    value="${value#\'}"
+    printf '%s' "$value"
+}
+
+detect_public_ip() {
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null || true
+    fi
+}
+
+domain_points_to_host() {
+    local domain="$1"
+    local public_ip="$2"
+
+    [ -n "$domain" ] || return 1
+    [ -n "$public_ip" ] || return 1
+
+    if command -v getent >/dev/null 2>&1; then
+        getent ahosts "$domain" 2>/dev/null | awk '{ print $1 }' | grep -Fxq "$public_ip"
+        return $?
+    fi
+
+    if command -v dig >/dev/null 2>&1; then
+        dig +short A "$domain" 2>/dev/null | grep -Fxq "$public_ip"
+        return $?
+    fi
+
+    return 1
 }
 
 check_host_resources() {
@@ -336,6 +378,174 @@ resolve_install_mode() {
     fi
 }
 
+choose_host_domain() {
+    local existing_app_url public_ip domain_choice continue_choice
+
+    existing_app_url="$(strip_env_quotes "$(get_env_var APP_URL)")"
+
+    if [ -n "$SELECTED_HOST_DOMAIN" ]; then
+        SELECTED_APP_URL="${SOVEREIGN_APP_SCHEME}://${SELECTED_HOST_DOMAIN}"
+    elif can_prompt; then
+        section "Canonical host domain"
+        if [ -n "$existing_app_url" ]; then
+            note "Current APP_URL: ${existing_app_url}"
+        fi
+        note "Use a real domain for TLS and SL1 callback correctness."
+        printf 'Panel domain (blank to keep current or use IP fallback): ' > /dev/tty
+        read -r domain_choice < /dev/tty
+        if [ -n "$domain_choice" ]; then
+            SELECTED_HOST_DOMAIN="$domain_choice"
+            SELECTED_APP_URL="${SOVEREIGN_APP_SCHEME}://${domain_choice}"
+        elif [ -n "$existing_app_url" ] && [ "$existing_app_url" != "http://localhost" ] && [ "$existing_app_url" != "https://localhost" ]; then
+            SELECTED_APP_URL="$existing_app_url"
+        else
+            SELECTED_APP_URL="http://$(hostname -I 2>/dev/null | awk '{print $1}'):${APP_PORT}"
+        fi
+    elif [ -n "$existing_app_url" ] && [ "$existing_app_url" != "http://localhost" ] && [ "$existing_app_url" != "https://localhost" ]; then
+        SELECTED_APP_URL="$existing_app_url"
+    else
+        SELECTED_APP_URL="http://$(hostname -I 2>/dev/null | awk '{print $1}'):${APP_PORT}"
+    fi
+
+    if [ -n "$SELECTED_HOST_DOMAIN" ]; then
+        public_ip="$(detect_public_ip)"
+        if [ -n "$public_ip" ]; then
+            note "Detected public IP: ${public_ip}"
+            if domain_points_to_host "$SELECTED_HOST_DOMAIN" "$public_ip"; then
+                term_line "${C_GREEN}   DNS check passed for ${SELECTED_HOST_DOMAIN}.${C_RESET}"
+            else
+                warning "DNS for ${SELECTED_HOST_DOMAIN} does not appear to resolve to ${public_ip} yet."
+                if can_prompt; then
+                    printf 'Continue anyway? [y/N]: ' > /dev/tty
+                    read -r continue_choice < /dev/tty
+                    case "$continue_choice" in
+                        y|Y|yes|YES) ;;
+                        *) die "Aborted until DNS is bound to this host." ;;
+                    esac
+                fi
+            fi
+        fi
+    fi
+}
+
+apply_host_domain_env() {
+    if [ -z "$SELECTED_APP_URL" ]; then
+        return 0
+    fi
+
+    set_env_var "APP_URL" "$SELECTED_APP_URL"
+    if [ -n "$SELECTED_HOST_DOMAIN" ]; then
+        set_env_var "SOVEREIGN_HOST_DOMAIN" "$SELECTED_HOST_DOMAIN"
+        local public_ip
+        public_ip="$(detect_public_ip)"
+        if [ -n "$public_ip" ]; then
+            set_env_var "SOVEREIGN_HOST_PUBLIC_IP" "$public_ip"
+        fi
+    fi
+}
+
+choose_smtp_mode() {
+    local mode_choice
+
+    if [ -n "${SOVEREIGN_SMTP_MODE:-}" ] && [ "$SOVEREIGN_SMTP_MODE" != "auto" ]; then
+        return 0
+    fi
+
+    if ! can_prompt; then
+        if [ "${SOVEREIGN_SMTP_MODE:-}" = "auto" ]; then
+            export SOVEREIGN_SMTP_MODE="none"
+        fi
+        return 0
+    fi
+
+    section "Host SMTP"
+    note "Default is none. Relay mode configures outbound Postfix without a public open relay."
+    term_line "${C_MAGENTA}[1]${C_RESET} none"
+    term_line "${C_MAGENTA}[2]${C_RESET} relay through smarthost"
+    term_line "${C_MAGENTA}[3]${C_RESET} direct outbound MTA"
+    printf 'Select SMTP mode [1/2/3]: ' > /dev/tty
+    read -r mode_choice < /dev/tty
+    case "$mode_choice" in
+        2)
+            export SOVEREIGN_SMTP_MODE="relay"
+            printf 'Relay host: ' > /dev/tty
+            read -r SOVEREIGN_SMTP_RELAY_HOST < /dev/tty
+            export SOVEREIGN_SMTP_RELAY_HOST
+            printf 'Relay port [587]: ' > /dev/tty
+            read -r SOVEREIGN_SMTP_RELAY_PORT < /dev/tty
+            export SOVEREIGN_SMTP_RELAY_PORT="${SOVEREIGN_SMTP_RELAY_PORT:-587}"
+            printf 'Relay username (blank if none): ' > /dev/tty
+            read -r SOVEREIGN_SMTP_RELAY_USERNAME < /dev/tty
+            export SOVEREIGN_SMTP_RELAY_USERNAME
+            printf 'Relay password (blank if none): ' > /dev/tty
+            read -rs SOVEREIGN_SMTP_RELAY_PASSWORD < /dev/tty
+            printf '\n' > /dev/tty
+            export SOVEREIGN_SMTP_RELAY_PASSWORD
+            ;;
+        3)
+            warning "Direct SMTP requires PTR/rDNS, SPF, DKIM, DMARC, and provider support for outbound port 25."
+            export SOVEREIGN_SMTP_MODE="direct"
+            ;;
+        *)
+            export SOVEREIGN_SMTP_MODE="none"
+            ;;
+    esac
+}
+
+choose_hardening() {
+    local hardening_choice
+
+    case "$SOVEREIGN_HARDENING" in
+        true|1|yes|YES)
+            SELECTED_HARDENING="true"
+            ;;
+        false|0|no|NO)
+            SELECTED_HARDENING="false"
+            ;;
+        auto)
+            if can_prompt; then
+                section "Host hardening"
+                note "Applies reversible baseline: UFW, Fail2Ban, sysctl, Docker logs, optional SMTP relay."
+                printf 'Apply Sovereign host hardening now? [y/N]: ' > /dev/tty
+                read -r hardening_choice < /dev/tty
+                case "$hardening_choice" in
+                    y|Y|yes|YES) SELECTED_HARDENING="true" ;;
+                    *) SELECTED_HARDENING="false" ;;
+                esac
+            else
+                SELECTED_HARDENING="false"
+            fi
+            ;;
+        *)
+            die "Invalid SOVEREIGN_HARDENING=${SOVEREIGN_HARDENING}. Use auto, true, or false."
+            ;;
+    esac
+
+    if [ "$SELECTED_HARDENING" = "true" ]; then
+        choose_smtp_mode
+    fi
+}
+
+run_host_hardening() {
+    if [ "$SELECTED_HARDENING" != "true" ]; then
+        return 0
+    fi
+
+    download_file scripts/sovereign-host-hardening.sh "${SOURCE_DIR}/sovereign-host-hardening.sh"
+    chmod +x "${SOURCE_DIR}/sovereign-host-hardening.sh"
+
+    local hardening_app_port hardening_soketi_port
+    hardening_app_port="$(strip_env_quotes "$(get_env_var APP_PORT)")"
+    hardening_soketi_port="$(strip_env_quotes "$(get_env_var SOKETI_PORT)")"
+
+    APP_PORT="${hardening_app_port:-$APP_PORT}" \
+    SOKETI_PORT="${hardening_soketi_port:-$SOKETI_PORT}" \
+    SOVEREIGN_HARDENING_PROFILE="$SOVEREIGN_HARDENING_PROFILE" \
+    SOVEREIGN_HOST_DOMAIN="$SELECTED_HOST_DOMAIN" \
+    SOVEREIGN_HOST_PUBLIC_IP="$(strip_env_quotes "$(get_env_var SOVEREIGN_HOST_PUBLIC_IP)")" \
+    bash "${SOURCE_DIR}/sovereign-host-hardening.sh"
+}
+
 run_existing_upgrade() {
     local generate_claim="${1:-false}"
 
@@ -459,14 +669,22 @@ login_to_registry
 
 DETECTED_INSTALL_STATE="$(detected_install_state)"
 resolve_install_mode "$DETECTED_INSTALL_STATE"
+choose_host_domain
+choose_hardening
 
 section "Selected action"
 note "Mode:        ${SELECTED_INSTALL_MODE}"
 note "Admin claim: ${SELECTED_ADMIN_CLAIM}"
+note "Hardening:   ${SELECTED_HARDENING}"
+if [ -n "$SELECTED_APP_URL" ]; then
+    note "APP_URL:     ${SELECTED_APP_URL}"
+fi
 echo ""
 
 case "$SELECTED_INSTALL_MODE" in
     upgrade|refresh)
+        apply_host_domain_env
+        run_host_hardening
         run_existing_upgrade "$SELECTED_ADMIN_CLAIM"
         exit 0
         ;;
@@ -486,6 +704,7 @@ download_file scripts/upgrade-sovereign.sh "${SOURCE_DIR}/upgrade-sovereign.sh"
 chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh"
 
 merge_env_production
+apply_host_domain_env
 
 set_env_var_if_empty "APP_ID" "$(openssl rand -hex 16)"
 set_env_var_if_empty "APP_KEY" "base64:$(openssl rand -base64 32)"
@@ -509,6 +728,10 @@ set_env_var "SL1_CONNECT_CLIENT_ID" "$SL1_CONNECT_CLIENT_ID"
 set_env_var "SL1_CONNECT_CLIENT_NAME" "$SL1_CONNECT_CLIENT_NAME"
 set_env_var "SL1_CONNECT_CALLBACK_PATH" "$SL1_CONNECT_CALLBACK_PATH"
 set_env_var "SL1_CONNECT_TIMEOUT" "$SL1_CONNECT_TIMEOUT"
+set_env_var "SOVEREIGN_HARDENING_PROFILE" "$SOVEREIGN_HARDENING_PROFILE"
+if [ -n "${SOVEREIGN_WIREGUARD_CIDRS:-}" ]; then
+    set_env_var "SOVEREIGN_WIREGUARD_CIDRS" "$SOVEREIGN_WIREGUARD_CIDRS"
+fi
 
 if [ -n "${ROOT_USERNAME:-}" ] && [ -n "${ROOT_USER_EMAIL:-}" ] && [ -n "${ROOT_USER_PASSWORD:-}" ]; then
     set_env_var "ROOT_USERNAME" "$ROOT_USERNAME"
@@ -522,6 +745,7 @@ if ! docker network inspect coolify >/dev/null 2>&1; then
 fi
 
 prepare_ssh_key
+run_host_hardening
 chown -R 9999:root "$INSTALL_ROOT"
 chmod -R 700 "$INSTALL_ROOT"
 

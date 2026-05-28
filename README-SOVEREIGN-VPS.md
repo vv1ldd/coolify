@@ -48,6 +48,14 @@ cyberpunk terminal menu when a TTY is available:
 For non-interactive use, set `SOVEREIGN_INSTALL_MODE` to `auto`, `fresh`,
 `upgrade`, or `refresh`.
 
+Optional canonical host domain:
+
+```bash
+export SOVEREIGN_HOST_DOMAIN=coolify.example.com
+export SOVEREIGN_APP_SCHEME=https
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
+```
+
 Optional pre-created root user:
 
 ```bash
@@ -74,6 +82,42 @@ export SL1_CONNECT_CLIENT_ID=coolify.sovereign
 export SL1_CONNECT_CLIENT_NAME='Sovereign Coolify'
 curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
 ```
+
+Optional host hardening:
+
+```bash
+export SOVEREIGN_HARDENING=true
+export SOVEREIGN_HARDENING_PROFILE=baseline
+export SOVEREIGN_WIREGUARD_CIDRS=10.8.0.0/24
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
+```
+
+Database/container exposed ports are closed by default unless explicitly allowed.
+Prefer WireGuard/VPN-scoped access:
+
+```bash
+export SOVEREIGN_HARDENING=true
+export SOVEREIGN_EXPOSED_PORTS=3306/tcp,5432/tcp
+export SOVEREIGN_WIREGUARD_CIDRS=10.8.0.0/24
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
+```
+
+Optional outbound SMTP relay on the host:
+
+```bash
+export SOVEREIGN_HARDENING=true
+export SOVEREIGN_SMTP_MODE=relay
+export SOVEREIGN_SMTP_RELAY_HOST=smtp.example.com
+export SOVEREIGN_SMTP_RELAY_PORT=587
+export SOVEREIGN_SMTP_RELAY_USERNAME=postmaster@example.com
+export SOVEREIGN_SMTP_RELAY_PASSWORD='smtp-password'
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
+```
+
+The hardening script never creates an open SMTP relay and does not globally open
+database ports unless explicitly configured as a break-glass exception. It also
+adds a `DOCKER-USER` ingress guard so Docker-published database ports do not
+bypass UFW on the public interface.
 
 After installation, open:
 
@@ -103,6 +147,8 @@ Update rail:
   upstream upgrade, and Sovereign refresh
 - `scripts/upgrade-sovereign.sh` - internal worker that pulls the fork image and
   restarts compose
+- `scripts/sovereign-host-hardening.sh` - optional reversible host hardening
+  worker for firewall, Fail2Ban, Docker logs, SMTP relay, and network surfaces
 - `docker-compose.sovereign.prod.yml` - overrides the app image to the fork image
 - `.github/workflows/sovereign-build.yml` - publishes `ghcr.io/vv1ldd/coolify:sovereign`
 

@@ -141,6 +141,21 @@ generate_admin_claim() {
     fi
 }
 
+run_host_hardening() {
+    if [ "${SOVEREIGN_HARDENING:-false}" != "true" ]; then
+        return
+    fi
+
+    write_status "2" "Applying host hardening"
+    log "Applying Sovereign host hardening"
+
+    APP_PORT="${APP_PORT:-$(strip_env_quotes "$(get_env_var APP_PORT)")}" \
+    SOKETI_PORT="${SOKETI_PORT:-$(strip_env_quotes "$(get_env_var SOKETI_PORT)")}" \
+    SOVEREIGN_HOST_DOMAIN="${SOVEREIGN_HOST_DOMAIN:-$(strip_env_quotes "$(get_env_var SOVEREIGN_HOST_DOMAIN)")}" \
+    SOVEREIGN_HOST_PUBLIC_IP="${SOVEREIGN_HOST_PUBLIC_IP:-$(strip_env_quotes "$(get_env_var SOVEREIGN_HOST_PUBLIC_IP)")}" \
+    bash "${SOURCE_DIR}/sovereign-host-hardening.sh"
+}
+
 if [ "$EUID" -ne 0 ]; then
     echo "Please run this script as root or with sudo."
     exit 1
@@ -157,7 +172,9 @@ download_file docker-compose.prod.yml "${SOURCE_DIR}/docker-compose.prod.yml"
 download_file docker-compose.sovereign.prod.yml "${SOURCE_DIR}/docker-compose.sovereign.prod.yml"
 download_file .env.production "${SOURCE_DIR}/.env.production"
 download_file scripts/upgrade-sovereign.sh "${SOURCE_DIR}/upgrade-sovereign.sh"
+download_file scripts/sovereign-host-hardening.sh "${SOURCE_DIR}/sovereign-host-hardening.sh"
 chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh"
+chmod +x "${SOURCE_DIR}/sovereign-host-hardening.sh"
 
 if [ ! -f "$ENV_FILE" ]; then
     cp "${SOURCE_DIR}/.env.production" "$ENV_FILE"
@@ -187,6 +204,8 @@ set_env_var "SL1_CONNECT_CLIENT_ID" "${SL1_CONNECT_CLIENT_ID:-$(get_env_var SL1_
 set_env_var "SL1_CONNECT_CLIENT_NAME" "$SL1_CONNECT_CLIENT_NAME_VALUE"
 set_env_var "SL1_CONNECT_CALLBACK_PATH" "${SL1_CONNECT_CALLBACK_PATH:-$(get_env_var SL1_CONNECT_CALLBACK_PATH)}"
 set_env_var "SL1_CONNECT_TIMEOUT" "${SL1_CONNECT_TIMEOUT:-$(get_env_var SL1_CONNECT_TIMEOUT)}"
+
+run_host_hardening
 
 if ! docker network inspect coolify >/dev/null 2>&1; then
     log "Creating coolify network"
