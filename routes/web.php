@@ -118,6 +118,7 @@ Route::middleware(['throttle:login'])->group(function () {
 });
 
 Route::get('/auth/sl1/redirect', [Sl1IdentityController::class, 'redirect'])->name('auth.sl1.redirect');
+Route::get('/auth/sl1/admin-claim/{token}', [Sl1IdentityController::class, 'adminClaim'])->name('auth.sl1.admin-claim');
 Route::get('/auth/sl1/callback', [Sl1IdentityController::class, 'callback'])->name('auth.sl1.callback');
 
 Route::middleware(['auth', 'verified'])->group(function () {

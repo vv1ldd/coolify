@@ -44,6 +44,15 @@ format_env_value() {
     printf '%s' "$value"
 }
 
+strip_env_quotes() {
+    local value="$1"
+    value="${value%\"}"
+    value="${value#\"}"
+    value="${value%\'}"
+    value="${value#\'}"
+    printf '%s' "$value"
+}
+
 download_file() {
     local source_path="$1"
     local target_path="$2"
@@ -96,6 +105,40 @@ configure_database_env() {
     set_env_var_if_empty "LEDGER_DB_DATABASE" "$(get_env_var DB_DATABASE)"
     set_env_var_if_empty "LEDGER_DB_USERNAME" "$(get_env_var DB_USERNAME)"
     set_env_var_if_empty "LEDGER_DB_PASSWORD" "$(get_env_var DB_PASSWORD)"
+}
+
+public_base_url() {
+    local app_url
+    app_url="$(strip_env_quotes "$(get_env_var APP_URL)")"
+    if [ -n "$app_url" ] && [ "$app_url" != "http://localhost" ] && [ "$app_url" != "https://localhost" ]; then
+        printf '%s' "$app_url"
+        return
+    fi
+
+    local app_port host_ip
+    app_port="$(strip_env_quotes "$(get_env_var APP_PORT)")"
+    app_port="${app_port:-8000}"
+    host_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    host_ip="${host_ip:-127.0.0.1}"
+
+    printf 'http://%s:%s' "$host_ip" "$app_port"
+}
+
+generate_admin_claim() {
+    if [ "${SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE:-false}" != "true" ]; then
+        return
+    fi
+
+    write_status "4" "Generating admin claim link"
+    log "Generating one-time SimpleL1 admin claim link"
+
+    local base_url
+    base_url="$(public_base_url)"
+
+    if ! docker exec coolify php artisan sovereign:admin-claim --auto --base-url="$base_url"; then
+        log "Automatic admin claim link was not generated. Run manually after selecting an admin user:"
+        log "docker exec -it coolify php artisan sovereign:admin-claim --user-id=<id> --base-url=${base_url}"
+    fi
 }
 
 if [ "$EUID" -ne 0 ]; then
@@ -153,8 +196,11 @@ fi
 COMPOSE_FILES=(
     -f "${SOURCE_DIR}/docker-compose.yml"
     -f "${SOURCE_DIR}/docker-compose.prod.yml"
-    -f "${SOURCE_DIR}/docker-compose.sovereign.prod.yml"
 )
+if [ -f "${SOURCE_DIR}/docker-compose.custom.yml" ]; then
+    COMPOSE_FILES+=(-f "${SOURCE_DIR}/docker-compose.custom.yml")
+fi
+COMPOSE_FILES+=(-f "${SOURCE_DIR}/docker-compose.sovereign.prod.yml")
 
 write_status "2" "Pulling images"
 log "Pulling images"
@@ -165,6 +211,8 @@ write_status "3" "Starting containers"
 log "Starting containers"
 COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
+
+generate_admin_claim
 
 write_status "done" "Sovereign Coolify upgrade complete"
 log "Sovereign Coolify upgrade complete"

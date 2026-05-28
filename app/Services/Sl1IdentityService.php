@@ -16,18 +16,25 @@ class Sl1IdentityService
 {
     private const SESSION_KEY = 'sl1_connect_login';
 
-    public function authorizationUrl(Request $request): string
+    public function authorizationUrl(Request $request, ?string $claimToken = null): string
     {
         $state = Str::random(40);
         $nonce = Str::random(40);
         $redirectUri = route('auth.sl1.callback');
 
-        $request->session()->put(self::SESSION_KEY, [
+        $sessionPayload = [
             'state' => $state,
             'nonce' => $nonce,
             'redirect_uri' => $redirectUri,
             'created_at' => now()->toIso8601String(),
-        ]);
+        ];
+
+        if ($claimToken) {
+            $sessionPayload['claim_token'] = $claimToken;
+            $sessionPayload['flow'] = 'admin_claim';
+        }
+
+        $request->session()->put(self::SESSION_KEY, $sessionPayload);
 
         return $this->issuerUrl('/authorize').'?'.http_build_query([
             'client_id' => $this->clientId(),
@@ -36,12 +43,12 @@ class Sl1IdentityService
             'state' => $state,
             'nonce' => $nonce,
             'mode' => 'connect',
-            'flow' => 'connect',
+            'flow' => $claimToken ? 'admin_claim' : 'connect',
         ], '', '&', PHP_QUERY_RFC3986);
     }
 
     /**
-     * @return array{identity: array<string, mixed>, proof: array<string, mixed>, exchange: array<string, mixed>, introspection: array<string, mixed>}
+     * @return array{identity: array<string, mixed>, proof: array<string, mixed>, exchange: array<string, mixed>, introspection: array<string, mixed>, session: array<string, mixed>}
      *
      * @throws ConnectionException
      */
@@ -105,6 +112,7 @@ class Sl1IdentityService
             'proof' => $proof,
             'exchange' => is_array($exchangePayload) ? $exchangePayload : [],
             'introspection' => is_array($introspectionPayload) ? $introspectionPayload : [],
+            'session' => $expected,
         ];
     }
 

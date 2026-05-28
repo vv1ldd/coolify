@@ -1,8 +1,11 @@
 <?php
 
 use App\Models\InstanceSettings;
+use App\Models\InfraLedger;
 use App\Models\Sl1IdentityBinding;
+use App\Models\SovereignAdminClaim;
 use App\Models\User;
+use App\Services\SovereignAdminClaimService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 
@@ -113,6 +116,104 @@ test('existing sl1 identity logs into its bound user even when registration is d
 
     $this->assertAuthenticatedAs($user);
     expect(User::count())->toBe(1);
+});
+
+test('valid admin claim binds first sl1 identity to existing root admin', function () {
+    InstanceSettings::findOrFail(0)->forceFill(['is_registration_enabled' => false])->save();
+    $admin = User::factory()->create([
+        'id' => 0,
+        'name' => 'Classic Root',
+        'email' => 'root@classic.test',
+    ]);
+    $claim = app(SovereignAdminClaimService::class)->createForUser($admin, 30);
+
+    $this->get('/auth/sl1/admin-claim/'.$claim['token'])
+        ->assertRedirect();
+
+    $session = session('sl1_connect_login');
+    expect($session['claim_token'])->toBe($claim['token'])
+        ->and($session['flow'])->toBe('admin_claim');
+
+    fakeSl1Http('sl1e_claimed_root', $session['nonce']);
+
+    $this->get('/auth/sl1/callback?state='.$session['state'].'&code=sl1c_test')
+        ->assertRedirect('/');
+
+    $this->assertAuthenticatedAs($admin);
+    expect(User::count())->toBe(1)
+        ->and($admin->fresh()->teams->firstWhere('id', 0))->not->toBeNull();
+
+    $this->assertDatabaseHas('sl1_identity_bindings', [
+        'user_id' => 0,
+        'entity_address' => 'sl1e_claimed_root',
+    ]);
+    expect(SovereignAdminClaim::first()->claimed_entity_address)->toBe('sl1e_claimed_root')
+        ->and(InfraLedger::where('event_type', 'identity.admin.claimed')->count())->toBe(1);
+});
+
+test('admin claim token alone cannot authenticate', function () {
+    $admin = User::factory()->create(['id' => 0]);
+    $claim = app(SovereignAdminClaimService::class)->createForUser($admin, 30);
+
+    $this->get('/auth/sl1/admin-claim/'.$claim['token'])
+        ->assertRedirect();
+
+    $this->assertGuest();
+    $this->assertDatabaseMissing('sl1_identity_bindings', [
+        'user_id' => 0,
+    ]);
+});
+
+test('expired admin claim is rejected before sl1 redirect', function () {
+    $admin = User::factory()->create(['id' => 0]);
+    $claim = app(SovereignAdminClaimService::class)->createForUser($admin, 30);
+    $claim['claim']->forceFill(['expires_at' => now()->subMinute()])->save();
+
+    $this->get('/auth/sl1/admin-claim/'.$claim['token'])
+        ->assertRedirect(route('login'));
+
+    $this->assertGuest();
+});
+
+test('admin claim rejects sl1 identity already bound to another user', function () {
+    InstanceSettings::findOrFail(0)->forceFill(['is_registration_enabled' => false])->save();
+    $admin = User::factory()->create(['id' => 0]);
+    $other = User::factory()->create();
+    Sl1IdentityBinding::create([
+        'user_id' => $other->id,
+        'entity_address' => 'sl1e_taken',
+        'last_verified_at' => now(),
+    ]);
+    $claim = app(SovereignAdminClaimService::class)->createForUser($admin, 30);
+
+    $this->get('/auth/sl1/admin-claim/'.$claim['token'])
+        ->assertRedirect();
+
+    $session = session('sl1_connect_login');
+    fakeSl1Http('sl1e_taken', $session['nonce']);
+
+    $this->get('/auth/sl1/callback?state='.$session['state'].'&code=sl1c_test')
+        ->assertRedirect(route('login'));
+
+    $this->assertGuest();
+    $this->assertDatabaseMissing('sl1_identity_bindings', [
+        'user_id' => 0,
+        'entity_address' => 'sl1e_taken',
+    ]);
+    expect(SovereignAdminClaim::first()->claimed_at)->toBeNull();
+});
+
+test('admin claim command auto prints one time claim url for existing root admin', function () {
+    User::factory()->create(['id' => 0]);
+
+    $this->artisan('sovereign:admin-claim', [
+        '--auto' => true,
+        '--base-url' => 'http://coolify.test',
+    ])
+        ->expectsOutputToContain('CLAIM_URL=http://coolify.test/auth/sl1/admin-claim/')
+        ->assertExitCode(0);
+
+    expect(SovereignAdminClaim::count())->toBe(1);
 });
 
 test('new sl1 identity is denied when registration is disabled', function () {

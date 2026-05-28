@@ -16,6 +16,7 @@ HELPER_IMAGE="${HELPER_IMAGE:-ghcr.io/coollabsio/coolify-helper:latest}"
 APP_PORT="${APP_PORT:-8000}"
 SOKETI_PORT="${SOKETI_PORT:-6001}"
 AUTOUPDATE="${AUTOUPDATE:-false}"
+SOVEREIGN_INSTALL_MODE="${SOVEREIGN_INSTALL_MODE:-auto}"
 SL1_CONNECT_ISSUER="${SL1_CONNECT_ISSUER:-https://simplel1.online}"
 SL1_CONNECT_CLIENT_ID="${SL1_CONNECT_CLIENT_ID:-coolify.sovereign}"
 SL1_CONNECT_CLIENT_NAME="${SL1_CONNECT_CLIENT_NAME:-Sovereign-Coolify}"
@@ -66,6 +67,36 @@ check_host_resources() {
             log "WARNING: Sovereign Coolify is likely unstable below 2 GB RAM. Current host reports $((mem_kb / 1024)) MB."
         fi
     fi
+}
+
+existing_coolify_detected() {
+    if [ -f "$ENV_FILE" ] || [ -f "${SOURCE_DIR}/docker-compose.yml" ]; then
+        return 0
+    fi
+
+    if command -v docker >/dev/null 2>&1; then
+        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Eq '^(coolify|coolify-db|coolify-redis)$'; then
+            return 0
+        fi
+
+        if docker volume ls --format '{{.Name}}' 2>/dev/null | grep -Eq '^(coolify-db|coolify-redis)$'; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+run_existing_upgrade() {
+    log "Existing Coolify installation detected. Running sovereign upgrade path."
+    download_file scripts/upgrade-sovereign.sh "${SOURCE_DIR}/upgrade-sovereign.sh"
+    chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh"
+
+    SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE=true bash "${SOURCE_DIR}/upgrade-sovereign.sh"
+
+    echo ""
+    echo "Sovereign Coolify upgrade complete."
+    echo "Use the printed CLAIM_URL to bind the existing admin to SimpleL1 Identity."
 }
 
 install_docker() {
@@ -174,11 +205,40 @@ echo ""
 echo "Repository: ${REPOSITORY}"
 echo "Branch:     ${BRANCH}"
 echo "Image:      ${COOLIFY_IMAGE}"
+echo "Mode:       ${SOVEREIGN_INSTALL_MODE}"
 echo ""
 
 check_host_resources
 install_docker
 login_to_registry
+
+case "$SOVEREIGN_INSTALL_MODE" in
+    auto)
+        if existing_coolify_detected; then
+            run_existing_upgrade
+            exit 0
+        fi
+        ;;
+    upgrade)
+        if ! existing_coolify_detected; then
+            echo "SOVEREIGN_INSTALL_MODE=upgrade was requested, but no existing Coolify installation was detected."
+            exit 1
+        fi
+        run_existing_upgrade
+        exit 0
+        ;;
+    fresh)
+        if existing_coolify_detected; then
+            echo "SOVEREIGN_INSTALL_MODE=fresh was requested, but an existing Coolify installation was detected."
+            echo "Refusing to continue to protect existing volumes and database."
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Invalid SOVEREIGN_INSTALL_MODE=${SOVEREIGN_INSTALL_MODE}. Use auto, fresh, or upgrade."
+        exit 1
+        ;;
+esac
 
 log "Downloading Sovereign Coolify configuration"
 download_file docker-compose.yml "${SOURCE_DIR}/docker-compose.yml"
