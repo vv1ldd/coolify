@@ -1,7 +1,9 @@
 @php 
     use App\Actions\CoolifyTask\RunRemoteProcess; 
-    $eventDigestPayload = $activity->id . $activity->created_at . $activity->description;
-    $txId = $activity ? hash('sha256', $eventDigestPayload) : 'PENDING';
+    $eventDigestPayload = $activity
+        ? $activity->id . $activity->created_at . $activity->description
+        : null;
+    $txId = $eventDigestPayload ? hash('sha256', $eventDigestPayload) : 'PENDING';
     $shortTxId = substr($txId, 0, 16) . '...';
 @endphp
 <div @class([
