@@ -116,8 +116,23 @@ curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/in
 
 The hardening script never creates an open SMTP relay and does not globally open
 database ports unless explicitly configured as a break-glass exception. It also
-adds a `DOCKER-USER` ingress guard so Docker-published database ports do not
+adds a `DOCKER-USER` ingress guard so Docker-published sensitive ports do not
 bypass UFW on the public interface.
+
+When `SOVEREIGN_HOST_DOMAIN` is configured, direct public access to `APP_PORT`
+is blocked by default because the panel should be reached through the canonical
+domain on `443`. Break-glass exposure is explicit:
+
+```bash
+export SOVEREIGN_ALLOW_DIRECT_APP_PORT=true
+```
+
+The internal Soketi metrics/control port `6002` is also blocked on the public
+interface by default. Only expose it intentionally:
+
+```bash
+export SOVEREIGN_ALLOW_PUBLIC_SOKETI_METRICS=true
+```
 
 After installation, open:
 

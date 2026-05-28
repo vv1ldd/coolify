@@ -12,6 +12,9 @@ EXPOSED_PORTS="${SOVEREIGN_EXPOSED_PORTS:-}"
 EXPOSED_CIDRS="${SOVEREIGN_EXPOSED_CIDRS:-}"
 WIREGUARD_CIDRS="${SOVEREIGN_WIREGUARD_CIDRS:-}"
 ALLOW_PUBLIC_DATABASE_PORTS="${SOVEREIGN_ALLOW_PUBLIC_DATABASE_PORTS:-false}"
+ALLOW_DIRECT_APP_PORT="${SOVEREIGN_ALLOW_DIRECT_APP_PORT:-false}"
+SOKETI_METRICS_PORT="${SOVEREIGN_SOKETI_METRICS_PORT:-6002}"
+ALLOW_PUBLIC_SOKETI_METRICS="${SOVEREIGN_ALLOW_PUBLIC_SOKETI_METRICS:-false}"
 SMTP_MODE="${SOVEREIGN_SMTP_MODE:-none}"
 SMTP_RELAY_HOST="${SOVEREIGN_SMTP_RELAY_HOST:-}"
 SMTP_RELAY_PORT="${SOVEREIGN_SMTP_RELAY_PORT:-587}"
@@ -261,8 +264,10 @@ configure_firewall() {
     ufw_allow_port 80 tcp "HTTP traffic" ""
     ufw_allow_port 443 tcp "HTTPS traffic" ""
 
-    if [ "$APP_PORT" != "80" ] && [ "$APP_PORT" != "443" ]; then
+    if [ "$APP_PORT" != "80" ] && [ "$APP_PORT" != "443" ] && { [ -z "$HOST_DOMAIN" ] || [ "$ALLOW_DIRECT_APP_PORT" = "true" ]; }; then
         ufw_allow_port "$APP_PORT" tcp "Sovereign Coolify direct app port" ""
+    elif [ "$APP_PORT" != "80" ] && [ "$APP_PORT" != "443" ]; then
+        warn "Not opening direct APP_PORT=${APP_PORT}; canonical host domain is configured. Set SOVEREIGN_ALLOW_DIRECT_APP_PORT=true for break-glass exposure."
     fi
 
     if [ -n "$SOKETI_PORT" ]; then
@@ -317,12 +322,25 @@ iptables_ensure() {
     iptables -C DOCKER-USER "$@" 2>/dev/null || iptables -I DOCKER-USER 1 "$@"
 }
 
-write_docker_database_guard_service() {
+surface_guard_ports() {
+    printf '%s\n' "3306 33060 5432 5433 6379 6380 27017 27018 9200 9300 11211 1433 1521"
+
+    if [ -n "$HOST_DOMAIN" ] && [ "$ALLOW_DIRECT_APP_PORT" != "true" ] && [ "$APP_PORT" != "80" ] && [ "$APP_PORT" != "443" ]; then
+        printf ' %s' "$APP_PORT"
+    fi
+
+    if [ "$ALLOW_PUBLIC_SOKETI_METRICS" != "true" ] && [ -n "$SOKETI_METRICS_PORT" ]; then
+        printf ' %s' "$SOKETI_METRICS_PORT"
+    fi
+}
+
+write_docker_surface_guard_service() {
     local public_iface="$1"
     local cidrs="$2"
+    local guarded_ports="$3"
 
     if [ "$DRY_RUN" = "true" ]; then
-        note "Would write sovereign-docker-db-guard systemd unit"
+        note "Would write sovereign-docker-surface-guard systemd unit"
         return
     fi
 
@@ -330,13 +348,13 @@ write_docker_database_guard_service() {
         return
     fi
 
-    cat > /usr/local/sbin/sovereign-docker-db-guard.sh <<EOF
+    cat > /usr/local/sbin/sovereign-docker-surface-guard.sh <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
 PUBLIC_INTERFACE="${public_iface}"
 CIDRS="${cidrs}"
-DB_PORTS="3306 33060 5432 5433 6379 6380 27017 27018 9200 9300 11211 1433 1521"
+GUARDED_PORTS="${guarded_ports}"
 
 if ! command -v iptables >/dev/null 2>&1; then
     exit 0
@@ -350,25 +368,25 @@ ensure_rule() {
     iptables -C DOCKER-USER "\$@" 2>/dev/null || iptables -I DOCKER-USER 1 "\$@"
 }
 
-for db_port in \$DB_PORTS; do
-    ensure_rule -i "\$PUBLIC_INTERFACE" -p tcp --dport "\$db_port" -m comment --comment "sovereign-db-deny-\$db_port" -j DROP
+for guarded_port in \$GUARDED_PORTS; do
+    ensure_rule -i "\$PUBLIC_INTERFACE" -p tcp --dport "\$guarded_port" -m comment --comment "sovereign-surface-deny-\$guarded_port" -j DROP
     for cidr in \$CIDRS; do
         [ -n "\$cidr" ] || continue
-        ensure_rule -i "\$PUBLIC_INTERFACE" -p tcp -s "\$cidr" --dport "\$db_port" -m comment --comment "sovereign-db-allow-\$db_port" -j RETURN
+        ensure_rule -i "\$PUBLIC_INTERFACE" -p tcp -s "\$cidr" --dport "\$guarded_port" -m comment --comment "sovereign-surface-allow-\$guarded_port" -j RETURN
     done
 done
 EOF
-    chmod 700 /usr/local/sbin/sovereign-docker-db-guard.sh
+    chmod 700 /usr/local/sbin/sovereign-docker-surface-guard.sh
 
-    cat > /etc/systemd/system/sovereign-docker-db-guard.service <<'EOF'
+    cat > /etc/systemd/system/sovereign-docker-surface-guard.service <<'EOF'
 [Unit]
-Description=Sovereign Docker database ingress guard
+Description=Sovereign Docker public ingress guard
 After=docker.service
 Wants=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/sovereign-docker-db-guard.sh
+ExecStart=/usr/local/sbin/sovereign-docker-surface-guard.sh
 RemainAfterExit=yes
 
 [Install]
@@ -376,51 +394,54 @@ WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reload
-    systemctl enable sovereign-docker-db-guard.service >/dev/null 2>&1 || true
-    systemctl start sovereign-docker-db-guard.service >/dev/null 2>&1 || true
+    systemctl enable sovereign-docker-surface-guard.service >/dev/null 2>&1 || true
+    systemctl start sovereign-docker-surface-guard.service >/dev/null 2>&1 || true
 }
 
-configure_docker_database_guard() {
-    if [ "$ALLOW_PUBLIC_DATABASE_PORTS" = "true" ]; then
-        warn "Public database port exposure is explicitly allowed. Docker ingress DB guard will not add deny rules."
-        return
-    fi
-
+configure_docker_surface_guard() {
     if ! command -v iptables >/dev/null 2>&1 && [ "$DRY_RUN" != "true" ]; then
-        warn "iptables not found; skipping Docker database ingress guard."
+        warn "iptables not found; skipping Docker public ingress guard."
         return
     fi
 
     if [ "$DRY_RUN" != "true" ] && ! iptables -nL DOCKER-USER >/dev/null 2>&1; then
-        warn "DOCKER-USER chain not found; skipping Docker database ingress guard."
+        warn "DOCKER-USER chain not found; skipping Docker public ingress guard."
         return
     fi
 
     local public_iface
     public_iface="$(default_public_iface)"
     if [ -z "$public_iface" ]; then
-        warn "Could not detect public network interface; skipping Docker database ingress guard."
+        warn "Could not detect public network interface; skipping Docker public ingress guard."
         return
     fi
 
-    info "Protecting Docker-published database ports on ${public_iface}"
+    info "Protecting Docker-published sensitive ports on ${public_iface}"
 
-    local db_port cidrs cidr
+    local guarded_port cidrs cidr guarded_ports
     cidrs="$WIREGUARD_CIDRS"
     if [ -z "$cidrs" ]; then
         cidrs="$EXPOSED_CIDRS"
     fi
 
-    for db_port in 3306 33060 5432 5433 6379 6380 27017 27018 9200 9300 11211 1433 1521; do
-        iptables_ensure -i "$public_iface" -p tcp --dport "$db_port" -m comment --comment "sovereign-db-deny-$db_port" -j DROP
+    guarded_ports="$(surface_guard_ports)"
+
+    if [ "$ALLOW_PUBLIC_DATABASE_PORTS" = "true" ]; then
+        warn "Public database port exposure is explicitly allowed. Database ports remain a break-glass operator responsibility."
+        guarded_ports="$(printf '%s' "$guarded_ports" | tr ' ' '\n' | grep -Ev '^(3306|33060|5432|5433|6379|6380|27017|27018|9200|9300|11211|1433|1521)$' | tr '\n' ' ')"
+    fi
+
+    for guarded_port in $guarded_ports; do
+        [ -n "$guarded_port" ] || continue
+        iptables_ensure -i "$public_iface" -p tcp --dport "$guarded_port" -m comment --comment "sovereign-surface-deny-$guarded_port" -j DROP
 
         for cidr in $(csv_items "$cidrs"); do
             [ -n "$cidr" ] || continue
-            iptables_ensure -i "$public_iface" -p tcp -s "$cidr" --dport "$db_port" -m comment --comment "sovereign-db-allow-$db_port" -j RETURN
+            iptables_ensure -i "$public_iface" -p tcp -s "$cidr" --dport "$guarded_port" -m comment --comment "sovereign-surface-allow-$guarded_port" -j RETURN
         done
     done
 
-    write_docker_database_guard_service "$public_iface" "$cidrs"
+    write_docker_surface_guard_service "$public_iface" "$cidrs" "$guarded_ports"
 }
 
 configure_fail2ban() {
@@ -635,7 +656,7 @@ main() {
 
     write_sysctl
     configure_firewall "$ssh_port"
-    configure_docker_database_guard
+    configure_docker_surface_guard
     configure_fail2ban "$ssh_port"
     configure_unattended_upgrades
     configure_docker_logging
