@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasColumn('users', 'is_notification_notifications_enabled')) {
+            return;
+        }
+
         Schema::table('users', function (Blueprint $table) {
             $table->boolean('is_notification_notifications_enabled')->default(true);
         });
@@ -21,6 +25,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (! Schema::hasColumn('users', 'is_notification_notifications_enabled')) {
+            return;
+        }
+
         Schema::table('users', function (Blueprint $table) {
             $table->dropColumn('is_notification_notifications_enabled');
         });

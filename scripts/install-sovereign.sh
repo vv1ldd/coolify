@@ -18,7 +18,7 @@ SOKETI_PORT="${SOKETI_PORT:-6001}"
 AUTOUPDATE="${AUTOUPDATE:-false}"
 SL1_CONNECT_ISSUER="${SL1_CONNECT_ISSUER:-https://simplel1.online}"
 SL1_CONNECT_CLIENT_ID="${SL1_CONNECT_CLIENT_ID:-coolify.sovereign}"
-SL1_CONNECT_CLIENT_NAME="${SL1_CONNECT_CLIENT_NAME:-Sovereign Coolify}"
+SL1_CONNECT_CLIENT_NAME="${SL1_CONNECT_CLIENT_NAME:-Sovereign-Coolify}"
 SL1_CONNECT_CALLBACK_PATH="${SL1_CONNECT_CALLBACK_PATH:-/auth/sl1/callback}"
 SL1_CONNECT_TIMEOUT="${SL1_CONNECT_TIMEOUT:-10}"
 
@@ -31,6 +31,41 @@ download_file() {
     local target_path="$2"
     log "Downloading ${source_path}"
     curl -fsSL "${RAW_BASE}/${source_path}" -o "$target_path"
+}
+
+get_env_var() {
+    local key="$1"
+    if [ -f "$ENV_FILE" ]; then
+        grep -E "^${key}=" "$ENV_FILE" | tail -n 1 | cut -d '=' -f 2- || true
+    fi
+}
+
+format_env_value() {
+    local value="$1"
+
+    if [[ "$value" == \"*\" || "$value" == \'*\' ]]; then
+        printf '%s' "$value"
+        return
+    fi
+
+    if [[ "$value" =~ [[:space:]#] ]]; then
+        value="${value//\\/\\\\}"
+        value="${value//\"/\\\"}"
+        printf '"%s"' "$value"
+        return
+    fi
+
+    printf '%s' "$value"
+}
+
+check_host_resources() {
+    if [ -r /proc/meminfo ]; then
+        local mem_kb
+        mem_kb="$(awk '/MemTotal/ { print $2 }' /proc/meminfo)"
+        if [ "${mem_kb:-0}" -lt 1800000 ]; then
+            log "WARNING: Sovereign Coolify is likely unstable below 2 GB RAM. Current host reports $((mem_kb / 1024)) MB."
+        fi
+    fi
 }
 
 install_docker() {
@@ -66,7 +101,8 @@ merge_env_production() {
 
 set_env_var() {
     local key="$1"
-    local value="$2"
+    local value
+    value="$(format_env_value "$2")"
 
     if grep -q "^${key}=" "$ENV_FILE"; then
         awk -v key="$key" -v value="$value" '
@@ -87,6 +123,20 @@ set_env_var_if_empty() {
     if ! grep -q "^${key}=" "$ENV_FILE" || grep -q "^${key}=$" "$ENV_FILE"; then
         set_env_var "$key" "$value"
     fi
+}
+
+configure_database_env() {
+    set_env_var_if_empty "DB_HOST" "coolify-db"
+    set_env_var_if_empty "DB_PORT" "5432"
+    set_env_var_if_empty "DB_DATABASE" "coolify"
+    set_env_var_if_empty "DB_USERNAME" "coolify"
+
+    set_env_var_if_empty "LEDGER_DB_CONNECTION" "pgsql"
+    set_env_var_if_empty "LEDGER_DB_HOST" "$(get_env_var DB_HOST)"
+    set_env_var_if_empty "LEDGER_DB_PORT" "$(get_env_var DB_PORT)"
+    set_env_var_if_empty "LEDGER_DB_DATABASE" "$(get_env_var DB_DATABASE)"
+    set_env_var_if_empty "LEDGER_DB_USERNAME" "$(get_env_var DB_USERNAME)"
+    set_env_var_if_empty "LEDGER_DB_PASSWORD" "$(get_env_var DB_PASSWORD)"
 }
 
 prepare_ssh_key() {
@@ -126,6 +176,7 @@ echo "Branch:     ${BRANCH}"
 echo "Image:      ${COOLIFY_IMAGE}"
 echo ""
 
+check_host_resources
 install_docker
 login_to_registry
 
@@ -146,6 +197,7 @@ set_env_var_if_empty "REDIS_PASSWORD" "$(openssl rand -base64 32)"
 set_env_var_if_empty "PUSHER_APP_ID" "$(openssl rand -hex 32)"
 set_env_var_if_empty "PUSHER_APP_KEY" "$(openssl rand -hex 32)"
 set_env_var_if_empty "PUSHER_APP_SECRET" "$(openssl rand -hex 32)"
+configure_database_env
 
 set_env_var "APP_PORT" "$APP_PORT"
 set_env_var "SOKETI_PORT" "$SOKETI_PORT"

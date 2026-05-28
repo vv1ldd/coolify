@@ -26,6 +26,24 @@ get_env_var() {
     fi
 }
 
+format_env_value() {
+    local value="$1"
+
+    if [[ "$value" == \"*\" || "$value" == \'*\' ]]; then
+        printf '%s' "$value"
+        return
+    fi
+
+    if [[ "$value" =~ [[:space:]#] ]]; then
+        value="${value//\\/\\\\}"
+        value="${value//\"/\\\"}"
+        printf '"%s"' "$value"
+        return
+    fi
+
+    printf '%s' "$value"
+}
+
 download_file() {
     local source_path="$1"
     local target_path="$2"
@@ -42,7 +60,8 @@ merge_env_production() {
 
 set_env_var() {
     local key="$1"
-    local value="$2"
+    local value
+    value="$(format_env_value "$2")"
 
     if grep -q "^${key}=" "$ENV_FILE"; then
         awk -v key="$key" -v value="$value" '
@@ -54,6 +73,29 @@ set_env_var() {
     else
         printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
     fi
+}
+
+set_env_var_if_empty() {
+    local key="$1"
+    local value="$2"
+
+    if ! grep -q "^${key}=" "$ENV_FILE" || grep -q "^${key}=$" "$ENV_FILE"; then
+        set_env_var "$key" "$value"
+    fi
+}
+
+configure_database_env() {
+    set_env_var_if_empty "DB_HOST" "coolify-db"
+    set_env_var_if_empty "DB_PORT" "5432"
+    set_env_var_if_empty "DB_DATABASE" "coolify"
+    set_env_var_if_empty "DB_USERNAME" "coolify"
+
+    set_env_var_if_empty "LEDGER_DB_CONNECTION" "pgsql"
+    set_env_var_if_empty "LEDGER_DB_HOST" "$(get_env_var DB_HOST)"
+    set_env_var_if_empty "LEDGER_DB_PORT" "$(get_env_var DB_PORT)"
+    set_env_var_if_empty "LEDGER_DB_DATABASE" "$(get_env_var DB_DATABASE)"
+    set_env_var_if_empty "LEDGER_DB_USERNAME" "$(get_env_var DB_USERNAME)"
+    set_env_var_if_empty "LEDGER_DB_PASSWORD" "$(get_env_var DB_PASSWORD)"
 }
 
 if [ "$EUID" -ne 0 ]; then
@@ -94,9 +136,12 @@ set_env_var "HELPER_IMAGE" "$HELPER_IMAGE"
 set_env_var "SOVEREIGN_REPOSITORY" "$REPOSITORY"
 set_env_var "SOVEREIGN_BRANCH" "$BRANCH"
 set_env_var "AUTOUPDATE" "${AUTOUPDATE:-false}"
+configure_database_env
+SL1_CONNECT_CLIENT_NAME_VALUE="${SL1_CONNECT_CLIENT_NAME:-$(get_env_var SL1_CONNECT_CLIENT_NAME)}"
+SL1_CONNECT_CLIENT_NAME_VALUE="${SL1_CONNECT_CLIENT_NAME_VALUE:-Sovereign-Coolify}"
 set_env_var "SL1_CONNECT_ISSUER" "${SL1_CONNECT_ISSUER:-$(get_env_var SL1_CONNECT_ISSUER)}"
 set_env_var "SL1_CONNECT_CLIENT_ID" "${SL1_CONNECT_CLIENT_ID:-$(get_env_var SL1_CONNECT_CLIENT_ID)}"
-set_env_var "SL1_CONNECT_CLIENT_NAME" "${SL1_CONNECT_CLIENT_NAME:-$(get_env_var SL1_CONNECT_CLIENT_NAME)}"
+set_env_var "SL1_CONNECT_CLIENT_NAME" "$SL1_CONNECT_CLIENT_NAME_VALUE"
 set_env_var "SL1_CONNECT_CALLBACK_PATH" "${SL1_CONNECT_CALLBACK_PATH:-$(get_env_var SL1_CONNECT_CALLBACK_PATH)}"
 set_env_var "SL1_CONNECT_TIMEOUT" "${SL1_CONNECT_TIMEOUT:-$(get_env_var SL1_CONNECT_TIMEOUT)}"
 

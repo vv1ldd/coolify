@@ -3,6 +3,22 @@
 use Illuminate\Support\Str;
 use Pdo\Pgsql;
 
+$infraLedgerConnection = [
+    'driver' => env('LEDGER_DB_CONNECTION', env('DB_CONNECTION') === 'testing' ? 'sqlite' : env('DB_CONNECTION', 'pgsql')),
+    'url' => env('LEDGER_DATABASE_URL'),
+    'host' => env('LEDGER_DB_HOST', env('DB_HOST', 'coolify-db')),
+    'port' => env('LEDGER_DB_PORT', env('DB_PORT', '5432')),
+    'database' => env('LEDGER_DB_DATABASE', env('DB_CONNECTION') === 'testing' ? ':memory:' : env('DB_DATABASE', 'coolify')),
+    'username' => env('LEDGER_DB_USERNAME', env('DB_USERNAME', 'coolify')),
+    'password' => env('LEDGER_DB_PASSWORD', env('DB_PASSWORD', '')),
+    'charset' => 'utf8',
+    'prefix' => '',
+    'prefix_indexes' => true,
+    'search_path' => 'public',
+    'sslmode' => env('LEDGER_DB_SSLMODE', 'prefer'),
+    'foreign_key_constraints' => true,
+];
+
 return [
 
     /*
@@ -83,21 +99,8 @@ return [
          *   GRANT INSERT, SELECT ON infra_ledger TO ledger_writer;
          *   -- No UPDATE, no DELETE, no DROP — ever.
          */
-        'infra_ledger' => [
-            'driver' => env('LEDGER_DB_CONNECTION', env('DB_CONNECTION') === 'testing' ? 'sqlite' : env('DB_CONNECTION', 'pgsql')),
-            'url' => env('LEDGER_DATABASE_URL'),
-            'host' => env('LEDGER_DB_HOST', env('DB_HOST', '127.0.0.1')),
-            'port' => env('LEDGER_DB_PORT', env('DB_PORT', '5432')),
-            'database' => env('LEDGER_DB_DATABASE', env('DB_CONNECTION') === 'testing' ? ':memory:' : env('DB_DATABASE', database_path('database.sqlite'))),
-            'username' => env('LEDGER_DB_USERNAME', env('DB_USERNAME', '')),
-            'password' => env('LEDGER_DB_PASSWORD', env('DB_PASSWORD', '')),
-            'charset' => 'utf8',
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'search_path' => 'public',
-            'sslmode' => env('LEDGER_DB_SSLMODE', 'prefer'),
-            'foreign_key_constraints' => true,
-        ],
+        'infra_ledger' => $infraLedgerConnection,
+        'ledger' => $infraLedgerConnection,
 
     ],
 
