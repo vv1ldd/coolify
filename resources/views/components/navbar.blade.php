@@ -58,7 +58,7 @@
     }
 </style>
 
-<nav class="flex flex-col flex-1 px-4 bg-white dark:bg-[#090909] border-r-[3px] border-black shadow-[4px_0_0_#000000] z-20 relative min-h-screen"
+<nav class="sovereign-sidebar flex flex-col flex-1 px-4 border-r-[3px] border-black shadow-[4px_0_0_#000000] z-20 relative min-h-screen"
     x-data="{
         switchWidth() {
                 if (this.full === 'full') {

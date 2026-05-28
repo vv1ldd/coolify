@@ -33,7 +33,7 @@
                             </button>
                         </div>
 
-                        <div class="flex flex-col pb-2 overflow-y-auto min-w-56 dark:bg-coolgray-100 gap-y-5 scrollbar min-w-0">
+                        <div class="sovereign-sidebar-shell flex flex-col pb-2 overflow-y-auto min-w-56 gap-y-5 scrollbar min-w-0">
                             <x-navbar />
                         </div>
                     </div>
@@ -41,7 +41,7 @@
             </div>
 
             <div class="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-56 lg:flex-col min-w-0">
-                <div class="flex flex-col overflow-y-auto grow gap-y-5 scrollbar min-w-0">
+                <div class="sovereign-sidebar-shell flex flex-col overflow-y-auto grow gap-y-5 scrollbar min-w-0">
                     <x-navbar />
                 </div>
             </div>

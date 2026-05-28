@@ -252,10 +252,31 @@ html, body, html.dark, html.dark body {
 }
 
 /* 🧭 Sidebar Neomorphic Card & Menu Overrides */
-aside, .fi-sidebar, nav, header {
+.sovereign-sidebar-shell,
+.sovereign-sidebar,
+aside,
+.fi-sidebar {
     background-color: var(--brand-card) !important;
+    background-image:
+        linear-gradient(180deg, rgba(13, 7, 24, 0.98), rgba(5, 2, 10, 0.98)),
+        radial-gradient(rgba(34, 211, 238, 0.09) 1px, transparent 1px) !important;
+    background-size: auto, 18px 18px !important;
+    background-attachment: local !important;
+}
+
+.sovereign-sidebar-shell {
+    min-height: 100dvh;
+    box-shadow: inset -1px 0 0 rgba(34, 211, 238, 0.14) !important;
+}
+
+.sovereign-sidebar {
+    min-height: 100dvh;
     border-right: 3px solid #000000 !important;
     box-shadow: inset -1px 0 0 rgba(34, 211, 238, 0.14) !important;
+}
+
+header {
+    background-color: var(--brand-card) !important;
 }
 
 /* Ensure Sidebar elements have outstanding contrast on dark background */
