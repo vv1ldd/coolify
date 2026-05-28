@@ -101,7 +101,7 @@
                 class="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto scrollbar py-1.5  px-2 w-full text-sm rounded-sm border-0 bg-white dark:bg-coolgray-100 cursor-text px-1 text-black dark:text-white"
                 :style="(() => {
                     const isDark = document.documentElement.classList.contains('dark');
-                    const accent = isDark ? '#fcd452' : '#6b16ed';
+                    const accent = isDark ? '#22d3ee' : '#a855f7';
                     const border = isDark ? '#242424' : '#e5e5e5';
                     return focused
                         ? 'box-shadow: inset 4px 0 0 ' + accent + ', inset 0 0 0 2px ' + border + ';'
@@ -110,7 +110,7 @@
                 :class="{
                         'opacity-50': {{ $disabled ? 'true' : 'false' }}
                     }" wire:loading.class="opacity-50"
-                wire:dirty.class="[box-shadow:inset_4px_0_0_#6b16ed,inset_0_0_0_2px_#e5e5e5] dark:[box-shadow:inset_4px_0_0_#fcd452,inset_0_0_0_2px_#242424]">
+                wire:dirty.class="[box-shadow:inset_4px_0_0_#a855f7,inset_0_0_0_2px_#e5e5e5] dark:[box-shadow:inset_4px_0_0_#22d3ee,inset_0_0_0_2px_#281a44]">
 
                 {{-- Selected Tags Inside Input --}}
                 <template x-for="value in selected" :key="value">
@@ -233,7 +233,7 @@
                     class="flex items-center gap-2 py-1.5 w-full text-sm rounded-sm border-0 bg-white dark:bg-coolgray-100 cursor-text text-black dark:text-white"
                     :style="(() => {
                         const isDark = document.documentElement.classList.contains('dark');
-                        const accent = isDark ? '#fcd452' : '#6b16ed';
+                        const accent = isDark ? '#22d3ee' : '#a855f7';
                         const border = isDark ? '#242424' : '#e5e5e5';
                         return focused
                             ? 'box-shadow: inset 4px 0 0 ' + accent + ', inset 0 0 0 2px ' + border + ';'
@@ -241,7 +241,7 @@
                     })()"
                     :class="{
                     'opacity-50': {{ $disabled ? 'true' : 'false' }}
-                }" wire:loading.class="opacity-50" wire:dirty.class="[box-shadow:inset_4px_0_0_#6b16ed,inset_0_0_0_2px_#e5e5e5] dark:[box-shadow:inset_4px_0_0_#fcd452,inset_0_0_0_2px_#242424]">
+                }" wire:loading.class="opacity-50" wire:dirty.class="[box-shadow:inset_4px_0_0_#a855f7,inset_0_0_0_2px_#e5e5e5] dark:[box-shadow:inset_4px_0_0_#22d3ee,inset_0_0_0_2px_#281a44]">
 
                     {{-- Display Selected Value or Search Input --}}
                     <div class="flex-1 flex items-center min-w-0 px-1">

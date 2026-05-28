@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html data-theme="dark" lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <script>
-    // Immediate theme application - runs before any rendering
+    // Sovereign fork is dark-only; apply before rendering to avoid light flash.
     (function () {
-        const t = localStorage.theme || 'dark';
-        const d = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.classList[d ? 'add' : 'remove']('dark');
-        document.documentElement.setAttribute('data-theme', d ? 'dark' : 'light');
+        localStorage.theme = 'dark';
+        document.documentElement.classList.add('dark');
+        document.documentElement.setAttribute('data-theme', 'dark');
     })();
 </script>
 
@@ -14,8 +13,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <meta name="theme-color" content="#ffffff" id="theme-color-meta" />
-    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#030303" id="theme-color-meta" />
+    <meta name="color-scheme" content="dark" />
     <meta name="Description" content="Coolify: An open-source & self-hostable Heroku / Netlify / Vercel alternative" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -54,10 +53,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
     @vite(['resources/js/app.js', 'resources/css/app.css'])
     <script>
-        // Update theme-color meta tag (non-critical, can run async)
-        const t = localStorage.theme || 'dark';
-        const isDark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-        document.getElementById('theme-color-meta')?.setAttribute('content', isDark ? '#101010' : '#ffffff');
+        localStorage.theme = 'dark';
+        document.documentElement.classList.add('dark');
+        document.documentElement.setAttribute('data-theme', 'dark');
+        document.getElementById('theme-color-meta')?.setAttribute('content', '#030303');
     </script>
     <style>
         [x-cloak] {
@@ -141,12 +140,10 @@
             return DOMPurify.sanitize(html, config);
         };
 
-        // Initialize theme if not set
-        if (!('theme' in localStorage)) {
-            localStorage.theme = 'dark';
-        }
+        // Sovereign fork intentionally exposes a single dark theme.
+        localStorage.theme = 'dark';
 
-        let theme = localStorage.theme
+        let theme = 'dark'
         let cpuColor = '#1e90ff'
         let ramColor = '#00ced1'
         let textColor = '#ffffff'
@@ -154,23 +151,13 @@
         let editorTheme = 'blackboard'
 
         function checkTheme() {
-            theme = localStorage.theme
-            if (theme == 'system') {
-                theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-            }
-            if (theme == 'dark') {
-                cpuColor = '#1e90ff'
-                ramColor = '#00ced1'
-                textColor = '#ffffff'
-                editorBackground = '#181818'
-                editorTheme = 'blackboard'
-            } else {
-                cpuColor = '#1e90ff'
-                ramColor = '#00ced1'
-                textColor = '#000000'
-                editorBackground = '#ffffff'
-                editorTheme = null
-            }
+            localStorage.theme = 'dark'
+            theme = 'dark'
+            cpuColor = '#1e90ff'
+            ramColor = '#00ced1'
+            textColor = '#ffffff'
+            editorBackground = '#181818'
+            editorTheme = 'blackboard'
         }
         @auth
             window.Pusher = Pusher;

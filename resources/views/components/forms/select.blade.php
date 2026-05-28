@@ -12,7 +12,7 @@
     @endif
     <select {{ $attributes->merge(['class' => $defaultClass]) }} @disabled($disabled) @required($required)
         wire:loading.attr="disabled" name={{ $modelBinding }} id="{{ $htmlId }}"
-        @if ($attributes->whereStartsWith('wire:model')->first()) {{ $attributes->whereStartsWith('wire:model')->first() }} wire:dirty.class="[box-shadow:inset_4px_0_0_#6b16ed,inset_0_0_0_2px_#e5e5e5] dark:[box-shadow:inset_4px_0_0_#fcd452,inset_0_0_0_2px_#242424]" @else wire:model={{ $modelBinding }} wire:dirty.class="[box-shadow:inset_4px_0_0_#6b16ed,inset_0_0_0_2px_#e5e5e5] dark:[box-shadow:inset_4px_0_0_#fcd452,inset_0_0_0_2px_#242424]" @endif>
+        @if ($attributes->whereStartsWith('wire:model')->first()) {{ $attributes->whereStartsWith('wire:model')->first() }} wire:dirty.class="[box-shadow:inset_4px_0_0_#a855f7,inset_0_0_0_2px_#e5e5e5] dark:[box-shadow:inset_4px_0_0_#22d3ee,inset_0_0_0_2px_#281a44]" @else wire:model={{ $modelBinding }} wire:dirty.class="[box-shadow:inset_4px_0_0_#a855f7,inset_0_0_0_2px_#e5e5e5] dark:[box-shadow:inset_4px_0_0_#22d3ee,inset_0_0_0_2px_#281a44]" @endif>
         {{ $slot }}
     </select>
     @error($modelBinding)

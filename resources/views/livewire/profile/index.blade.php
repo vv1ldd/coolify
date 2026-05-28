@@ -21,12 +21,12 @@
     <div class="mt-8 pt-6 border-t-[3px] border-black">
         <h2 class="mb-4 text-xl font-black uppercase tracking-widest text-black dark:text-white" style="font-family: 'Space Grotesk', sans-serif;">Sovereign Identity</h2>
         <div class="relative group" title="Sovereign Infrastructure Core - Identity Managed by L1 Ledger">
-            <div class="absolute inset-0 bg-purple-600/10 blur-xl rounded-lg opacity-50"></div>
+            <div class="absolute inset-0 bg-[#a855f7]/10 blur-xl rounded-lg opacity-50"></div>
             <div class="relative flex flex-col md:flex-row items-start md:items-center justify-between p-6 bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0_#000000] rounded-sm">
 
                 <div class="flex items-center gap-4 mb-4 md:mb-0">
                     <div class="w-12 h-12 flex items-center justify-center bg-neutral-900 border-2 border-black rounded shadow-[2px_2px_0_#000000]">
-                        <svg class="w-6 h-6 text-purple-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <svg class="w-6 h-6 text-[#c084fc]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM11 19.93C7.05 19.43 4 16.05 4 12C4 7.95 7.05 4.57 11 4.07V19.93ZM13 4.07C16.95 4.57 20 7.95 20 12C20 16.05 16.95 19.43 13 19.93V4.07Z" fill="currentColor"/>
                         </svg>
                     </div>
@@ -36,9 +36,9 @@
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2 px-3 py-1.5 bg-neutral-900 border border-purple-500/20 rounded-sm">
-                    <div class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
-                    <span class="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Cryptographic Proof Verified</span>
+                <div class="flex items-center gap-2 px-3 py-1.5 bg-neutral-900 border border-[#22d3ee]/20 rounded-sm">
+                    <div class="w-2 h-2 rounded-full bg-[#22d3ee] animate-pulse"></div>
+                    <span class="text-[10px] font-bold text-[#67e8f9] uppercase tracking-widest">Cryptographic Proof Verified</span>
                 </div>
             </div>
         </div>

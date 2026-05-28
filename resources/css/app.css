@@ -19,30 +19,30 @@
     --font-geist-sans: 'Geist Sans', Inter, sans-serif;
     --font-logs: 'Geist Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 
-    --color-base: #101010;
-    --color-warning: #fcd452;
+    --color-base: #05020a;
+    --color-warning: #22d3ee;
     --color-warning-50: #fefce8;
     --color-warning-100: #fef9c3;
     --color-warning-200: #fef08a;
-    --color-warning-300: #fde047;
-    --color-warning-400: #fcd452;
-    --color-warning-500: #facc15;
-    --color-warning-600: #ca8a04;
-    --color-warning-700: #a16207;
-    --color-warning-800: #854d0e;
-    --color-warning-900: #713f12;
-    --color-success: #22C55E;
+    --color-warning-300: #67e8f9;
+    --color-warning-400: #22d3ee;
+    --color-warning-500: #06b6d4;
+    --color-warning-600: #0891b2;
+    --color-warning-700: #0e7490;
+    --color-warning-800: #155e75;
+    --color-warning-900: #164e63;
+    --color-success: #22d3ee;
     --color-error: #dc2626;
     --color-coollabs-50: #f5f0ff;
-    --color-coollabs: #6b16ed;
-    --color-coollabs-100: #7317ff;
-    --color-coollabs-200: #5a12c7;
-    --color-coollabs-300: #4a0fa3;
-    --color-coolgray-100: #181818;
-    --color-coolgray-200: #202020;
-    --color-coolgray-300: #242424;
-    --color-coolgray-400: #282828;
-    --color-coolgray-500: #323232;
+    --color-coollabs: #a855f7;
+    --color-coollabs-100: #c084fc;
+    --color-coollabs-200: #9333ea;
+    --color-coollabs-300: #7e22ce;
+    --color-coolgray-100: #0d0718;
+    --color-coolgray-200: #120a24;
+    --color-coolgray-300: #1b1033;
+    --color-coolgray-400: #281a44;
+    --color-coolgray-500: #3b2a63;
 }
 
 /*
@@ -212,216 +212,38 @@ section {
 }
 
 /* ==========================================================================
-   ⚡ SOVEREIGN NEO-BRUTALIST CONSORTIUM RETRO (LIGHT THEME OVERLAY)
-   ========================================================================== */
-html[data-theme="light"] {
-    --color-base: #eef0fc;
-    --color-coolgray-100: #ffffff;
-    --color-coolgray-200: #000000;
-    --color-coolgray-300: #eef0fc;
-    --color-coolgray-400: #000000;
-    --color-coollabs: #7c3aed; /* Royal purple */
-    --color-coollabs-100: #7c3aed;
-    --color-warning: #fcd452; /* Bright yellow */
-}
-
-/* Force Light Neo-Brutalist canvas and grids */
-html[data-theme="light"],
-html[data-theme="light"] body {
-    background-color: #eef0fc !important;
-    background-image: radial-gradient(#bc9fff 1.5px, transparent 1.5px) !important;
-    background-size: 24px 24px !important;
-    color: #000000 !important;
-    font-family: 'Space Grotesk', 'Outfit', 'Inter', sans-serif !important;
-}
-
-/* Typography Overrides */
-html[data-theme="light"] h1,
-html[data-theme="light"] h2,
-html[data-theme="light"] h3,
-html[data-theme="light"] h4,
-html[data-theme="light"] label,
-html[data-theme="light"] p,
-html[data-theme="light"] span,
-html[data-theme="light"] div {
-    color: #000000 !important;
-}
-
-html[data-theme="light"] .text-neutral-400,
-html[data-theme="light"] .text-neutral-500,
-html[data-theme="light"] .dark\:text-neutral-400 {
-    color: #1e1b4b !important; /* Indigo accent text */
-    font-weight: 600 !important;
-}
-
-/* Neo-Brutalist Card Boxes */
-html[data-theme="light"] .box,
-html[data-theme="light"] .box-boarding,
-html[data-theme="light"] .coolbox,
-html[data-theme="light"] .custom-modal {
-    background-color: #ffffff !important;
-    color: #000000 !important;
-    border: 3px solid #000000 !important;
-    box-shadow: 5px 5px 0px #000000 !important;
-    border-radius: 6px !important;
-    transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
-}
-
-html[data-theme="light"] .box:hover,
-html[data-theme="light"] .box-boarding:hover,
-html[data-theme="light"] .coolbox:hover {
-    transform: translate(-3px, -3px) !important;
-    box-shadow: 8px 8px 0px #000000 !important;
-    background-color: #f7f8ff !important;
-}
-
-/* Neo-Brutalist Inputs & Selects */
-html[data-theme="light"] .input,
-html[data-theme="light"] .select,
-html[data-theme="light"] input,
-html[data-theme="light"] select {
-    background-color: #ffffff !important;
-    color: #000000 !important;
-    border: 3px solid #000000 !important;
-    box-shadow: 3px 3px 0px #000000 !important;
-    border-radius: 4px !important;
-    font-weight: 600 !important;
-    padding: 8px 12px !important;
-}
-
-html[data-theme="light"] .input:focus,
-html[data-theme="light"] .select:focus,
-html[data-theme="light"] input:focus,
-html[data-theme="light"] select:focus {
-    box-shadow: 4px 4px 0px #7c3aed !important;
-    outline: none !important;
-}
-
-/* Premium Neo-Brutalist Action Buttons */
-html[data-theme="light"] .button,
-html[data-theme="light"] button:not(.toast) {
-    background-color: #fcd452 !important; /* Vivid Yellow */
-    color: #000000 !important;
-    border: 3px solid #000000 !important;
-    box-shadow: 4px 4px 0px #000000 !important;
-    border-radius: 4px !important;
-    font-weight: 800 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
-    transition: all 0.12s ease-in-out !important;
-}
-
-html[data-theme="light"] .button:hover,
-html[data-theme="light"] button:not(.toast):hover {
-    transform: translate(-2px, -2px) !important;
-    box-shadow: 6px 6px 0px #000000 !important;
-    background-color: #ffe17d !important;
-}
-
-html[data-theme="light"] .button:active,
-html[data-theme="light"] button:not(.toast):active {
-    transform: translate(2px, 2px) !important;
-    box-shadow: 2px 2px 0px #000000 !important;
-}
-
-/* Highlighted / Positive Action Overrides */
-html[data-theme="light"] button[isHighlighted] {
-    background-color: #7c3aed !important; /* Bold Purple */
-    color: #ffffff !important;
-}
-
-html[data-theme="light"] button[isHighlighted] span,
-html[data-theme="light"] button[isHighlighted] div {
-    color: #ffffff !important;
-}
-
-html[data-theme="light"] button[isHighlighted]:hover {
-    background-color: #9060fa !important;
-}
-
-/* Sidebar and Navigation Elements */
-html[data-theme="light"] .menu-item {
-    border: 2px solid transparent !important;
-    transition: all 0.1s ease-in-out !important;
-}
-
-html[data-theme="light"] .menu-item-active {
-    background-color: #7c3aed !important;
-    color: #ffffff !important;
-    border: 3px solid #000000 !important;
-    box-shadow: 3px 3px 0px #000000 !important;
-}
-
-html[data-theme="light"] .menu-item-active span,
-html[data-theme="light"] .menu-item-active svg,
-html[data-theme="light"] .menu-item-active div {
-    color: #ffffff !important;
-}
-
-html[data-theme="light"] .menu-item:hover {
-    background-color: #ffe17d !important;
-    color: #000000 !important;
-    border: 2px solid #000000 !important;
-    box-shadow: 2px 2px 0px #000000 !important;
-}
-
-/* Tables and Headers */
-html[data-theme="light"] table {
-    border: 3px solid #000000 !important;
-    background-color: #ffffff !important;
-    box-shadow: 4px 4px 0px #000000 !important;
-    border-radius: 6px !important;
-    overflow: hidden !important;
-}
-
-html[data-theme="light"] thead tr {
-    background-color: #7c3aed !important;
-    border-bottom: 3px solid #000000 !important;
-}
-
-html[data-theme="light"] thead tr th {
-    color: #ffffff !important;
-    font-weight: 800 !important;
-}
-
-html[data-theme="light"] tbody tr {
-    background-color: #ffffff !important;
-    border-bottom: 2px solid #000000 !important;
-}
-
-html[data-theme="light"] tbody tr:hover {
-    background-color: #f7f8ff !important;
-}
-
-/* ==========================================================================
-   🏛️ SOVEREIGN HIGH-FIDELITY "CONSORTIUM" THEME (DARK NEO-BRUTALISM)
+   SOVEREIGN THEME (DARK ONLY)
    ========================================================================== */
 :root, .dark {
-    --brand-primary: #f53003;
-    --brand-bg: #030303;
-    --brand-card: #090909;
-    --brand-border: #1a1a1a;
-    --text-bright: #ffffff;
-    --text-normal: #e0e0e0;
-    --text-muted: #8e8e93;
+    --brand-primary: #a855f7;
+    --brand-primary-hover: #c084fc;
+    --brand-secondary: #22d3ee;
+    --brand-bg: #05020a;
+    --brand-card: #0d0718;
+    --brand-border: #281a44;
+    --text-bright: #f8f7ff;
+    --text-normal: #e6e0ff;
+    --text-muted: #a7a3b8;
     
     /* Mapping color variables for default layouts */
-    --color-base: #030303;
-    --color-coolgray-100: #090909;
+    --color-base: #05020a;
+    --color-coolgray-100: #0d0718;
     --color-coolgray-200: #000000;
-    --color-coolgray-300: #090909;
-    --color-coolgray-400: #1a1a1a;
-    --color-coolgray-500: #2a2a2a;
-    --color-coollabs: #f53003;
-    --color-coollabs-100: #d62700;
+    --color-coolgray-300: #120a24;
+    --color-coolgray-400: #281a44;
+    --color-coolgray-500: #3b2a63;
+    --color-coollabs: #a855f7;
+    --color-coollabs-100: #c084fc;
+    --color-warning: #22d3ee;
 }
 
-/* 🌌 Dark Neo-Brutalist Canvas with Retro Red Grids */
+/* Dark sovereign canvas with subtle red grid */
 html, body, html.dark, html.dark body {
     background-color: var(--brand-bg) !important;
     color: var(--text-normal) !important;
     background-image: 
-        radial-gradient(rgba(245, 48, 3, 0.12) 1.5px, transparent 1.5px) !important;
+        radial-gradient(rgba(34, 211, 238, 0.12) 1.5px, transparent 1.5px),
+        linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(34, 211, 238, 0.03), transparent 42%) !important;
     background-size: 24px 24px !important;
     background-attachment: fixed !important;
     text-rendering: optimizeLegibility;
@@ -433,23 +255,23 @@ html, body, html.dark, html.dark body {
 aside, .fi-sidebar, nav, header {
     background-color: var(--brand-card) !important;
     border-right: 3px solid #000000 !important;
-    box-shadow: none !important;
+    box-shadow: inset -1px 0 0 rgba(34, 211, 238, 0.14) !important;
 }
 
 /* Ensure Sidebar elements have outstanding contrast on dark background */
 aside a, aside span, aside p, aside svg, nav a, nav span, nav p, nav svg {
-    color: #b0b5c0 !important;
+    color: var(--text-muted) !important;
 }
 
 aside a:hover, nav a:hover {
     color: #ffffff !important;
 }
 
-/* Premium Neo-Brutalist Card Boxes (Thick black borders & flat offset shadows) */
+/* Sovereign card boxes */
 .box, .box-boarding, .coolbox, .custom-modal, [class*="card"], [class*="stat"] {
     background-color: var(--brand-card) !important;
     border: 3px solid #000000 !important;
-    box-shadow: 4px 4px 0px #000000 !important;
+    box-shadow: 4px 4px 0px #000000, 0 0 22px rgba(168, 85, 247, 0.08) !important;
     border-radius: 8px !important;
     color: var(--text-bright) !important;
     transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
@@ -457,7 +279,7 @@ aside a:hover, nav a:hover {
 
 .box:hover, .box-boarding:hover, .coolbox:hover, [class*="card"]:hover {
     transform: translate(-3px, -3px) !important;
-    box-shadow: 7px 7px 0px var(--brand-primary) !important;
+    box-shadow: 7px 7px 0px var(--brand-primary), 0 0 28px rgba(34, 211, 238, 0.12) !important;
     border-color: #000000 !important;
 }
 
@@ -475,19 +297,19 @@ a[href="/"], .logo-text-partner {
     border-radius: 6px !important;
     transition: all 0.1s ease-in-out !important;
     font-weight: 600 !important;
-    color: #b0b5c0 !important;
+    color: var(--text-muted) !important;
 }
 
 .menu-item:hover, [class*="sidebar-item"]:hover {
-    background-color: rgba(255, 255, 255, 0.08) !important;
+    background-color: rgba(34, 211, 238, 0.08) !important;
     border: 2px solid #000000 !important;
     box-shadow: 2px 2px 0px #000000 !important;
     color: #ffffff !important;
 }
 
 .menu-item:hover svg, [class*="sidebar-item"]:hover svg {
-    stroke: #ffffff !important;
-    color: #ffffff !important;
+    stroke: var(--brand-secondary) !important;
+    color: var(--brand-secondary) !important;
 }
 
 .menu-item-active, [class*="sidebar-item-active"] {
@@ -502,7 +324,7 @@ a[href="/"], .logo-text-partner {
     stroke: #ffffff !important;
 }
 
-/* Neo-Brutalist Inputs & Select Fields */
+/* Sovereign inputs and select fields */
 .input, .select, input, select, textarea {
     background-color: #000000 !important;
     color: var(--text-bright) !important;
@@ -515,14 +337,14 @@ a[href="/"], .logo-text-partner {
 }
 
 .input:focus, .select:focus, input:focus, select:focus, textarea:focus {
-    box-shadow: 4px 4px 0px var(--brand-primary) !important;
+    box-shadow: 4px 4px 0px var(--brand-primary), 0 0 18px rgba(34, 211, 238, 0.16) !important;
     border-color: #000000 !important;
     outline: none !important;
 }
 
-/* Premium Neo-Brutalist Action Buttons */
+/* Sovereign action buttons */
 .button, button:not(.toast), a.button {
-    background-color: var(--brand-primary) !important; /* Sovereign Vivid Red */
+    background-color: var(--brand-primary) !important;
     color: #ffffff !important;
     border: 3px solid #000000 !important;
     box-shadow: 4px 4px 0px #000000 !important;
@@ -536,7 +358,7 @@ a[href="/"], .logo-text-partner {
 .button:hover, button:not(.toast):hover, a.button:hover {
     transform: translate(-2px, -2px) !important;
     box-shadow: 6px 6px 0px #000000 !important;
-    background-color: #ff451a !important;
+    background-color: var(--brand-primary-hover) !important;
 }
 
 .button:active, button:not(.toast):active {
@@ -544,7 +366,7 @@ a[href="/"], .logo-text-partner {
     box-shadow: 2px 2px 0px #000000 !important;
 }
 
-/* Neo-Brutalist High-Contrast Tables */
+/* High-contrast tables */
 table {
     border: 3px solid #000000 !important;
     background-color: var(--brand-card) !important;
@@ -554,7 +376,7 @@ table {
 }
 
 thead tr {
-    background-color: var(--brand-primary) !important;
+    background: linear-gradient(90deg, rgba(168, 85, 247, 0.95), rgba(34, 211, 238, 0.55)) !important;
     border-bottom: 3px solid #000000 !important;
 }
 
@@ -594,4 +416,67 @@ label, .text-neutral-400, .dark\:text-neutral-400 {
 .bg-warning, .dark\:bg-warning {
     background-color: var(--brand-primary) !important;
     color: #ffffff !important;
+}
+
+/* Cyberpunk status remapping: cyan for proof/success, violet for capability. */
+.text-green-500,
+.text-green-600,
+.text-emerald-400,
+.text-emerald-500,
+.dark\:text-green-400,
+.dark\:text-emerald-400 {
+    color: var(--brand-secondary) !important;
+}
+
+.bg-green-500,
+.bg-green-500\/5,
+.bg-green-500\/10,
+.dark\:bg-green-500\/20,
+.bg-emerald-500,
+.bg-emerald-500\/10,
+.dark\:bg-emerald-500\/20,
+.dark\:bg-green-500,
+.dark\:bg-emerald-500 {
+    background-color: var(--brand-secondary) !important;
+}
+
+.border-green-500,
+.border-green-500\/30,
+.border-emerald-500,
+.border-emerald-500\/30,
+.dark\:border-green-500,
+.dark\:border-emerald-500 {
+    border-color: var(--brand-secondary) !important;
+}
+
+.text-purple-400,
+.text-purple-500,
+.text-purple-600,
+.text-indigo-400,
+.text-indigo-500,
+.text-indigo-600,
+.dark\:text-purple-400,
+.dark\:text-indigo-400 {
+    color: var(--brand-primary-hover) !important;
+}
+
+.bg-purple-500,
+.bg-purple-500\/10,
+.bg-purple-500\/20,
+.bg-purple-600,
+.bg-indigo-500,
+.bg-indigo-500\/10,
+.dark\:bg-purple-500,
+.dark\:bg-indigo-500 {
+    background-color: var(--brand-primary) !important;
+}
+
+.border-purple-500,
+.border-purple-500\/30,
+.border-purple-500\/50,
+.border-indigo-500,
+.border-indigo-500\/30,
+.dark\:border-purple-500,
+.dark\:border-indigo-500 {
+    border-color: var(--brand-primary) !important;
 }

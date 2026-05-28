@@ -8,15 +8,14 @@
     <h1>Dashboard</h1>
     <div class="subtitle mb-6">Your self-hosted infrastructure.</div>
 
-    <!-- 🚩 Sovereign High-Fidelity Welcome Banner -->
-    <div class="card-neo mb-6 p-6 relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-br from-red-50 to-white dark:from-[rgba(245,48,3,0.06)] dark:to-[#090909] bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg">
+    <div class="card-neo mb-6 p-6 relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-br dark:from-[rgba(168,85,247,0.12)] dark:via-[#0d0718] dark:to-[rgba(34,211,238,0.06)] bg-[#0d0718] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg">
         <div>
             <div class="flex gap-2 mb-3">
-                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-[#f53003] bg-[#f53003]/10" 
+                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-[#c084fc] bg-[#a855f7]/10" 
                       style="box-shadow: 1.5px 1.5px 0px #000000;">
                     SOVEREIGN SYSTEMS
                 </span>
-                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-[#10b981] bg-[#10b981]/10"
+                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-[#22d3ee] bg-[#22d3ee]/10"
                       style="box-shadow: 1.5px 1.5px 0px #000000;">
                     INFRASTRUCTURE SHIELDED
                 </span>
@@ -31,8 +30,8 @@
         <!-- Right side quick balance/mandate indicator if active -->
         <div class="flex flex-col gap-1.5">
             <span class="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Network status</span>
-            <div class="flex items-center gap-1.5 bg-[#fcd452] text-black border-2 border-black px-2 py-1 rounded font-bold uppercase tracking-widest text-[9px]" style="box-shadow: 2px 2px 0px #000000; width: fit-content;">
-                <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse border border-black"></div>
+            <div class="flex items-center gap-1.5 bg-[#22d3ee]/15 text-[#67e8f9] border-2 border-black px-2 py-1 rounded font-bold uppercase tracking-widest text-[9px]" style="box-shadow: 2px 2px 0px #000000; width: fit-content;">
+                <div class="w-1.5 h-1.5 rounded-full bg-[#22d3ee] animate-pulse border border-black"></div>
                 <span>CLEARING: ACTIVE</span>
             </div>
         </div>
@@ -51,7 +50,7 @@
         <div class="card-neo p-4 flex flex-col justify-between bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg min-h-[90px]">
             <div>
                 <div class="text-[10px] font-bold text-neutral-600 dark:text-neutral-400 uppercase tracking-widest">Validated Servers</div>
-                <div class="text-xl font-black text-[#f53003] mt-1" style="font-family: 'Space Grotesk', sans-serif;">
+                <div class="text-xl font-black text-[#c084fc] mt-1" style="font-family: 'Space Grotesk', sans-serif;">
                     {{ $servers->count() }} <span class="text-neutral-500 text-xs font-semibold">nodes online</span>
                 </div>
             </div>
@@ -59,7 +58,7 @@
         <div class="card-neo p-4 flex flex-col justify-between bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg min-h-[90px]">
             <div>
                 <div class="text-[10px] font-bold text-neutral-600 dark:text-neutral-400 uppercase tracking-widest">Crypto Identity</div>
-                <div class="text-xl font-black text-[#10b981] mt-1" style="font-family: 'Space Grotesk', sans-serif;">
+                <div class="text-xl font-black text-[#22d3ee] mt-1" style="font-family: 'Space Grotesk', sans-serif;">
                     Touch ID / Passkey <span class="text-neutral-500 text-xs font-semibold">secured</span>
                 </div>
             </div>
@@ -68,15 +67,15 @@
 
     <!-- 🏛️ Sovereign Audit Ledger (Крипто-История) Widget -->
     @if ($successMessage)
-        <div class="card-neo mb-6 p-4 flex justify-between items-center bg-emerald-950/20 text-emerald-400 border-2 border-emerald-500 rounded" 
-             style="box-shadow: 4px 4px 0px #10b981; border: 3px solid #10b981;">
+        <div class="card-neo mb-6 p-4 flex justify-between items-center bg-[#22d3ee]/10 text-[#67e8f9] border-2 border-[#22d3ee] rounded" 
+             style="box-shadow: 4px 4px 0px #22d3ee; border: 3px solid #22d3ee;">
             <div class="flex items-center gap-2">
-                <svg class="w-5 h-5 text-emerald-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 text-[#67e8f9] animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
                 </svg>
                 <span class="text-xs font-black uppercase tracking-wider">{{ $successMessage }}</span>
             </div>
-            <button wire:click="dismissMessage" class="text-xs font-black uppercase bg-transparent text-emerald-400 hover:text-white border border-emerald-500 px-2 py-0.5 rounded cursor-pointer transition">
+            <button wire:click="dismissMessage" class="text-xs font-black uppercase bg-transparent text-[#67e8f9] hover:text-white border border-[#22d3ee] px-2 py-0.5 rounded cursor-pointer transition">
                 Dismiss
             </button>
         </div>
@@ -89,7 +88,7 @@
                     <h3 class="text-lg font-black text-black dark:text-white m-0 tracking-tight" style="font-family: 'Space Grotesk', sans-serif;">
                         SOVEREIGN AUDIT LEDGER
                     </h3>
-                    <span class="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border border-black text-[#f53003] bg-[#f53003]/10" 
+                    <span class="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border border-black text-[#22d3ee] bg-[#22d3ee]/10" 
                           style="box-shadow: 1px 1px 0px #000000;">
                         Consortium L1 Verified
                     </span>
@@ -99,7 +98,7 @@
                 </p>
             </div>
             <button wire:click="auditState" wire:loading.attr="disabled"
-                    class="bg-[#f53003] text-white font-black uppercase tracking-widest text-[10px] px-4 py-2 border-2 border-black rounded transition hover:-translate-y-0.5"
+                    class="bg-[#a855f7] text-white font-black uppercase tracking-widest text-[10px] px-4 py-2 border-2 border-black rounded transition hover:-translate-y-0.5"
                     style="box-shadow: 3px 3px 0px #000000; font-family: 'Space Grotesk', sans-serif;">
                 <span wire:loading.remove>Audit State Checkpoint</span>
                 <span wire:loading>Sealing Consensus...</span>
@@ -134,18 +133,18 @@
                                 {{ $event['details'] }}
                             </td>
                             <td class="p-3">
-                                <code class="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-black text-[#f53003] border border-neutral-300 dark:border-neutral-800 text-[10px] font-bold" title="{{ $event['hash'] }}">
+                                <code class="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-black text-[#c084fc] border border-neutral-300 dark:border-neutral-800 text-[10px] font-bold" title="{{ $event['hash'] }}">
                                     {{ substr($event['hash'], 0, 10) }}...{{ substr($event['hash'], -8) }}
                                 </code>
                             </td>
                             <td class="p-3">
-                                <code class="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-black text-emerald-600 dark:text-emerald-400 border border-neutral-300 dark:border-neutral-800 text-[10px] font-bold">
+                                <code class="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-black text-[#67e8f9] border border-neutral-300 dark:border-neutral-800 text-[10px] font-bold">
                                     {{ $event['signature'] }}
                                 </code>
                             </td>
                             <td class="p-3">
-                                <div class="flex items-center gap-1.5 text-emerald-500 font-bold uppercase tracking-widest text-[9px]">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse border border-black"></span>
+                                <div class="flex items-center gap-1.5 text-[#22d3ee] font-bold uppercase tracking-widest text-[9px]">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-[#22d3ee] animate-pulse border border-black"></span>
                                     <span>{{ $event['status'] }}</span>
                                 </div>
                             </td>

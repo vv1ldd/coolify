@@ -1,5 +1,5 @@
 <style>
-    /* Sovereign Neo-Brutalist Sidebar Menu Items */
+    /* Sovereign sidebar menu items */
     .menu-item {
         display: flex;
         align-items: center;
@@ -32,10 +32,10 @@
     }
 
     .menu-item-active {
-        background-color: #9333ea !important; /* purple-600 */
+        background: linear-gradient(90deg, #a855f7, #7c3aed) !important;
         color: #ffffff !important;
         border: 2px solid #000000 !important;
-        box-shadow: 4px 4px 0px #000000 !important;
+        box-shadow: 4px 4px 0px #000000, 0 0 18px rgba(34, 211, 238, 0.18) !important;
         transform: translateY(-2px);
     }
 
@@ -75,42 +75,19 @@
             init() {
                 this.full = localStorage.getItem('pageWidth');
                 this.zoom = localStorage.getItem('zoom');
-                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-                    const userSettings = localStorage.getItem('theme');
-                    if (userSettings !== 'system') {
-                        return;
-                    }
-                    if (e.matches) {
-                        document.documentElement.classList.add('dark');
-                    } else {
-                        document.documentElement.classList.remove('dark');
-                    }
-                });
                 this.queryTheme();
                 this.checkZoom();
             },
             setTheme(type) {
-                this.theme = type;
-                localStorage.setItem('theme', type);
+                this.theme = 'dark';
+                localStorage.setItem('theme', 'dark');
                 this.queryTheme();
             },
             queryTheme() {
-                const darkModePreference = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                const userSettings = localStorage.getItem('theme') || 'dark';
-                localStorage.setItem('theme', userSettings);
-                if (userSettings === 'dark') {
-                    document.documentElement.classList.add('dark');
-                    this.theme = 'dark';
-                } else if (userSettings === 'light') {
-                    document.documentElement.classList.remove('dark');
-                    this.theme = 'light';
-                } else if (darkModePreference) {
-                    this.theme = 'system';
-                    document.documentElement.classList.add('dark');
-                } else if (!darkModePreference) {
-                    this.theme = 'system';
-                    document.documentElement.classList.remove('dark');
-                }
+                localStorage.setItem('theme', 'dark');
+                document.documentElement.classList.add('dark');
+                document.documentElement.setAttribute('data-theme', 'dark');
+                this.theme = 'dark';
             },
             checkZoom() {
                 if (this.zoom === null) {
@@ -130,7 +107,7 @@
     <div class="flex lg:pt-8 pt-6 pb-6 items-start justify-between">
         <div class="flex flex-col w-full">
             <a href="/" {{ wireNavigate() }} class="flex items-center gap-2 text-2xl font-black tracking-tight text-black dark:text-white hover:opacity-80 transition-opacity uppercase" style="font-family: 'Space Grotesk', sans-serif;">
-                <div class="w-4 h-4 bg-purple-600 border-2 border-black rounded-[3px] shadow-[2px_2px_0px_#000000]"></div>
+                <div class="w-4 h-4 bg-[#a855f7] border-2 border-black rounded-[3px] shadow-[2px_2px_0px_#22d3ee]"></div>
                 SOVEREIGN.
             </a>
             <div class="mt-1">
@@ -138,13 +115,13 @@
             </div>
             
             @if (session('sovereign_mandate_id'))
-                <div class="flex items-center gap-1.5 mt-3 bg-neutral-900 border border-emerald-500/20 px-2 py-1.5 rounded-sm text-[9px] font-bold text-emerald-400 uppercase tracking-widest" style="width: fit-content;" title="Sovereign Session Mandate ID: {{ session('sovereign_mandate_id') }}">
-                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                <div class="flex items-center gap-1.5 mt-3 bg-neutral-900 border border-[#22d3ee]/20 px-2 py-1.5 rounded-sm text-[9px] font-bold text-[#67e8f9] uppercase tracking-widest" style="width: fit-content;" title="Sovereign Session Mandate ID: {{ session('sovereign_mandate_id') }}">
+                    <div class="w-1.5 h-1.5 rounded-full bg-[#22d3ee] animate-pulse"></div>
                     <span>MANDATE: ACTIVE</span>
                 </div>
             @else
-                <div class="flex items-center gap-1.5 mt-3 bg-neutral-900 border border-yellow-500/20 px-2 py-1.5 rounded-sm text-[9px] font-bold text-yellow-500 uppercase tracking-widest" style="width: fit-content;" title="Standard Session">
-                    <div class="w-1.5 h-1.5 rounded-full bg-yellow-500"></div>
+                <div class="flex items-center gap-1.5 mt-3 bg-neutral-900 border border-[#a855f7]/20 px-2 py-1.5 rounded-sm text-[9px] font-bold text-[#c084fc] uppercase tracking-widest" style="width: fit-content;" title="Standard Session">
+                    <div class="w-1.5 h-1.5 rounded-full bg-[#a855f7]"></div>
                     <span>SESSION: STANDARD</span>
                 </div>
             @endif

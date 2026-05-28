@@ -4,13 +4,13 @@
     </x-slot>
 
     <!-- Header Section -->
-    <div class="card-neo mb-6 p-6 relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-br from-indigo-50 to-white dark:from-[rgba(79,70,229,0.06)] dark:to-[#090909] bg-white dark:bg-[#090909] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg">
+    <div class="card-neo mb-6 p-6 relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-br dark:from-[rgba(168,85,247,0.12)] dark:via-[#0d0718] dark:to-[rgba(34,211,238,0.06)] bg-[#0d0718] border-[3px] border-black shadow-[4px_4px_0px_#000000] rounded-lg">
         <div>
             <div class="flex gap-2 mb-3">
-                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 shadow-[1.5px_1.5px_0px_#000000]">
+                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-[#c084fc] bg-[#a855f7]/10 shadow-[1.5px_1.5px_0px_#000000]">
                     CONSENSUS LAYER
                 </span>
-                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-[#10b981] bg-[#10b981]/10 shadow-[1.5px_1.5px_0px_#000000]">
+                <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-[#22d3ee] bg-[#22d3ee]/10 shadow-[1.5px_1.5px_0px_#000000]">
                     TOPOLOGY: {{ $servers->count() }} NODES
                 </span>
             </div>
@@ -56,8 +56,8 @@
                     </div>
                     <div>
                         @if ($server->settings->is_reachable && $server->settings->is_usable)
-                            <div class="flex items-center gap-1.5 px-2 py-1 text-[10px] font-black uppercase tracking-wider rounded border border-black text-[#10b981] bg-[#10b981]/10 shadow-[1.5px_1.5px_0px_#000000]">
-                                <span class="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse"></span>
+                            <div class="flex items-center gap-1.5 px-2 py-1 text-[10px] font-black uppercase tracking-wider rounded border border-black text-[#22d3ee] bg-[#22d3ee]/10 shadow-[1.5px_1.5px_0px_#000000]">
+                                <span class="w-1.5 h-1.5 rounded-full bg-[#22d3ee] animate-pulse"></span>
                                 ONLINE
                             </div>
                         @else
@@ -77,22 +77,22 @@
                     
                     <div class="mt-4 flex flex-wrap gap-2">
                         @if ($server->settings->is_swarm_manager)
-                            <span class="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-purple-500/10 text-purple-600 border border-purple-500/30">
+                            <span class="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-[#a855f7]/10 text-[#c084fc] border border-[#a855f7]/30">
                                 SWARM MANAGER
                             </span>
                         @endif
                         @if ($server->settings->is_swarm_worker)
-                            <span class="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-indigo-500/10 text-indigo-600 border border-indigo-500/30">
+                            <span class="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-[#22d3ee]/10 text-[#67e8f9] border border-[#22d3ee]/30">
                                 SWARM WORKER
                             </span>
                         @endif
                         @if ($server->settings->is_build_server)
-                            <span class="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-amber-500/10 text-amber-600 border border-amber-500/30">
+                            <span class="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-[#f59e0b]/10 text-[#fbbf24] border border-[#f59e0b]/30">
                                 BUILD NODE
                             </span>
                         @endif
                         @if ($server->isLocalhost())
-                            <span class="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-blue-500/10 text-blue-600 border border-blue-500/30">
+                            <span class="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-[#22d3ee]/10 text-[#67e8f9] border border-[#22d3ee]/30">
                                 LOCALHOST
                             </span>
                         @endif

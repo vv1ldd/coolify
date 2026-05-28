@@ -40,11 +40,11 @@
     }
 
     &:focus-visible {
-        box-shadow: inset 4px 0 0 #6b16ed, inset 0 0 0 1px #e5e5e5;
+        box-shadow: inset 4px 0 0 #a855f7, inset 0 0 0 1px #e5e5e5;
     }
 
     &:where(.dark, .dark *):focus-visible {
-        box-shadow: inset 4px 0 0 #fcd452, inset 0 0 0 1px #242424;
+        box-shadow: inset 4px 0 0 #22d3ee, inset 0 0 0 1px #281a44;
     }
 }
 
@@ -82,11 +82,11 @@
     @apply focus-visible:outline-none;
 
     &:focus-visible {
-        box-shadow: inset 4px 0 0 #6b16ed, inset 0 0 0 2px #e5e5e5;
+        box-shadow: inset 4px 0 0 #a855f7, inset 0 0 0 2px #e5e5e5;
     }
 
     &:where(.dark, .dark *):focus-visible {
-        box-shadow: inset 4px 0 0 #fcd452, inset 0 0 0 2px #242424;
+        box-shadow: inset 4px 0 0 #22d3ee, inset 0 0 0 2px #281a44;
     }
 
     &:read-only {
@@ -113,11 +113,11 @@
     }
 
     &:focus-visible {
-        box-shadow: inset 4px 0 0 #6b16ed, inset 0 0 0 2px #e5e5e5;
+        box-shadow: inset 4px 0 0 #a855f7, inset 0 0 0 2px #e5e5e5;
     }
 
     &:where(.dark, .dark *):focus-visible {
-        box-shadow: inset 4px 0 0 #fcd452, inset 0 0 0 2px #242424;
+        box-shadow: inset 4px 0 0 #22d3ee, inset 0 0 0 2px #281a44;
     }
 }
 
@@ -333,7 +333,7 @@
 }
 
 @utility log-warning {
-    @apply bg-yellow-500/10 dark:bg-yellow-500/15;
+    @apply bg-warning/10 dark:bg-warning/15;
 }
 
 @utility log-debug {

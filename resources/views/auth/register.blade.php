@@ -1,13 +1,13 @@
 <x-layout-simple>
     <div class="min-h-screen w-full flex items-center justify-center relative bg-white dark:bg-[#090909] overflow-hidden" style="font-family: 'Space Grotesk', sans-serif;">
         <div class="absolute inset-0 pointer-events-none z-0 overflow-hidden">
-            <div class="absolute top-[-10%] left-[20%] w-[60vw] h-[60vw] rounded-full blur-[80px] bg-[radial-gradient(circle,rgba(245,48,3,0.06)_0%,rgba(0,0,0,0)_70%)]"></div>
-            <div class="absolute top-[30%] right-[-10%] w-[50vw] h-[50vw] rounded-full blur-[100px] bg-[radial-gradient(circle,rgba(79,70,229,0.06)_0%,rgba(0,0,0,0)_75%)]"></div>
+            <div class="absolute top-[-10%] left-[20%] w-[60vw] h-[60vw] rounded-full blur-[80px] bg-[radial-gradient(circle,rgba(168,85,247,0.16)_0%,rgba(0,0,0,0)_70%)]"></div>
+            <div class="absolute top-[30%] right-[-10%] w-[50vw] h-[50vw] rounded-full blur-[100px] bg-[radial-gradient(circle,rgba(34,211,238,0.14)_0%,rgba(0,0,0,0)_75%)]"></div>
         </div>
 
         <div class="relative z-10 bg-white dark:bg-[#090909] border-[4px] border-black shadow-[8px_8px_0px_#000000] rounded-xl p-8 sm:p-10 mx-4" style="width: min(460px, calc(100vw - 2rem));">
             <div class="flex items-center justify-center gap-3 mb-8">
-                <div class="w-4 h-4 bg-[#f53003] border-2 border-black rounded-[3px] shadow-[2px_2px_0px_#000000]"></div>
+                <div class="w-4 h-4 bg-[#a855f7] border-2 border-black rounded-[3px] shadow-[2px_2px_0px_#22d3ee]"></div>
                 <h1 class="text-3xl font-black text-black dark:text-white tracking-tight uppercase m-0">Sovereign Coolify</h1>
             </div>
 
@@ -35,7 +35,7 @@
                     </div>
                 @endif
 
-                <a href="{{ route('auth.sl1.redirect') }}" class="flex items-center justify-center gap-2 bg-[#f53003] hover:bg-[#ff451a] text-white border-[3px] border-black shadow-[4px_4px_0px_#000000] hover:shadow-[2px_2px_0px_#000000] hover:translate-y-[2px] transition-all rounded-lg py-4 px-6 font-black uppercase tracking-widest text-sm mx-auto" style="width: min(360px, 100%);">
+                <a href="{{ route('auth.sl1.redirect') }}" class="flex items-center justify-center gap-2 bg-[#a855f7] hover:bg-[#c084fc] text-white border-[3px] border-black shadow-[4px_4px_0px_#000000] hover:shadow-[2px_2px_0px_#22d3ee] hover:translate-y-[2px] transition-all rounded-lg py-4 px-6 font-black uppercase tracking-widest text-sm mx-auto" style="width: min(360px, 100%);">
                     Создать через SL1 Identity
                 </a>
 
