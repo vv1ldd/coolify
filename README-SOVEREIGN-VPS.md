@@ -29,13 +29,24 @@ Sovereign install path for VPS testing.
    export GHCR_TOKEN=github_pat_or_classic_pat_with_read_packages
    ```
 
-## Install On A Fresh VPS
+## One Command Bootstrap
 
 Run as `root` or with `sudo`.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | bash
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo bash
 ```
+
+The bootstrap script auto-detects the host state and shows an interactive
+cyberpunk terminal menu when a TTY is available:
+
+- clean VPS -> fresh Sovereign Coolify install
+- existing upstream Coolify -> preserve data, upgrade to Sovereign, generate an
+  SL1 admin claim URL
+- existing Sovereign Coolify -> refresh compose/image and restart containers
+
+For non-interactive use, set `SOVEREIGN_INSTALL_MODE` to `auto`, `fresh`,
+`upgrade`, or `refresh`.
 
 Optional pre-created root user:
 
@@ -43,7 +54,7 @@ Optional pre-created root user:
 export ROOT_USERNAME=admin
 export ROOT_USER_EMAIL=admin@example.com
 export ROOT_USER_PASSWORD='change-this-password'
-curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | bash
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
 ```
 
 Optional custom ports/image:
@@ -52,7 +63,7 @@ Optional custom ports/image:
 export APP_PORT=8000
 export SOKETI_PORT=6001
 export COOLIFY_IMAGE=ghcr.io/vv1ldd/coolify:sovereign
-curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | bash
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
 ```
 
 Optional SL1 Connect settings:
@@ -61,7 +72,7 @@ Optional SL1 Connect settings:
 export SL1_CONNECT_ISSUER=https://simplel1.online
 export SL1_CONNECT_CLIENT_ID=coolify.sovereign
 export SL1_CONNECT_CLIENT_NAME='Sovereign Coolify'
-curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | bash
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
 ```
 
 After installation, open:
@@ -70,12 +81,12 @@ After installation, open:
 http://SERVER_IP:8000
 ```
 
-## Upgrade The Fork
+## Upgrade Or Refresh The Fork
 
 After pushing a new `sovereign` image:
 
 ```bash
-sudo bash /data/coolify/source/upgrade-sovereign.sh
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo bash
 ```
 
 Update rail:
@@ -83,13 +94,15 @@ Update rail:
 1. Commit code to branch `sovereign`.
 2. Push `origin sovereign`.
 3. Wait for `Sovereign Build` to publish `ghcr.io/vv1ldd/coolify:sovereign`.
-4. Run `sudo bash /data/coolify/source/upgrade-sovereign.sh` on the VPS.
+4. Run the one command bootstrap on the VPS and select refresh or upgrade.
 5. Verify `/api/health` and one SL1 login round-trip.
 
 ## Files Added For The Fork
 
-- `scripts/install-sovereign.sh` - fresh VPS installer
-- `scripts/upgrade-sovereign.sh` - pulls the fork image and restarts compose
+- `scripts/install-sovereign.sh` - unified cyberpunk bootstrap for fresh install,
+  upstream upgrade, and Sovereign refresh
+- `scripts/upgrade-sovereign.sh` - internal worker that pulls the fork image and
+  restarts compose
 - `docker-compose.sovereign.prod.yml` - overrides the app image to the fork image
 - `.github/workflows/sovereign-build.yml` - publishes `ghcr.io/vv1ldd/coolify:sovereign`
 

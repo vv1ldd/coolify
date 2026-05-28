@@ -22,6 +22,56 @@ SL1_CONNECT_CLIENT_ID="${SL1_CONNECT_CLIENT_ID:-coolify.sovereign}"
 SL1_CONNECT_CLIENT_NAME="${SL1_CONNECT_CLIENT_NAME:-Sovereign-Coolify}"
 SL1_CONNECT_CALLBACK_PATH="${SL1_CONNECT_CALLBACK_PATH:-/auth/sl1/callback}"
 SL1_CONNECT_TIMEOUT="${SL1_CONNECT_TIMEOUT:-10}"
+SELECTED_INSTALL_MODE=""
+SELECTED_ADMIN_CLAIM="false"
+
+if [ -z "${NO_COLOR:-}" ]; then
+    C_RESET="$(printf '\033[0m')"
+    C_DIM="$(printf '\033[2m')"
+    C_CYAN="$(printf '\033[36m')"
+    C_MAGENTA="$(printf '\033[35m')"
+    C_GREEN="$(printf '\033[32m')"
+    C_YELLOW="$(printf '\033[33m')"
+    C_RED="$(printf '\033[31m')"
+else
+    C_RESET=""
+    C_DIM=""
+    C_CYAN=""
+    C_MAGENTA=""
+    C_GREEN=""
+    C_YELLOW=""
+    C_RED=""
+fi
+
+term_line() {
+    printf '%b\n' "$*"
+}
+
+banner() {
+    echo ""
+    term_line "${C_MAGENTA}============================================================${C_RESET}"
+    term_line "${C_CYAN}  SOVEREIGN COOLIFY // SL1 CONTROL-PLANE BOOTSTRAP${C_RESET}"
+    term_line "${C_MAGENTA}============================================================${C_RESET}"
+    term_line "${C_DIM}  identity: SL1-only  theme: cyberpunk  mode: auto-aware${C_RESET}"
+    echo ""
+}
+
+section() {
+    term_line "${C_CYAN}>> $*${C_RESET}"
+}
+
+note() {
+    term_line "${C_DIM}   $*${C_RESET}"
+}
+
+warning() {
+    term_line "${C_YELLOW}!! $*${C_RESET}"
+}
+
+die() {
+    term_line "${C_RED}ERROR: $*${C_RESET}"
+    exit 1
+}
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
@@ -87,16 +137,221 @@ existing_coolify_detected() {
     return 1
 }
 
+sovereign_coolify_detected() {
+    if [ -f "$ENV_FILE" ] && grep -Eq '^(SOVEREIGN_BRANCH|SOVEREIGN_REPOSITORY)=|^COOLIFY_IMAGE=.*(vv1ldd/coolify|:sovereign)' "$ENV_FILE"; then
+        return 0
+    fi
+
+    if command -v docker >/dev/null 2>&1; then
+        local image
+        image="$(docker inspect coolify --format '{{.Config.Image}}' 2>/dev/null || true)"
+        case "$image" in
+            *vv1ldd/coolify*|*:sovereign)
+                return 0
+                ;;
+        esac
+    fi
+
+    return 1
+}
+
+detected_install_state() {
+    if sovereign_coolify_detected; then
+        printf 'sovereign'
+        return
+    fi
+
+    if existing_coolify_detected; then
+        printf 'coolify'
+        return
+    fi
+
+    printf 'fresh'
+}
+
+can_prompt() {
+    [ "${SOVEREIGN_ASSUME_YES:-false}" != "true" ] && [ -r /dev/tty ] && [ -w /dev/tty ]
+}
+
+print_detection() {
+    local state="$1"
+
+    section "Host scan"
+    note "Install root: ${INSTALL_ROOT}"
+    note "Source dir:   ${SOURCE_DIR}"
+    note "Repository:   ${REPOSITORY}"
+    note "Branch:       ${BRANCH}"
+    note "Image:        ${COOLIFY_IMAGE}"
+
+    case "$state" in
+        fresh)
+            term_line "${C_GREEN}   Detected: clean host / no Coolify state found${C_RESET}"
+            note "Recommended action: fresh Sovereign Coolify install."
+            ;;
+        coolify)
+            term_line "${C_YELLOW}   Detected: existing Coolify state${C_RESET}"
+            note "Recommended action: preserve data, upgrade compose/image, generate one-time SL1 admin claim."
+            ;;
+        sovereign)
+            term_line "${C_CYAN}   Detected: existing Sovereign Coolify state${C_RESET}"
+            note "Recommended action: refresh compose/image and restart containers."
+            ;;
+    esac
+    echo ""
+}
+
+choose_auto_mode() {
+    local state="$1"
+    local choice
+
+    print_detection "$state"
+
+    if ! can_prompt; then
+        case "$state" in
+            fresh)
+                SELECTED_INSTALL_MODE="fresh"
+                SELECTED_ADMIN_CLAIM="false"
+                ;;
+            coolify)
+                SELECTED_INSTALL_MODE="upgrade"
+                SELECTED_ADMIN_CLAIM="true"
+                ;;
+            sovereign)
+                SELECTED_INSTALL_MODE="refresh"
+                SELECTED_ADMIN_CLAIM="${SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE:-false}"
+                ;;
+        esac
+        note "No interactive terminal detected. Auto-selected: ${SELECTED_INSTALL_MODE}."
+        echo ""
+        return
+    fi
+
+    case "$state" in
+        fresh)
+            term_line "${C_MAGENTA}[1]${C_RESET} Fresh install Sovereign Coolify"
+            note "Creates /data/coolify, Postgres, Redis, SL1-only auth, cyberpunk UI."
+            term_line "${C_MAGENTA}[q]${C_RESET} Abort"
+            while true; do
+                printf 'Select action [1/q]: ' > /dev/tty
+                read -r choice < /dev/tty
+                case "$choice" in
+                    1|"")
+                        SELECTED_INSTALL_MODE="fresh"
+                        SELECTED_ADMIN_CLAIM="false"
+                        break
+                        ;;
+                    q|Q)
+                        die "Aborted by operator."
+                        ;;
+                esac
+            done
+            ;;
+        coolify)
+            term_line "${C_MAGENTA}[1]${C_RESET} Upgrade existing Coolify to Sovereign + generate admin claim"
+            note "Preserves database/volumes, installs SL1-only auth, prints CLAIM_URL for the current admin."
+            term_line "${C_MAGENTA}[2]${C_RESET} Refresh compose/image only, no admin claim"
+            note "Use this if the admin was already claimed or you only want the newest cyberpunk build."
+            term_line "${C_MAGENTA}[q]${C_RESET} Abort"
+            while true; do
+                printf 'Select action [1/2/q]: ' > /dev/tty
+                read -r choice < /dev/tty
+                case "$choice" in
+                    1|"")
+                        SELECTED_INSTALL_MODE="upgrade"
+                        SELECTED_ADMIN_CLAIM="true"
+                        break
+                        ;;
+                    2)
+                        SELECTED_INSTALL_MODE="refresh"
+                        SELECTED_ADMIN_CLAIM="false"
+                        break
+                        ;;
+                    q|Q)
+                        die "Aborted by operator."
+                        ;;
+                esac
+            done
+            ;;
+        sovereign)
+            term_line "${C_MAGENTA}[1]${C_RESET} Refresh Sovereign Coolify"
+            note "Pulls the latest ghcr.io image, updates compose/env defaults, restarts containers."
+            term_line "${C_MAGENTA}[2]${C_RESET} Refresh and generate a new admin claim"
+            note "Use this only if an existing admin still needs to bind SL1 Identity."
+            term_line "${C_MAGENTA}[q]${C_RESET} Abort"
+            while true; do
+                printf 'Select action [1/2/q]: ' > /dev/tty
+                read -r choice < /dev/tty
+                case "$choice" in
+                    1|"")
+                        SELECTED_INSTALL_MODE="refresh"
+                        SELECTED_ADMIN_CLAIM="false"
+                        break
+                        ;;
+                    2)
+                        SELECTED_INSTALL_MODE="upgrade"
+                        SELECTED_ADMIN_CLAIM="true"
+                        break
+                        ;;
+                    q|Q)
+                        die "Aborted by operator."
+                        ;;
+                esac
+            done
+            ;;
+    esac
+
+    echo ""
+}
+
+resolve_install_mode() {
+    local state="$1"
+
+    case "$SOVEREIGN_INSTALL_MODE" in
+        auto)
+            choose_auto_mode "$state"
+            ;;
+        fresh)
+            SELECTED_INSTALL_MODE="fresh"
+            SELECTED_ADMIN_CLAIM="false"
+            ;;
+        upgrade)
+            SELECTED_INSTALL_MODE="upgrade"
+            SELECTED_ADMIN_CLAIM="${SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE:-true}"
+            ;;
+        refresh)
+            SELECTED_INSTALL_MODE="refresh"
+            SELECTED_ADMIN_CLAIM="${SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE:-false}"
+            ;;
+        *)
+            die "Invalid SOVEREIGN_INSTALL_MODE=${SOVEREIGN_INSTALL_MODE}. Use auto, fresh, upgrade, or refresh."
+            ;;
+    esac
+
+    if [ "$SELECTED_INSTALL_MODE" = "fresh" ] && [ "$state" != "fresh" ]; then
+        die "Fresh install was requested, but existing Coolify state was detected. Refusing to protect volumes and database."
+    fi
+
+    if { [ "$SELECTED_INSTALL_MODE" = "upgrade" ] || [ "$SELECTED_INSTALL_MODE" = "refresh" ]; } && [ "$state" = "fresh" ]; then
+        die "${SELECTED_INSTALL_MODE} was requested, but no existing Coolify installation was detected."
+    fi
+}
+
 run_existing_upgrade() {
-    log "Existing Coolify installation detected. Running sovereign upgrade path."
+    local generate_claim="${1:-false}"
+
+    log "Existing Coolify installation detected. Running sovereign ${SELECTED_INSTALL_MODE} path."
     download_file scripts/upgrade-sovereign.sh "${SOURCE_DIR}/upgrade-sovereign.sh"
     chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh"
 
-    SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE=true bash "${SOURCE_DIR}/upgrade-sovereign.sh"
+    SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE="$generate_claim" bash "${SOURCE_DIR}/upgrade-sovereign.sh"
 
     echo ""
-    echo "Sovereign Coolify upgrade complete."
-    echo "Use the printed CLAIM_URL to bind the existing admin to SimpleL1 Identity."
+    term_line "${C_GREEN}Sovereign Coolify ${SELECTED_INSTALL_MODE} complete.${C_RESET}"
+    if [ "$generate_claim" = "true" ]; then
+        echo "Use the printed CLAIM_URL to bind the existing admin to SimpleL1 Identity."
+    else
+        echo "No admin claim was requested."
+    fi
 }
 
 install_docker() {
@@ -189,54 +444,36 @@ prepare_ssh_key() {
 }
 
 if [ "$EUID" -ne 0 ]; then
-    echo "Please run this script as root or with sudo."
-    exit 1
+    die "Please run this script as root or with sudo."
 fi
 
 mkdir -p "${SOURCE_DIR}" "${INSTALL_ROOT}"/{ssh,applications,databases,backups,services,proxy,sentinel}
 mkdir -p "${INSTALL_ROOT}/ssh/keys" "${INSTALL_ROOT}/ssh/mux" "${INSTALL_ROOT}/proxy/dynamic"
 touch "$LOG_FILE"
 
-echo ""
-echo "=========================================="
-echo "   Sovereign Coolify Installation"
-echo "=========================================="
-echo ""
-echo "Repository: ${REPOSITORY}"
-echo "Branch:     ${BRANCH}"
-echo "Image:      ${COOLIFY_IMAGE}"
-echo "Mode:       ${SOVEREIGN_INSTALL_MODE}"
-echo ""
+banner
 
 check_host_resources
 install_docker
 login_to_registry
 
-case "$SOVEREIGN_INSTALL_MODE" in
-    auto)
-        if existing_coolify_detected; then
-            run_existing_upgrade
-            exit 0
-        fi
-        ;;
-    upgrade)
-        if ! existing_coolify_detected; then
-            echo "SOVEREIGN_INSTALL_MODE=upgrade was requested, but no existing Coolify installation was detected."
-            exit 1
-        fi
-        run_existing_upgrade
+DETECTED_INSTALL_STATE="$(detected_install_state)"
+resolve_install_mode "$DETECTED_INSTALL_STATE"
+
+section "Selected action"
+note "Mode:        ${SELECTED_INSTALL_MODE}"
+note "Admin claim: ${SELECTED_ADMIN_CLAIM}"
+echo ""
+
+case "$SELECTED_INSTALL_MODE" in
+    upgrade|refresh)
+        run_existing_upgrade "$SELECTED_ADMIN_CLAIM"
         exit 0
         ;;
     fresh)
-        if existing_coolify_detected; then
-            echo "SOVEREIGN_INSTALL_MODE=fresh was requested, but an existing Coolify installation was detected."
-            echo "Refusing to continue to protect existing volumes and database."
-            exit 1
-        fi
         ;;
     *)
-        echo "Invalid SOVEREIGN_INSTALL_MODE=${SOVEREIGN_INSTALL_MODE}. Use auto, fresh, or upgrade."
-        exit 1
+        die "Invalid selected install mode: ${SELECTED_INSTALL_MODE}"
         ;;
 esac
 
