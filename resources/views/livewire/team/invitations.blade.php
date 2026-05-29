@@ -15,6 +15,7 @@
                                             <th class="px-5 py-3 text-xs font-medium text-left uppercase">
                                                 Via</th>
                                             <th class="px-5 py-3 text-xs font-medium text-left uppercase">Role</th>
+                                            <th class="px-5 py-3 text-xs font-medium text-left uppercase">SL1 Authority</th>
                                             <th class="px-5 py-3 text-xs font-medium text-left uppercase">Invitation Link
                                             </th>
                                             <th class="px-5 py-3 text-xs font-medium text-left uppercase">Actions
@@ -27,6 +28,20 @@
                                                 <td class="px-5 py-4 text-sm whitespace-nowrap">{{ $invite->email }}</td>
                                                 <td class="px-5 py-4 text-sm whitespace-nowrap">{{ $invite->via }}</td>
                                                 <td class="px-5 py-4 text-sm whitespace-nowrap">{{ $invite->role }}</td>
+                                                <td class="px-5 py-4 text-sm whitespace-nowrap">
+                                                    @if ($invite->pendingIntent && $invite->pendingIntent->status === \App\Models\PendingIntent::STATUS_PENDING)
+                                                        <div class="flex flex-col gap-2">
+                                                            <span class="text-xs font-bold uppercase text-warning">Owner SL1 signature required</span>
+                                                            <a class="button" href="{{ route('auth.sl1.intent.redirect', ['intent' => $invite->pendingIntent]) }}">
+                                                                Sign invite intent
+                                                            </a>
+                                                        </div>
+                                                    @elseif ($invite->pendingIntent)
+                                                        <span class="text-xs font-bold uppercase">{{ $invite->pendingIntent->status }}</span>
+                                                    @else
+                                                        <span class="text-xs font-bold uppercase">legacy</span>
+                                                    @endif
+                                                </td>
                                                 <td class="px-5 py-4 text-sm whitespace-nowrap" x-data="checkProtocol">
                                                     <template x-if="isHttps">
                                                         <div class="flex gap-2">

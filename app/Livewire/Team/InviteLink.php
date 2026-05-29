@@ -5,10 +5,8 @@ namespace App\Livewire\Team;
 use App\Models\PolicyDecision;
 use App\Models\TeamInvitation;
 use App\Services\PolicyEngine;
-use App\Services\Sl1NotificationEnvelopeService;
 use App\Services\TeamInvitationArtifactService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-use Illuminate\Notifications\Messages\MailMessage;
 use Livewire\Component;
 use Visus\Cuid2\Cuid2;
 
@@ -53,7 +51,7 @@ class InviteLink extends Component
                 return handleError(livewire: $this, customErrorMessage: "$this->email is already a member of ".currentTeam()->name.'.');
             }
             $uuid = new Cuid2(32);
-            $link = url('/').config('constants.invitation.link.base_url').$uuid;
+            $link = route('auth.sl1.invitation', ['uuid' => (string) $uuid]);
 
             $invitation = TeamInvitation::whereTeamId(currentTeam()->id)->whereEmail($this->email)->first();
             if (! is_null($invitation)) {
@@ -71,39 +69,35 @@ class InviteLink extends Component
                 requestedRole: $this->role,
                 deliveryEmail: $this->email,
             ));
-            $artifact = app(TeamInvitationArtifactService::class)->issueFromDecision($decision);
+            if (! $decision->allows(TeamInvitationArtifactService::CAPABILITY_TEAM_MEMBER_INVITE)) {
+                throw new \InvalidArgumentException('PolicyDecision does not allow team invitation issuance.');
+            }
 
             $invitation = TeamInvitation::create([
                 'team_id' => currentTeam()->id,
                 'uuid' => $uuid,
                 'email' => $this->email,
-                'role' => $artifact->role_scope,
+                'role' => data_get($decision->scope, 'role_scope'),
                 'link' => $link,
                 'via' => $sendEmail ? 'email' : 'link',
-                'artifact_version' => $artifact->artifact_version,
-                'team_invitation_artifact_id' => $artifact->id,
+                'artifact_version' => TeamInvitationArtifactService::ARTIFACT_VERSION,
             ]);
-            app(Sl1NotificationEnvelopeService::class)->publishTeamInvitationDiscovery(
-                artifact: $artifact,
-                deliveryChannels: $sendEmail ? ['email.discovery'] : ['manual.discovery'],
-                actor: auth()->user(),
-            );
-            if ($sendEmail) {
-                $mail = new MailMessage;
-                $mail->view('emails.invitation-link', [
-                    'team' => currentTeam()->name,
-                    'discovery_link' => route('login'),
-                ]);
-                $mail->subject('SL1 discovery notice for '.currentTeam()->name.' on '.config('app.name').'.');
-                send_user_an_email($mail, $this->email);
-                $this->dispatch('success', 'Discovery notice sent via email.');
-                $this->dispatch('refreshInvitations');
 
-                return;
-            } else {
-                $this->dispatch('success', 'Invitation artifact and discovery pointer generated.');
-                $this->dispatch('refreshInvitations');
-            }
+            $intent = app(PolicyEngine::class)->stage('team.member.invite', currentTeam(), [
+                'team_id' => currentTeam()->id,
+                'team_name' => currentTeam()->name,
+                'invitation_id' => $invitation->id,
+                'invitation_uuid' => $invitation->uuid,
+                'policy_decision_id' => $decision->id,
+                'delivery_email' => $this->email,
+                'delivery_email_hash' => hash('sha256', $this->email),
+                'role_scope' => data_get($decision->scope, 'role_scope'),
+                'send_email' => $sendEmail,
+            ], currentTeam()->id);
+            $invitation->forceFill(['pending_intent_id' => $intent->id])->save();
+
+            $this->dispatch('success', 'Team invitation intent staged. Owner SL1 signature is required before the discovery pointer becomes active.');
+            $this->dispatch('refreshInvitations');
         } catch (\Throwable $e) {
             $error_message = $e->getMessage();
             if ($e->getCode() === '23505') {

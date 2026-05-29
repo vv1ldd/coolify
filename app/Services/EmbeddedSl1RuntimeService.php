@@ -29,7 +29,7 @@ class EmbeddedSl1RuntimeService
             return null;
         }
 
-        return DB::transaction(function () use ($verified, $proof, $identity, $entityAddress, $source) {
+        return DB::transaction(function () use ($proof, $identity, $entityAddress, $source) {
             $controllerAddress = (string) (data_get($proof, 'controller_l1_address') ?: data_get($proof, 'keyAddress') ?: data_get($identity, 'key_l1_address'));
             $credentialId = data_get($proof, 'credential_id') ?: data_get($identity, 'credential_id') ?: data_get($identity, 'credentialId');
             $credentialPublicKey = data_get($proof, 'credential_public_key') ?: data_get($identity, 'credential_public_key') ?: data_get($identity, 'credentialPublicKey');
@@ -124,6 +124,50 @@ class EmbeddedSl1RuntimeService
             'entities' => Sl1Entity::query()->count(),
             'controllers' => Sl1Controller::query()->count(),
             'events' => Sl1IdentityEvent::query()->count(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function eventStream(int $afterId = 0, int $limit = 100, ?Sl1NodeIdentityService $nodeIdentity = null): array
+    {
+        $limit = min(max($limit, 1), 500);
+        $events = Sl1IdentityEvent::query()
+            ->where('id', '>', max(0, $afterId))
+            ->orderBy('id')
+            ->limit($limit)
+            ->get();
+
+        $nextCursor = (string) ($events->last()?->id ?? $afterId);
+
+        return [
+            'protocol' => 'simple-l1',
+            'runtime' => self::VERSION,
+            'mode' => 'embedded',
+            'issuer' => $this->issuerUrl(),
+            'stream' => 'identity_events',
+            'cursor' => (string) max(0, $afterId),
+            'next_cursor' => $nextCursor,
+            'authoritative' => false,
+            'events' => $events->map(function (Sl1IdentityEvent $event) use ($nodeIdentity) {
+                $envelope = [
+                    'id' => (string) $event->id,
+                    'uuid' => $event->uuid,
+                    'event_type' => $event->event_type,
+                    'entity_address' => $event->entity_address,
+                    'controller_address' => $event->controller_address,
+                    'proof_id' => $event->proof_id,
+                    'source' => $event->source,
+                    'event_hash' => $event->event_hash,
+                    'previous_event_hash' => $event->previous_event_hash,
+                    'payload' => $event->payload ?? [],
+                    'occurred_at' => $event->occurred_at?->toIso8601String(),
+                    'created_at' => $event->created_at?->toIso8601String(),
+                ];
+
+                return $nodeIdentity?->signEventEnvelope($envelope) ?? $envelope;
+            })->values()->all(),
         ];
     }
 

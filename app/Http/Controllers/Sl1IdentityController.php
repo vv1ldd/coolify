@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\PendingIntent;
+use App\Models\TeamInvitation;
 use App\Services\Sl1IdentityService;
 use App\Services\SovereignAdminClaimService;
 use Illuminate\Http\Request;
@@ -32,17 +33,40 @@ class Sl1IdentityController extends Controller
         }
     }
 
+    public function invitation(string $uuid, Request $request, Sl1IdentityService $sl1)
+    {
+        try {
+            $invitation = TeamInvitation::query()->where('uuid', $uuid)->firstOrFail();
+
+            return redirect()->away($sl1->invitationAuthorizationUrl($request, $invitation));
+        } catch (Throwable $e) {
+            Log::warning('SL1 team invitation start failed: '.$e->getMessage());
+
+            return redirect()
+                ->route('login')
+                ->withErrors(['sl1' => $e->getMessage()]);
+        }
+    }
+
     public function callback(Request $request, Sl1IdentityService $sl1, SovereignAdminClaimService $claims)
     {
         try {
             $verified = $sl1->completeCallback($request);
             $claimToken = data_get($verified, 'session.claim_token');
-            $user = is_string($claimToken) && $claimToken !== ''
-                ? $claims->claim($claimToken, $verified)
-                : $sl1->userForVerifiedIdentity($verified);
+            $invitationUuid = data_get($verified, 'session.invitation_uuid');
+            $preferredTeam = null;
+            if (is_string($claimToken) && $claimToken !== '') {
+                $user = $claims->claim($claimToken, $verified);
+            } elseif (is_string($invitationUuid) && $invitationUuid !== '') {
+                $accepted = $sl1->userForVerifiedInvitation($invitationUuid, $verified);
+                $user = $accepted['user'];
+                $preferredTeam = $accepted['team'];
+            } else {
+                $user = $sl1->userForVerifiedIdentity($verified);
+            }
 
             Auth::login($user);
-            $sl1->establishCoolifySession($user);
+            $sl1->establishCoolifySession($user, $preferredTeam);
 
             return redirect('/');
         } catch (Throwable $e) {

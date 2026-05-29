@@ -6,10 +6,13 @@ use App\Actions\Application\StopApplication;
 use App\Actions\Server\DeleteServer;
 use App\Models\Application;
 use App\Models\PendingIntent;
+use App\Models\PolicyDecision;
 use App\Models\Server;
 use App\Models\Team;
+use App\Models\TeamInvitation;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Visus\Cuid2\Cuid2;
@@ -54,7 +57,7 @@ class PolicyEngine
         ],
         'team.member.invite' => [
             'title' => 'Issue bounded team invitation artifact',
-            'signatures_required' => 1,
+            'signatures_required' => 2,
             'roles' => ['owner', 'admin'],
             'description' => 'Creates a non-consumable authority opportunity for future SL1 membership join.',
         ],
@@ -539,6 +542,66 @@ class PolicyEngine
                     ],
                     inputState: [
                         'status' => $application->status,
+                    ],
+                    actor: 'DID:SYS|SERVICE:#execution-substrate',
+                    teamId: $intent->team_id,
+                );
+                break;
+
+            case 'team.member.invite':
+                $invitation = TeamInvitation::query()
+                    ->whereKey($payload['invitation_id'] ?? null)
+                    ->where('uuid', $payload['invitation_uuid'] ?? null)
+                    ->first();
+                if (! $invitation || ! $invitation->isValid()) {
+                    throw new \Exception('Team invitation target not found or expired.');
+                }
+
+                $decision = PolicyDecision::find($payload['policy_decision_id'] ?? null);
+                if (! $decision) {
+                    throw new \Exception('Team invitation policy decision not found.');
+                }
+
+                $artifact = $invitation->artifact ?: app(TeamInvitationArtifactService::class)->issueFromDecision($decision);
+                $invitation->forceFill([
+                    'artifact_version' => $artifact->artifact_version,
+                    'team_invitation_artifact_id' => $artifact->id,
+                    'role' => $artifact->role_scope,
+                ])->save();
+
+                app(Sl1NotificationEnvelopeService::class)->publishTeamInvitationDiscovery(
+                    artifact: $artifact,
+                    deliveryChannels: ($payload['send_email'] ?? false) ? ['email.discovery'] : ['manual.discovery'],
+                    actor: $decision->user,
+                );
+
+                if ($payload['send_email'] ?? false) {
+                    $mail = new MailMessage;
+                    $mail->view('emails.invitation-link', [
+                        'team' => $invitation->team->name,
+                        'discovery_link' => $invitation->link,
+                    ]);
+                    $mail->subject('SL1 discovery notice for '.$invitation->team->name.' on '.config('app.name').'.');
+                    send_user_an_email($mail, $invitation->email);
+                }
+
+                app(InfraLedgerService::class)->record(
+                    eventType: 'team.member.invite.issued',
+                    entity: $invitation->team,
+                    payload: [
+                        'approved_intent_uuid' => $intent->uuid,
+                        'invitation_uuid' => $invitation->uuid,
+                        'artifact_id' => $artifact->uuid,
+                        'role_scope' => $artifact->role_scope,
+                        'delivery_email_hash' => $artifact->delivery_email_hash,
+                        'authority' => $this->approvalSummary($intent),
+                    ],
+                    inputState: [
+                        'policy_decision_id' => $decision->uuid,
+                    ],
+                    outputState: [
+                        'artifact_status' => $artifact->status,
+                        'membership_created' => false,
                     ],
                     actor: 'DID:SYS|SERVICE:#execution-substrate',
                     teamId: $intent->team_id,

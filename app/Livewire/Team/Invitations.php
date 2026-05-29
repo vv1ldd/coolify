@@ -43,6 +43,8 @@ class Invitations extends Component
 
     public function refreshInvitations()
     {
-        $this->invitations = TeamInvitation::ownedByCurrentTeam()->get();
+        $this->invitations = TeamInvitation::ownedByCurrentTeam()
+            ->with(['artifact', 'pendingIntent'])
+            ->get();
     }
 }

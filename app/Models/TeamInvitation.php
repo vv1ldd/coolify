@@ -15,6 +15,7 @@ class TeamInvitation extends Model
         'via',
         'artifact_version',
         'team_invitation_artifact_id',
+        'pending_intent_id',
     ];
 
     /**
@@ -33,6 +34,11 @@ class TeamInvitation extends Model
     public function artifact()
     {
         return $this->belongsTo(TeamInvitationArtifact::class, 'team_invitation_artifact_id');
+    }
+
+    public function pendingIntent()
+    {
+        return $this->belongsTo(PendingIntent::class, 'pending_intent_id');
     }
 
     public static function ownedByCurrentTeam()

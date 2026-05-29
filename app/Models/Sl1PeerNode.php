@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class Sl1PeerNode extends Model
@@ -42,5 +43,20 @@ class Sl1PeerNode extends Model
             $peer->uuid ??= (string) Str::uuid();
             $peer->status ??= self::STATUS_PENDING;
         });
+    }
+
+    public function syncCursors(): HasMany
+    {
+        return $this->hasMany(Sl1PeerSyncCursor::class);
+    }
+
+    public function observedEvents(): HasMany
+    {
+        return $this->hasMany(Sl1PeerObservedEvent::class);
+    }
+
+    public function identities(): HasMany
+    {
+        return $this->hasMany(Sl1PeerIdentity::class);
     }
 }

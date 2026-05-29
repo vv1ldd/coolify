@@ -37,6 +37,7 @@ class Sl1PeerRegisterCommand extends Command
         $this->line("runtime={$peer->runtime}");
         $this->line("storage={$peer->storage}");
         $this->line('capabilities='.implode(',', $peer->capabilities ?? []));
+        $this->line('peer_identities='.$peer->identities()->count());
 
         return 0;
     }

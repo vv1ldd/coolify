@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Sl1PeerIdentity;
 use App\Models\Sl1PeerNode;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -32,6 +33,7 @@ class Sl1PeerRegistryService
             $status = $this->fetchJson($peer->issuer.'/status');
             $issuerDocument = $this->fetchJson($peer->issuer.'/.well-known/issuer');
             $this->assertValidPeer($peer->issuer, $status, $issuerDocument);
+            $this->recordPeerIdentity($peer, $issuerDocument);
 
             $peer->forceFill([
                 'status' => Sl1PeerNode::STATUS_VERIFIED,
@@ -133,5 +135,40 @@ class Sl1PeerRegistryService
         if (rtrim((string) data_get($issuerDocument, 'issuer'), '/') !== $expectedIssuer) {
             throw new RuntimeException('Peer issuer document does not match registered issuer.');
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $issuerDocument
+     */
+    private function recordPeerIdentity(Sl1PeerNode $peer, array $issuerDocument): void
+    {
+        $nodeIdentity = data_get($issuerDocument, 'node_identity');
+        if (! is_array($nodeIdentity)) {
+            return;
+        }
+
+        $nodeId = (string) data_get($nodeIdentity, 'node_id');
+        $publicKey = (string) data_get($nodeIdentity, 'public_key');
+        $algorithm = (string) data_get($nodeIdentity, 'signature_algorithm', 'ed25519');
+        if ($nodeId === '' || $publicKey === '') {
+            throw new RuntimeException('Peer issuer document has incomplete node identity.');
+        }
+
+        $identity = Sl1PeerIdentity::query()->firstOrNew([
+            'sl1_peer_node_id' => $peer->id,
+            'peer_node_id' => $nodeId,
+        ]);
+
+        $identity->forceFill([
+            'signature_algorithm' => $algorithm,
+            'peer_public_key' => $publicKey,
+            'trust_state' => $identity->trust_state ?: Sl1PeerIdentity::TRUST_OBSERVED,
+            'metadata' => [
+                'issuer' => data_get($nodeIdentity, 'issuer'),
+                'status' => data_get($nodeIdentity, 'status'),
+            ],
+            'first_seen_at' => $identity->first_seen_at ?: now(),
+            'last_seen_at' => now(),
+        ])->save();
     }
 }

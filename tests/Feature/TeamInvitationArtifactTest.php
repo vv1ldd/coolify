@@ -3,6 +3,7 @@
 use App\Livewire\Team\InviteLink;
 use App\Models\InfraLedger;
 use App\Models\InstanceSettings;
+use App\Models\PendingIntent;
 use App\Models\PolicyDecision;
 use App\Models\Sl1NotificationEnvelope;
 use App\Models\Team;
@@ -11,6 +12,7 @@ use App\Models\TeamInvitationArtifact;
 use App\Models\User;
 use App\Services\PolicyEngine;
 use App\Services\Sl1NotificationEnvelopeService;
+use App\Services\TeamInvitationArtifactService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 
@@ -45,9 +47,21 @@ test('team invitation issuance creates bounded artifact without user or membersh
         ->call('viaLink')
         ->assertDispatched('success');
 
-    $artifact = TeamInvitationArtifact::first();
+    $intent = PendingIntent::where('event_type', 'team.member.invite')->first();
     $invitation = TeamInvitation::first();
+
+    expect($intent)->not->toBeNull()
+        ->and($intent->status)->toBe(PendingIntent::STATUS_PENDING)
+        ->and($invitation->pending_intent_id)->toBe($intent->id)
+        ->and($invitation->team_invitation_artifact_id)->toBeNull()
+        ->and(TeamInvitationArtifact::count())->toBe(0)
+        ->and(Sl1NotificationEnvelope::count())->toBe(0);
+
+    app(PolicyEngine::class)->addSignature($intent, 'DID:SL1|ENTITY:#owner', 'sl1-intent-approval');
+
+    $artifact = TeamInvitationArtifact::first();
     $notification = Sl1NotificationEnvelope::first();
+    $invitation->refresh();
 
     expect($artifact)->not->toBeNull()
         ->and($artifact->artifact_version)->toBe('team.invitation.v1')
@@ -66,10 +80,12 @@ test('team invitation issuance creates bounded artifact without user or membersh
 
     expect(User::whereEmail('candidate@example.com')->exists())->toBeFalse()
         ->and($this->team->members()->where('users.email', 'candidate@example.com')->exists())->toBeFalse()
-        ->and(str_contains($invitation->link, '/link?token='))->toBeFalse();
+        ->and(str_contains($invitation->link, '/link?token='))->toBeFalse()
+        ->and(str_contains($invitation->link, '/auth/sl1/invitation/'))->toBeTrue();
 
     expect(PolicyDecision::where('intent_type', 'team.member.invite')->count())->toBe(1);
     expect(InfraLedger::where('event_type', 'team.member.invite')->count())->toBe(1);
+    expect(InfraLedger::where('event_type', 'team.member.invite.issued')->count())->toBe(1);
     expect(InfraLedger::where('event_type', 'sl1.notification.v1')->count())->toBe(1);
 });
 
@@ -97,7 +113,7 @@ test('team invitation artifact cannot be issued from denied policy decision', fu
         deliveryEmail: 'owner-candidate@example.com',
     ));
 
-    expect(fn () => app(\App\Services\TeamInvitationArtifactService::class)->issueFromDecision($decision))
+    expect(fn () => app(TeamInvitationArtifactService::class)->issueFromDecision($decision))
         ->toThrow(InvalidArgumentException::class, 'PolicyDecision does not allow team invitation issuance.');
 
     expect(TeamInvitationArtifact::count())->toBe(0);
@@ -110,6 +126,7 @@ test('legacy invitation acceptance cannot consume team invitation v1 artifact', 
         ->set('email', 'candidate@example.com')
         ->set('role', 'member')
         ->call('viaLink');
+    app(PolicyEngine::class)->addSignature(PendingIntent::firstOrFail(), 'DID:SL1|ENTITY:#owner', 'sl1-intent-approval');
 
     $joiningUser = User::factory()->create(['email' => 'candidate@example.com']);
     $joiningTeam = Team::factory()->create();
@@ -120,7 +137,7 @@ test('legacy invitation acceptance cannot consume team invitation v1 artifact', 
     $invitation = TeamInvitation::firstOrFail();
 
     $this->post(route('team.invitation.accept', ['uuid' => $invitation->uuid]))
-        ->assertStatus(409);
+        ->assertRedirect(route('auth.sl1.invitation', ['uuid' => $invitation->uuid]));
 
     expect($this->team->members()->where('users.id', $joiningUser->id)->exists())->toBeFalse()
         ->and(TeamInvitationArtifact::first()->status)->toBe('issued');
@@ -133,6 +150,7 @@ test('role drift on display invitation does not change frozen artifact scope', f
         ->set('email', 'candidate@example.com')
         ->set('role', 'member')
         ->call('viaLink');
+    app(PolicyEngine::class)->addSignature(PendingIntent::firstOrFail(), 'DID:SL1|ENTITY:#owner', 'sl1-intent-approval');
 
     $invitation = TeamInvitation::firstOrFail();
     $invitation->forceFill(['role' => 'owner'])->save();
@@ -147,6 +165,7 @@ test('notification envelope interaction cannot consume artifact or mutate member
         ->set('email', 'candidate@example.com')
         ->set('role', 'member')
         ->call('viaLink');
+    app(PolicyEngine::class)->addSignature(PendingIntent::firstOrFail(), 'DID:SL1|ENTITY:#owner', 'sl1-intent-approval');
 
     $artifact = TeamInvitationArtifact::firstOrFail();
     $notification = Sl1NotificationEnvelope::firstOrFail();
@@ -168,10 +187,10 @@ test('notification envelope cannot accrete authority fields', function () {
         ->set('email', 'candidate@example.com')
         ->set('role', 'admin')
         ->call('viaLink');
+    app(PolicyEngine::class)->addSignature(PendingIntent::firstOrFail(), 'DID:SL1|ENTITY:#owner', 'sl1-intent-approval');
 
     $notification = Sl1NotificationEnvelope::firstOrFail();
 
     expect(fn () => $notification->forceFill(['authority_effect' => 'grant'])->save())
         ->toThrow(LogicException::class, 'NotificationEnvelope cannot carry authority semantics.');
 });
-

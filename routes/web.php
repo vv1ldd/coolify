@@ -120,11 +120,13 @@ Route::middleware(['throttle:login'])->group(function () {
 
 Route::get('/auth/sl1/redirect', [Sl1IdentityController::class, 'redirect'])->name('auth.sl1.redirect');
 Route::get('/auth/sl1/admin-claim/{token}', [Sl1IdentityController::class, 'adminClaim'])->name('auth.sl1.admin-claim');
+Route::get('/auth/sl1/invitation/{uuid}', [Sl1IdentityController::class, 'invitation'])->name('auth.sl1.invitation');
 Route::get('/auth/sl1/callback', [Sl1IdentityController::class, 'callback'])->name('auth.sl1.callback');
 
 Route::prefix('sl1')->name('sl1.embedded.')->group(function () {
     Route::get('/status', [EmbeddedSl1RuntimeController::class, 'status'])->name('status');
     Route::get('/.well-known/issuer', [EmbeddedSl1RuntimeController::class, 'issuer'])->name('issuer');
+    Route::get('/events', [EmbeddedSl1RuntimeController::class, 'events'])->name('events');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

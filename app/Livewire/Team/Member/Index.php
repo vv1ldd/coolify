@@ -16,7 +16,9 @@ class Index extends Component
     {
         // Only load invitations for users who can manage them
         if (auth()->user()->can('manageInvitations', currentTeam())) {
-            $this->invitations = TeamInvitation::whereTeamId(currentTeam()->id)->get();
+            $this->invitations = TeamInvitation::whereTeamId(currentTeam()->id)
+                ->with(['artifact', 'pendingIntent'])
+                ->get();
         }
     }
 

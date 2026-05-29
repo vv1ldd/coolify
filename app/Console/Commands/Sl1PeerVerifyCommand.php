@@ -33,6 +33,7 @@ class Sl1PeerVerifyCommand extends Command
                 $this->info("verified #{$peer->id} {$peer->issuer}");
                 $this->line("  runtime={$peer->runtime} storage={$peer->storage}");
                 $this->line('  capabilities='.implode(',', $peer->capabilities ?? []));
+                $this->line('  peer_identities='.$peer->identities()->count());
             } else {
                 $failed = true;
                 $this->error("failed #{$peer->id} {$peer->issuer}");

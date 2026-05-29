@@ -5,10 +5,13 @@ namespace App\Services;
 use App\Models\InstanceSettings;
 use App\Models\PendingIntent;
 use App\Models\Sl1IdentityBinding;
+use App\Models\Team;
+use App\Models\TeamInvitation;
 use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -47,6 +50,43 @@ class Sl1IdentityService
             'nonce' => $nonce,
             'mode' => 'connect',
             'flow' => $claimToken ? 'admin_claim' : 'connect',
+        ], '', '&', PHP_QUERY_RFC3986);
+    }
+
+    public function invitationAuthorizationUrl(Request $request, TeamInvitation $invitation): string
+    {
+        if (! $invitation->isValid()) {
+            throw new RuntimeException('Team invitation expired.');
+        }
+        if (! $invitation->artifact || $invitation->artifact->status !== 'issued') {
+            throw new RuntimeException('Team invitation is waiting for owner SL1 signature.');
+        }
+
+        $state = Str::random(40);
+        $nonce = Str::random(40);
+        $redirectUri = route('auth.sl1.callback');
+
+        $request->session()->put(self::SESSION_KEY, [
+            'state' => $state,
+            'nonce' => $nonce,
+            'redirect_uri' => $redirectUri,
+            'flow' => 'team_invitation',
+            'invitation_uuid' => $invitation->uuid,
+            'created_at' => now()->toIso8601String(),
+        ]);
+
+        return $this->issuerUrl('/authorize').'?'.http_build_query([
+            'client_id' => $this->clientId(),
+            'client_name' => config('sovereign.sl1_connect.client_name', 'Sovereign Coolify'),
+            'redirect_uri' => $redirectUri,
+            'state' => $state,
+            'nonce' => $nonce,
+            'mode' => 'connect',
+            'flow' => 'team_invitation',
+            'intent_type' => 'team.member.join',
+            'intent_title' => 'Join team: '.$invitation->team->name,
+            'intent_description' => 'Create or use an SL1 Identity to accept the signed team invitation.',
+            'intent_cta' => 'Join with SL1 Identity',
         ], '', '&', PHP_QUERY_RFC3986);
     }
 
@@ -252,12 +292,72 @@ class Sl1IdentityService
         return $user->load('teams');
     }
 
-    public function establishCoolifySession(User $user): void
+    /**
+     * @param  array{identity: array<string, mixed>, proof: array<string, mixed>}  $verified
+     * @return array{user: User, team: Team}
+     */
+    public function userForVerifiedInvitation(string $invitationUuid, array $verified): array
+    {
+        return DB::transaction(function () use ($invitationUuid, $verified) {
+            $invitation = TeamInvitation::query()
+                ->where('uuid', $invitationUuid)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $invitation->isValid()) {
+                throw new RuntimeException('Team invitation expired.');
+            }
+
+            $artifact = $invitation->artifact;
+            if (! $artifact || $artifact->status !== 'issued' || $artifact->expires_at->isPast()) {
+                throw new RuntimeException('Team invitation is not active.');
+            }
+
+            $proof = $verified['proof'];
+            $identity = $verified['identity'];
+            $entityAddress = (string) (data_get($proof, 'entity_l1_address') ?: data_get($identity, 'entity_l1_address'));
+            if ($entityAddress === '') {
+                throw new RuntimeException('SL1 entity address is missing.');
+            }
+
+            $binding = Sl1IdentityBinding::query()->where('entity_address', $entityAddress)->first();
+            if ($binding) {
+                $this->updateBinding($binding, $verified);
+                $user = $binding->user()->firstOrFail();
+            } else {
+                $user = User::query()->where('email', $invitation->email)->first()
+                    ?: $this->createInvitedUserProjection($verified, $invitation);
+                $this->createBinding($user, $verified);
+            }
+
+            if (! $user->teams()->whereKey($invitation->team_id)->exists()) {
+                $user->teams()->attach($invitation->team_id, ['role' => $invitation->role]);
+            }
+
+            $artifact->forceFill([
+                'status' => 'consumed',
+                'consumed_at' => now(),
+                'consumed_by_user_id' => $user->id,
+                'consumed_by_entity_address' => $entityAddress,
+            ])->save();
+            $team = $invitation->team;
+            $invitation->delete();
+
+            return [
+                'user' => $user->load('teams'),
+                'team' => $team,
+            ];
+        });
+    }
+
+    public function establishCoolifySession(User $user, ?Team $preferredTeam = null): void
     {
         $user->updated_at = now();
         $user->save();
 
-        $currentTeam = $user->teams->firstWhere('personal_team', true);
+        $currentTeam = $preferredTeam && $user->teams()->whereKey($preferredTeam->id)->exists()
+            ? $preferredTeam
+            : $user->teams->firstWhere('personal_team', true);
         if (! $currentTeam) {
             $currentTeam = $user->recreate_personal_team();
             $user->load('teams');
@@ -412,6 +512,25 @@ class Sl1IdentityService
         $user = User::create([
             'name' => $displayName,
             'email' => $email,
+            'password' => null,
+        ]);
+        $user->markEmailAsVerified();
+
+        return $user;
+    }
+
+    /**
+     * @param  array{identity: array<string, mixed>, proof: array<string, mixed>}  $verified
+     */
+    private function createInvitedUserProjection(array $verified, TeamInvitation $invitation): User
+    {
+        $proof = $verified['proof'];
+        $entityAddress = (string) data_get($proof, 'entity_l1_address');
+        $displayName = (string) (data_get($proof, 'displayName') ?: data_get($proof, 'display_alias') ?: data_get($proof, 'alias') ?: $entityAddress);
+
+        $user = User::create([
+            'name' => $displayName,
+            'email' => $invitation->email,
             'password' => null,
         ]);
         $user->markEmailAsVerified();

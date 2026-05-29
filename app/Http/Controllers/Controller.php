@@ -57,7 +57,7 @@ class Controller extends BaseController
         $invitationUuid = request()->route('uuid');
         $invitation = TeamInvitation::whereUuid($invitationUuid)->firstOrFail();
         if ($invitation->artifact_version === 'team.invitation.v1') {
-            abort(409, 'SL1 join flow is required for this invitation.');
+            return redirect()->route('auth.sl1.invitation', ['uuid' => $invitation->uuid]);
         }
         $user = User::whereEmail($invitation->email)->firstOrFail();
 
@@ -84,7 +84,7 @@ class Controller extends BaseController
 
         $invitation = TeamInvitation::whereUuid($invitationUuid)->firstOrFail();
         if ($invitation->artifact_version === 'team.invitation.v1') {
-            abort(409, 'SL1 join flow is required for this invitation.');
+            return redirect()->route('auth.sl1.invitation', ['uuid' => $invitation->uuid]);
         }
         $user = User::whereEmail($invitation->email)->firstOrFail();
 
