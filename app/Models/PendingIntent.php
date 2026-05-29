@@ -14,6 +14,20 @@ use Illuminate\Support\Str;
  */
 class PendingIntent extends Model
 {
+    public const STATUS_PENDING = 'pending';
+
+    public const STATUS_ACCEPTED = 'accepted';
+
+    public const STATUS_EXECUTED = 'executed';
+
+    public const STATUS_REJECTED = 'rejected';
+
+    public const STATUS_REVOKED = 'revoked';
+
+    public const STATUS_EXPIRED = 'expired';
+
+    public const STATUS_FAILED = 'failed';
+
     protected $fillable = [
         'uuid',
         'event_type',

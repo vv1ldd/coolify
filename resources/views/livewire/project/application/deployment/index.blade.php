@@ -64,11 +64,18 @@
                                 {{ data_get($latestTimeline, 'detail', 'Awaiting SL1 signature') }}
                             </div>
                         </div>
-                        <a href="{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id]) }}"
-                            onclick="const popup = window.open('{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id, 'popup' => 1]) }}', 'sl1_intent_{{ $intent->id }}', 'popup,width=460,height=720'); if (popup) { window.addEventListener('message', (event) => { if (event.origin === window.location.origin && event.data?.type === 'sl1:intent-signature') window.location.reload(); }, { once: true }); return false; } return true;"
-                            class="inline-flex items-center justify-center rounded px-4 py-2 text-xs font-black uppercase tracking-widest text-white bg-warning hover:bg-warning/80">
-                            Sign with SL1 Identity
-                        </a>
+                        <div class="flex flex-col gap-2 sm:flex-row">
+                            <a href="{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id]) }}"
+                                onclick="const popup = window.open('{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id, 'popup' => 1]) }}', 'sl1_intent_{{ $intent->id }}', 'popup,width=460,height=720'); if (popup) { window.addEventListener('message', (event) => { if (event.origin === window.location.origin && event.data?.type === 'sl1:intent-signature') window.location.reload(); }, { once: true }); return false; } return true;"
+                                class="inline-flex items-center justify-center rounded px-4 py-2 text-xs font-black uppercase tracking-widest text-white bg-warning hover:bg-warning/80">
+                                Sign with SL1 Identity
+                            </a>
+                            <button wire:click="revokeIntent({{ $intent->id }})"
+                                wire:confirm="Revoke this pending deployment intent? It will leave the active queue but remain in the audit trail."
+                                class="inline-flex items-center justify-center rounded border border-red-500/50 px-4 py-2 text-xs font-black uppercase tracking-widest text-red-500 hover:bg-red-500 hover:text-white">
+                                Revoke intent
+                            </button>
+                        </div>
                     </div>
                 @endforeach
             </div>

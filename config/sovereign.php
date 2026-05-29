@@ -52,6 +52,10 @@ return [
         ],
     ],
 
+    'pending_intents' => [
+        'ttl_minutes' => (int) env('SOVEREIGN_PENDING_INTENT_TTL_MINUTES', 30),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | B2B Consortium Clearing & Billing

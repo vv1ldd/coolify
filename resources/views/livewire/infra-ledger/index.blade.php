@@ -64,7 +64,13 @@
                         <div class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></div>
                         <h2 class="text-xs font-black uppercase tracking-[0.25em] text-amber-500 font-mono">PENDING INTENTS MEMPOOL (CONSTITUTIONAL CLEARANCE REQUIRED)</h2>
                     </div>
-                    <span class="text-[9px] font-mono text-neutral-400 uppercase tracking-widest">Awaiting Quorum Approvals</span>
+                    <div class="flex items-center gap-3">
+                        <button wire:click="expireStaleIntents"
+                            class="text-[9px] font-mono text-neutral-400 hover:text-amber-500 uppercase tracking-widest transition-colors">
+                            Expire overdue
+                        </button>
+                        <span class="text-[9px] font-mono text-neutral-400 uppercase tracking-widest">Awaiting Quorum Approvals</span>
+                    </div>
                 </div>
 
                 <div class="flex flex-col gap-6">
@@ -120,15 +126,24 @@
                                         </div>
                                     </div>
 
-                                    {{-- Action SL1 signing button --}}
-                                    <a href="{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id]) }}"
-                                        onclick="const popup = window.open('{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id, 'popup' => 1]) }}', 'sl1_intent_{{ $intent->id }}', 'popup,width=460,height=720'); if (popup) { window.addEventListener('message', (event) => { if (event.origin === window.location.origin && event.data?.type === 'sl1:intent-signature') window.location.reload(); }, { once: true }); return false; } return true;"
-                                        class="w-full mt-2 py-2.5 px-4 text-[10px] font-black uppercase tracking-widest font-mono text-center
-                                               block
-                                               border-[2px] border-amber-500 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-black
-                                               transition-all duration-100 cursor-pointer">
-                                        [ SIGN WITH SL1 IDENTITY ]
-                                    </a>
+                                    <div class="flex flex-col gap-2 mt-2">
+                                        {{-- Action SL1 signing button --}}
+                                        <a href="{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id]) }}"
+                                            onclick="const popup = window.open('{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id, 'popup' => 1]) }}', 'sl1_intent_{{ $intent->id }}', 'popup,width=460,height=720'); if (popup) { window.addEventListener('message', (event) => { if (event.origin === window.location.origin && event.data?.type === 'sl1:intent-signature') window.location.reload(); }, { once: true }); return false; } return true;"
+                                            class="w-full py-2.5 px-4 text-[10px] font-black uppercase tracking-widest font-mono text-center
+                                                   block
+                                                   border-[2px] border-amber-500 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-black
+                                                   transition-all duration-100 cursor-pointer">
+                                            [ SIGN WITH SL1 IDENTITY ]
+                                        </a>
+                                        <button wire:click="revokeIntent({{ $intent->id }})"
+                                            wire:confirm="Revoke this pending intent? It will be removed from the active mempool but kept in the audit trail."
+                                            class="w-full py-2 px-4 text-[9px] font-black uppercase tracking-widest font-mono text-center
+                                                   border border-neutral-700 bg-neutral-950/70 text-neutral-500 hover:border-red-500 hover:text-red-500
+                                                   transition-all duration-100 cursor-pointer">
+                                            [ REVOKE INTENT ]
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {{-- 2. Intent Diff View (Col 5-8) --}}

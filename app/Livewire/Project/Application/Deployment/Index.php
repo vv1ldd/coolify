@@ -4,6 +4,7 @@ namespace App\Livewire\Project\Application\Deployment;
 
 use App\Models\Application;
 use App\Models\PendingIntent;
+use App\Services\PolicyEngine;
 use Illuminate\Support\Collection;
 use Livewire\Component;
 
@@ -124,8 +125,39 @@ class Index extends Component
         ['deployments' => $deployments, 'count' => $count] = $this->application->deployments($this->skip, $this->defaultTake, $this->pull_request_id);
         $this->deployments = $deployments;
         $this->deployments_count = $count;
+        app(PolicyEngine::class)->expireStalePendingIntents(currentTeam()?->id);
         $this->pendingIntents = $this->pendingIntentsForApplication($this->application);
         $this->showMore();
+    }
+
+    public function cancelIntent(int $intentId): void
+    {
+        $this->revokeIntent($intentId);
+    }
+
+    public function revokeIntent(int $intentId): void
+    {
+        $intent = PendingIntent::query()
+            ->whereKey($intentId)
+            ->where('target_type', Application::class)
+            ->where('target_id', $this->application->id)
+            ->where('team_id', $this->application->team_id)
+            ->first();
+
+        if (! $intent || $intent->status !== PendingIntent::STATUS_PENDING) {
+            $this->dispatch('error', 'Pending intent not found or already closed.');
+
+            return;
+        }
+
+        app(PolicyEngine::class)->cancelIntent(
+            $intent,
+            'DID:SYS|USER:#'.(auth()->id() ?? 'system'),
+            'Operator marked this application execution intent as no longer current.'
+        );
+
+        $this->loadDeployments();
+        $this->dispatch('success', 'Deployment intent revoked.');
     }
 
     private function pendingIntentsForApplication(Application $application): Collection
@@ -134,7 +166,7 @@ class Index extends Component
             ->where('target_type', Application::class)
             ->where('target_id', $application->id)
             ->whereIn('event_type', ['application.deploy', 'application.stop'])
-            ->where('status', 'pending')
+            ->where('status', PendingIntent::STATUS_PENDING)
             ->orderByDesc('id')
             ->get();
     }

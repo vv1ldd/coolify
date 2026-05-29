@@ -75,7 +75,7 @@ class Sl1IdentityController extends Controller
     {
         try {
             $intent = $sl1->completeIntentCallback($request);
-            $message = $intent->status === 'executed'
+            $message = $intent->status === PendingIntent::STATUS_EXECUTED
                 ? 'SL1 intent signed. Quorum reached and execution was released.'
                 : 'SL1 intent signed. Waiting for remaining approvals.';
 

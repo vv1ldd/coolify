@@ -5,8 +5,10 @@ use App\Models\InfraLedger;
 use App\Models\Sl1Entity;
 use App\Models\Sl1IdentityBinding;
 use App\Models\Sl1IdentityEvent;
+use App\Models\Sl1PeerNode;
 use App\Models\SovereignAdminClaim;
 use App\Models\User;
+use App\Services\Sl1PeerRegistryService;
 use App\Services\SovereignAdminClaimService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -135,6 +137,42 @@ test('embedded sl1 runtime status exposes durable store counts', function () {
         ->assertJsonPath('storage', 'coolify-postgres')
         ->assertJsonPath('entities', 1)
         ->assertJsonPath('events', 1);
+});
+
+test('sl1 peer registry verifies embedded runtime metadata without syncing authority', function () {
+    Http::fake([
+        'https://peer.example.test/sl1/status' => Http::response([
+            'protocol' => 'simple-l1',
+            'runtime' => 'coolify.embedded-sl1.runtime.v0',
+            'mode' => 'embedded',
+            'enabled' => true,
+            'issuer' => 'https://peer.example.test/sl1',
+            'storage' => 'coolify-postgres',
+            'entities' => 1,
+            'controllers' => 1,
+            'events' => 3,
+        ]),
+        'https://peer.example.test/sl1/.well-known/issuer' => Http::response([
+            'protocol' => 'simple-l1',
+            'issuer' => 'https://peer.example.test/sl1',
+            'runtime' => 'coolify.embedded-sl1.runtime.v0',
+            'storage' => 'coolify-postgres',
+            'capabilities' => [
+                'durable_identity_store',
+                'proof_projection',
+                'coolify_backup_scope',
+            ],
+        ]),
+    ]);
+
+    $peer = app(Sl1PeerRegistryService::class)->register('peer.example.test', 'Peer Example');
+    $result = app(Sl1PeerRegistryService::class)->verify($peer);
+
+    expect($result['ok'])->toBeTrue()
+        ->and($result['peer']->status)->toBe(Sl1PeerNode::STATUS_VERIFIED)
+        ->and($result['peer']->issuer)->toBe('https://peer.example.test/sl1')
+        ->and($result['peer']->runtime)->toBe('coolify.embedded-sl1.runtime.v0');
+    expect(Sl1IdentityEvent::count())->toBe(0);
 });
 
 test('existing sl1 identity logs into its bound user even when registration is disabled', function () {

@@ -168,6 +168,74 @@ class PolicyEngine
         return $this->constitution[$eventType] ?? null;
     }
 
+    public function cancelIntent(PendingIntent $intent, string $actorDid, string $reason = 'Superseded by a newer operational intent.'): bool
+    {
+        return $this->revokeIntent($intent, $actorDid, $reason);
+    }
+
+    public function revokeIntent(PendingIntent $intent, string $actorDid, string $reason = 'Intent was revoked before quorum.'): bool
+    {
+        return $this->closeIntent($intent, PendingIntent::STATUS_REVOKED, 'Intent Revoked', $actorDid, $reason);
+    }
+
+    public function rejectIntent(PendingIntent $intent, string $actorDid, string $reason = 'Intent was rejected by policy or authority evaluation.'): bool
+    {
+        return $this->closeIntent($intent, PendingIntent::STATUS_REJECTED, 'Intent Rejected', $actorDid, $reason);
+    }
+
+    private function expireIntent(PendingIntent $intent, string $actorDid, string $reason): bool
+    {
+        return $this->closeIntent($intent, PendingIntent::STATUS_EXPIRED, 'Intent Expired', $actorDid, $reason);
+    }
+
+    private function closeIntent(PendingIntent $intent, string $status, string $action, string $actorDid, string $reason): bool
+    {
+        if ($intent->status !== PendingIntent::STATUS_PENDING) {
+            return false;
+        }
+
+        $timeline = $intent->timeline ?? [];
+        $timeline[] = [
+            'timestamp' => now()->toIso8601String(),
+            'actor' => $actorDid,
+            'action' => $action,
+            'detail' => $reason,
+        ];
+
+        $intent->update([
+            'status' => $status,
+            'timeline' => $timeline,
+        ]);
+
+        return true;
+    }
+
+    public function expireStalePendingIntents(?int $teamId = null, ?int $ttlMinutes = null): int
+    {
+        $ttl = max(1, $ttlMinutes ?? (int) config('sovereign.pending_intents.ttl_minutes', 30));
+        $cutoff = now()->subMinutes($ttl);
+        $expired = 0;
+
+        PendingIntent::query()
+            ->when($teamId !== null, fn ($query) => $query->where('team_id', $teamId))
+            ->where('status', PendingIntent::STATUS_PENDING)
+            ->where('created_at', '<', $cutoff)
+            ->orderBy('id')
+            ->chunkById(100, function ($intents) use (&$expired, $ttl) {
+                foreach ($intents as $intent) {
+                    if ($this->expireIntent(
+                        $intent,
+                        'DID:SYS|SERVICE:#intent-expiry',
+                        "Intent expired after {$ttl} minutes without quorum."
+                    )) {
+                        $expired++;
+                    }
+                }
+            });
+
+        return $expired;
+    }
+
     /**
      * Stages a pending intent inside the Mempool.
      */
@@ -186,7 +254,7 @@ class PolicyEngine
             'target_id' => $entity->getKey(),
             'payload' => $payload,
             'team_id' => $resolvedTeamId,
-            'status' => 'pending',
+            'status' => PendingIntent::STATUS_PENDING,
             'signatures' => [],
             'timeline' => [
                 [
@@ -346,7 +414,7 @@ class PolicyEngine
         ];
 
         $intent->update([
-            'status' => 'approved',
+            'status' => PendingIntent::STATUS_ACCEPTED,
             'timeline' => $timeline,
         ]);
 
@@ -370,7 +438,7 @@ class PolicyEngine
             ];
 
             $intent->update([
-                'status' => 'executed',
+                'status' => PendingIntent::STATUS_EXECUTED,
                 'timeline' => $timeline,
             ]);
 
@@ -385,7 +453,7 @@ class PolicyEngine
                 'detail' => 'Substrate error: '.$e->getMessage(),
             ];
             $intent->update([
-                'status' => 'failed',
+                'status' => PendingIntent::STATUS_FAILED,
                 'timeline' => $timeline,
             ]);
             Log::error("Sovereign Policy Engine: Failed execution of '{$intent->event_type}'", [

@@ -57,7 +57,7 @@ class Sl1IdentityService
             throw new RuntimeException('SL1 intent signing requires an active Coolify session.');
         }
 
-        if ($intent->status !== 'pending') {
+        if ($intent->status !== PendingIntent::STATUS_PENDING) {
             throw new RuntimeException('This execution intent is no longer pending.');
         }
 
@@ -162,7 +162,7 @@ class Sl1IdentityService
             ->whereKey($expected['intent_id'] ?? null)
             ->where('uuid', $expected['intent_uuid'] ?? null)
             ->first();
-        if (! $intent || $intent->status !== 'pending') {
+        if (! $intent || $intent->status !== PendingIntent::STATUS_PENDING) {
             throw new RuntimeException('Pending intent not found or already processed.');
         }
 

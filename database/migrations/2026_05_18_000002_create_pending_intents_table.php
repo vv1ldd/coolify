@@ -24,7 +24,7 @@ return new class extends Migration
             $table->json('signatures');    // Cryptographic signatures map: {"DID:SYS|USER:#1": "sig_hex"}
             $table->json('timeline');      // Timeline log entries for the authority view
 
-            $table->string('status')->default('pending'); // pending, approved, rejected, executed
+            $table->string('status')->default('pending'); // pending, accepted, rejected, revoked, expired, executed, failed
             $table->foreignId('team_id')->constrained()->cascadeOnDelete();
             $table->timestamps();
         });
