@@ -22,6 +22,7 @@ use App\Services\Sl1PeerRegistryService;
 use App\Services\SovereignAdminClaimService;
 use App\Services\TeamInvitationArtifactService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
@@ -389,6 +390,19 @@ test('sl1 authority admissibility dry-run evaluates evidence without projection 
     $this->artisan('sl1:authority-admissibility-dry-run', ['--peer-id' => $peer->id])
         ->expectsOutputToContain('authority_projection=unchanged')
         ->assertExitCode(0);
+
+    $exitCode = Artisan::call('sl1:authority-admissibility-dry-run', [
+        '--peer-id' => $peer->id,
+        '--json' => true,
+    ]);
+    $jsonReport = json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR);
+
+    expect($exitCode)->toBe(0)
+        ->and($jsonReport['schema_version'])->toBe('sovereign.runtime.authority_admissibility_dry_run.v1')
+        ->and($jsonReport['authority_projection'])->toBe('unchanged')
+        ->and($jsonReport['events'][0]['evaluation_contexts']['crypto_context']['signature_valid'])->toBeTrue()
+        ->and($jsonReport['events'][0]['policy_context']['policy_mode'])->toBe('observe_only')
+        ->and($jsonReport['events'][0]['projection_candidate']['commit_blockers'])->toContain('observe_only_policy');
 
     $observed = Sl1PeerObservedEvent::first();
     expect($observed->admissibility_status)->toBe(Sl1PeerObservedEvent::STATUS_DRY_RUN_ADMISSIBLE)
