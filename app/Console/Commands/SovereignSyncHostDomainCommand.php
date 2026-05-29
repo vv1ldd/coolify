@@ -40,13 +40,46 @@ class SovereignSyncHostDomainCommand extends Command
         if (! $this->option('no-proxy-sync')) {
             $server = Server::find(0);
             if ($server) {
-                $server->setupDynamicProxyConfiguration();
-                $this->info('Synced proxy dynamic configuration for the local Coolify server.');
+                $this->syncProxyConfiguration($server);
             } else {
                 $this->warn('Local server #0 was not found; proxy dynamic configuration was not updated.');
             }
         }
 
         return 0;
+    }
+
+    private function syncProxyConfiguration(Server $server): void
+    {
+        if ($this->shouldSkipLocalSshProxySync($server)) {
+            $this->warn('Local server #0 is configured for localhost SSH, but SSH is not required for Sovereign host-domain sync. Panel URL was updated; proxy sync was skipped.');
+
+            return;
+        }
+
+        try {
+            $server->setupDynamicProxyConfiguration();
+            $this->info('Synced proxy dynamic configuration for the local Coolify server.');
+        } catch (\Throwable $e) {
+            if ($this->isLocalSshRefusal($server, $e)) {
+                $this->warn('Local proxy sync could not use localhost SSH. Panel URL was updated; proxy sync was skipped.');
+
+                return;
+            }
+
+            throw $e;
+        }
+    }
+
+    private function shouldSkipLocalSshProxySync(Server $server): bool
+    {
+        return $server->isLocalhost()
+            && in_array(strtolower((string) $server->ip), ['localhost', '127.0.0.1', '::1'], true);
+    }
+
+    private function isLocalSshRefusal(Server $server, \Throwable $e): bool
+    {
+        return $server->isLocalhost()
+            && str_contains($e->getMessage(), 'ssh: connect to host localhost port 22');
     }
 }
