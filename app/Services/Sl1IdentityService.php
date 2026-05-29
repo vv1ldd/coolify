@@ -137,6 +137,7 @@ class Sl1IdentityService
         $verified = $this->exchangeAndIntrospect($request, $expected);
         $proof = $verified['proof'];
         $this->assertProofMatchesSession($proof, $expected);
+        app(EmbeddedSl1RuntimeService::class)->recordVerifiedIdentity($verified, 'sl1-connect-callback');
 
         return $verified;
     }
@@ -196,6 +197,7 @@ class Sl1IdentityService
             throw new RuntimeException('SL1 proof does not match the pending execution intent.');
         }
 
+        app(EmbeddedSl1RuntimeService::class)->recordVerifiedIdentity($verified, 'sl1-intent-signing');
         $user->sl1IdentityBinding?->forceFill($this->bindingAttributes($verified))->save();
 
         $signed = app(PolicyEngine::class)->addSignature(

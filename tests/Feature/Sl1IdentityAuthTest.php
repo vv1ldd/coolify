@@ -2,7 +2,9 @@
 
 use App\Models\InstanceSettings;
 use App\Models\InfraLedger;
+use App\Models\Sl1Entity;
 use App\Models\Sl1IdentityBinding;
+use App\Models\Sl1IdentityEvent;
 use App\Models\SovereignAdminClaim;
 use App\Models\User;
 use App\Services\SovereignAdminClaimService;
@@ -16,6 +18,8 @@ beforeEach(function () {
     config()->set('sovereign.sl1_connect.issuer', 'https://simplel1.online');
     config()->set('sovereign.sl1_connect.client_id', 'coolify.sovereign');
     config()->set('sovereign.sl1_connect.client_name', 'Sovereign Coolify');
+    config()->set('sovereign.sl1_connect.embedded.enabled', true);
+    config()->set('sovereign.sl1_connect.embedded.issuer_path', '/sl1');
 });
 
 function beginSl1Login($test): array
@@ -96,7 +100,41 @@ test('first verified sl1 identity creates root user and binding', function () {
         'entity_address' => 'sl1e_root',
         'alias' => '@operator',
     ]);
+    $this->assertDatabaseHas('sl1_entities', [
+        'entity_address' => 'sl1e_root',
+        'alias' => '@operator',
+        'status' => 'active',
+    ]);
+    $this->assertDatabaseHas('sl1_identity_events', [
+        'entity_address' => 'sl1e_root',
+        'event_type' => 'sl1.identity.proof.observed',
+        'source' => 'sl1-connect-callback',
+    ]);
     expect(InstanceSettings::findOrFail(0)->is_registration_enabled)->toBeFalsy();
+});
+
+test('embedded sl1 runtime status exposes durable store counts', function () {
+    Sl1Entity::create([
+        'entity_address' => 'sl1e_status',
+        'status' => 'active',
+        'last_verified_at' => now(),
+    ]);
+    Sl1IdentityEvent::create([
+        'event_type' => 'sl1.identity.proof.observed',
+        'entity_address' => 'sl1e_status',
+        'source' => 'test',
+        'event_hash' => 'hash_status',
+        'payload' => ['ok' => true],
+        'occurred_at' => now(),
+    ]);
+
+    $this->getJson('/sl1/status')
+        ->assertOk()
+        ->assertJsonPath('protocol', 'simple-l1')
+        ->assertJsonPath('mode', 'embedded')
+        ->assertJsonPath('storage', 'coolify-postgres')
+        ->assertJsonPath('entities', 1)
+        ->assertJsonPath('events', 1);
 });
 
 test('existing sl1 identity logs into its bound user even when registration is disabled', function () {

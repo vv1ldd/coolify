@@ -46,6 +46,10 @@ return [
         'client_name' => env('SL1_CONNECT_CLIENT_NAME', 'Sovereign Coolify'),
         'callback_path' => env('SL1_CONNECT_CALLBACK_PATH', '/auth/sl1/callback'),
         'timeout' => (int) env('SL1_CONNECT_TIMEOUT', 10),
+        'embedded' => [
+            'enabled' => env('SL1_EMBEDDED_RUNTIME_ENABLED', true),
+            'issuer_path' => env('SL1_EMBEDDED_ISSUER_PATH', '/sl1'),
+        ],
     ],
 
     /*
