@@ -176,13 +176,14 @@ class PolicyEngine
         $title = $rule ? $rule['title'] : 'Infrastructure Transition';
 
         $actorDid = 'DID:SYS|USER:#'.(auth()->id() ?? 'system');
+        $resolvedTeamId = $this->resolveTeamId($entity, $teamId);
 
         $intent = PendingIntent::create([
             'event_type' => $eventType,
             'target_type' => get_class($entity),
             'target_id' => $entity->getKey(),
             'payload' => $payload,
-            'team_id' => $teamId ?? $entity->team_id ?? 1,
+            'team_id' => $resolvedTeamId,
             'status' => 'pending',
             'signatures' => [],
             'timeline' => [
@@ -201,6 +202,35 @@ class PolicyEngine
         Log::info("Sovereign Policy Engine: Staged '{$eventType}' in mempool [UUID: {$intent->uuid}]");
 
         return $intent;
+    }
+
+    protected function resolveTeamId(Model $entity, ?int $teamId = null): int
+    {
+        $candidates = [
+            $teamId,
+            data_get($entity, 'team_id'),
+            auth()->user()?->currentTeam()?->id,
+            auth()->user()?->teams()?->orderBy('teams.id')->value('teams.id'),
+            0,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+
+            $candidate = (int) $candidate;
+            if (Team::query()->whereKey($candidate)->exists()) {
+                return $candidate;
+            }
+        }
+
+        $firstTeamId = Team::query()->orderBy('id')->value('id');
+        if ($firstTeamId !== null) {
+            return (int) $firstTeamId;
+        }
+
+        throw new \RuntimeException('Cannot stage sovereign intent without an existing team.');
     }
 
     /**
