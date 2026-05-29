@@ -129,7 +129,7 @@ generate_admin_claim() {
         return
     fi
 
-    write_status "4" "Generating admin claim link"
+    write_status "6" "Generating admin claim link"
     log "Generating one-time SimpleL1 admin claim link"
 
     local base_url
@@ -138,6 +138,34 @@ generate_admin_claim() {
     if ! docker exec coolify php artisan sovereign:admin-claim --auto --base-url="$base_url"; then
         log "Automatic admin claim link was not generated. Run manually after selecting an admin user:"
         log "docker exec -it coolify php artisan sovereign:admin-claim --user-id=<id> --base-url=${base_url}"
+    fi
+}
+
+sync_host_domain() {
+    local app_url host_domain
+    app_url="$(strip_env_quotes "$(get_env_var APP_URL)")"
+    host_domain="$(strip_env_quotes "$(get_env_var SOVEREIGN_HOST_DOMAIN)")"
+
+    if [ -z "$app_url" ] || [ "$app_url" = "http://localhost" ] || [ "$app_url" = "https://localhost" ]; then
+        return
+    fi
+
+    write_status "5" "Syncing host domain"
+    log "Syncing host domain and panel URL"
+
+    if ! docker exec coolify php artisan sovereign:sync-host-domain --url="$app_url" --domain="$host_domain"; then
+        log "Host domain sync did not complete automatically. You can run manually:"
+        log "docker exec coolify php artisan sovereign:sync-host-domain --url=${app_url} --domain=${host_domain}"
+    fi
+}
+
+sync_identity_policy() {
+    write_status "4" "Syncing SL1 identity policy"
+    log "Syncing SL1 identity policy"
+
+    if ! docker exec coolify php artisan sovereign:sync-identity-policy; then
+        log "SL1 identity policy sync did not complete automatically. You can run manually:"
+        log "docker exec coolify php artisan sovereign:sync-identity-policy"
     fi
 }
 
@@ -231,6 +259,8 @@ log "Starting containers"
 COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
 
+sync_identity_policy
+sync_host_domain
 generate_admin_claim
 
 write_status "done" "Sovereign Coolify upgrade complete"

@@ -44,36 +44,17 @@
 
                 </div>
                 <div class="flex flex-col gap-1">
-                    @if ($disable_two_step_confirmation)
-                        <div class="pb-4 md:w-96" wire:key="two-step-confirmation-enabled">
-                            <x-forms.checkbox instantSave id="disable_two_step_confirmation"
-                                label="Disable Two Step Confirmation"
-                                helper="When disabled, you will not need to confirm actions with a text and user password. This significantly reduces security and may lead to accidental deletions or unwanted changes. Use with extreme caution, especially on production servers." />
-                        </div>
-                    @else
-                                    <div class="pb-4 flex items-center justify-between gap-2 md:w-96"
-                                        wire:key="two-step-confirmation-disabled">
-                                        <label class="flex items-center gap-2">
-                                            Disable Two Step Confirmation
-                                            <x-helper
-                                                helper="When disabled, you will not need to confirm actions with a text and user password. This significantly reduces security and may lead to accidental deletions or unwanted changes. Use with extreme caution, especially on production servers.">
-                                            </x-helper>
-                                        </label>
-                                        <x-modal-confirmation title="Disable Two Step Confirmation?" buttonTitle="Disable" isErrorButton
-                                            submitAction="toggleTwoStepConfirmation" :actions="[
-                            'Two Step confirmation will be disabled globally.',
-                            'Disabling two step confirmation reduces security (as anyone can easily delete anything).',
-                            'The risk of accidental actions will increase.',
-                        ]"
-                                            confirmationText="DISABLE TWO STEP CONFIRMATION"
-                                            confirmationLabel="Please type the confirmation text to disable two step confirmation."
-                                            shortConfirmationLabel="Confirmation text" />
-                                    </div>
-                                    <x-callout type="danger" title="Warning!" class="mb-4">
-                                        Disabling two step confirmation reduces security (as anyone can easily delete anything) and
-                                        increases the risk of accidental actions. This is not recommended for production servers.
-                                    </x-callout>
-                    @endif
+                    <h4 class="pt-4">SL1 Intent Approval</h4>
+                    <div class="pb-4 md:w-96">
+                        <x-forms.checkbox id="disable_two_step_confirmation" label="Legacy Confirmation Disabled"
+                            disabled
+                            helper="Sovereign Coolify does not use password or text-based two-step confirmation as an authority source. Destructive operations must be promoted to SL1 Identity signed intents." />
+                    </div>
+                    <x-callout type="info" title="Constitutional confirmation model" class="mb-4">
+                        Password prompts and typed confirmation strings are legacy friction, not authority.
+                        The SL1 path is SignedIntent approval over the operation, actor, resource, and current ledger
+                        context.
+                    </x-callout>
                 </div>
             </form>
         </div>

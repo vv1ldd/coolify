@@ -64,7 +64,7 @@ class Advanced extends Component
         $this->is_registration_enabled = $this->settings->is_registration_enabled;
         $this->is_dns_validation_enabled = $this->settings->is_dns_validation_enabled;
         $this->is_api_enabled = $this->settings->is_api_enabled;
-        $this->disable_two_step_confirmation = $this->settings->disable_two_step_confirmation;
+        $this->disable_two_step_confirmation = true;
         $this->is_sponsorship_popup_enabled = $this->settings->is_sponsorship_popup_enabled;
         $this->is_wire_navigate_enabled = $this->settings->is_wire_navigate_enabled ?? true;
     }
@@ -148,7 +148,7 @@ class Advanced extends Component
             $this->settings->is_api_enabled = $this->is_api_enabled;
             $this->settings->allowed_ips = $this->allowed_ips;
             $this->settings->is_sponsorship_popup_enabled = $this->is_sponsorship_popup_enabled;
-            $this->settings->disable_two_step_confirmation = $this->disable_two_step_confirmation;
+            $this->settings->disable_two_step_confirmation = true;
             $this->settings->is_wire_navigate_enabled = $this->is_wire_navigate_enabled;
             $this->settings->save();
             $this->dispatch('success', 'Settings updated!');
@@ -178,7 +178,7 @@ class Advanced extends Component
 
         $this->settings->disable_two_step_confirmation = $this->disable_two_step_confirmation = true;
         $this->settings->save();
-        $this->dispatch('success', 'Two step confirmation has been disabled.');
+        $this->dispatch('success', 'Legacy confirmation is disabled. Use SL1 Identity signed intents.');
 
         return true;
     }

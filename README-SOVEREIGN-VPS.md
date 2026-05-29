@@ -56,6 +56,17 @@ export SOVEREIGN_APP_SCHEME=https
 curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
 ```
 
+When a canonical host domain is provided, the installer syncs:
+
+- `APP_URL`
+- `SOVEREIGN_PANEL_URL`
+- `SOVEREIGN_HOST_DOMAIN`
+- `SOVEREIGN_HOST_URL`
+- Coolify instance settings URL (`instance_settings.fqdn`)
+
+This keeps the visible panel URL, host identity URL, SL1 callback base, and
+Coolify proxy configuration aligned.
+
 Optional pre-created root user:
 
 ```bash
@@ -133,6 +144,23 @@ interface by default. Only expose it intentionally:
 ```bash
 export SOVEREIGN_ALLOW_PUBLIC_SOKETI_METRICS=true
 ```
+
+## TLS Certificates
+
+Sovereign Coolify uses the normal Coolify proxy flow. When the local server runs
+Traefik and the instance URL is set to `https://your-domain`, Coolify writes a
+dynamic Traefik configuration for the panel host. The HTTPS routers use
+`tls.certresolver=letsencrypt`, so Traefik requests and renews the certificate
+from Let's Encrypt.
+
+Requirements:
+
+- DNS `A/AAAA` for the panel domain points to the VPS.
+- Public ports `80` and `443` reach the Coolify proxy.
+- The domain is not blocked by Cloudflare proxy mode unless the DNS/proxy setup
+  is intentionally configured for that flow.
+- The installer has synced `APP_URL` and `instance_settings.fqdn` to the same
+  canonical `https://` URL.
 
 After installation, open:
 

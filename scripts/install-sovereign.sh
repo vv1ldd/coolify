@@ -151,6 +151,14 @@ domain_points_to_host() {
     return 1
 }
 
+host_from_url() {
+    local value="$1"
+    value="${value#*://}"
+    value="${value%%/*}"
+    value="${value%%:*}"
+    printf '%s' "$value"
+}
+
 check_host_resources() {
     if [ -r /proc/meminfo ]; then
         local mem_kb
@@ -398,11 +406,13 @@ choose_host_domain() {
             SELECTED_APP_URL="${SOVEREIGN_APP_SCHEME}://${domain_choice}"
         elif [ -n "$existing_app_url" ] && [ "$existing_app_url" != "http://localhost" ] && [ "$existing_app_url" != "https://localhost" ]; then
             SELECTED_APP_URL="$existing_app_url"
+            SELECTED_HOST_DOMAIN="$(host_from_url "$existing_app_url")"
         else
             SELECTED_APP_URL="http://$(hostname -I 2>/dev/null | awk '{print $1}'):${APP_PORT}"
         fi
     elif [ -n "$existing_app_url" ] && [ "$existing_app_url" != "http://localhost" ] && [ "$existing_app_url" != "https://localhost" ]; then
         SELECTED_APP_URL="$existing_app_url"
+        SELECTED_HOST_DOMAIN="$(host_from_url "$existing_app_url")"
     else
         SELECTED_APP_URL="http://$(hostname -I 2>/dev/null | awk '{print $1}'):${APP_PORT}"
     fi
@@ -434,8 +444,10 @@ apply_host_domain_env() {
     fi
 
     set_env_var "APP_URL" "$SELECTED_APP_URL"
+    set_env_var "SOVEREIGN_PANEL_URL" "$SELECTED_APP_URL"
     if [ -n "$SELECTED_HOST_DOMAIN" ]; then
         set_env_var "SOVEREIGN_HOST_DOMAIN" "$SELECTED_HOST_DOMAIN"
+        set_env_var "SOVEREIGN_HOST_URL" "$SELECTED_APP_URL"
         local public_ip
         public_ip="$(detect_public_ip)"
         if [ -n "$public_ip" ]; then
