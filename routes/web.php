@@ -122,6 +122,9 @@ Route::get('/auth/sl1/admin-claim/{token}', [Sl1IdentityController::class, 'admi
 Route::get('/auth/sl1/callback', [Sl1IdentityController::class, 'callback'])->name('auth.sl1.callback');
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/auth/sl1/intent/callback', [Sl1IdentityController::class, 'intentCallback'])->name('auth.sl1.intent.callback');
+    Route::get('/auth/sl1/intent/{intent}/redirect', [Sl1IdentityController::class, 'intentRedirect'])->name('auth.sl1.intent.redirect');
+
     Route::middleware(['throttle:force-password-reset'])->group(function () {
         Route::get('/force-password-reset', ForcePasswordReset::class)->name('auth.force-password-reset');
     });

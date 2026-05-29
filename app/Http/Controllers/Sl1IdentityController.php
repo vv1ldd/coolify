@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\PendingIntent;
 use App\Services\Sl1IdentityService;
 use App\Services\SovereignAdminClaimService;
 use Illuminate\Http\Request;
@@ -49,6 +50,38 @@ class Sl1IdentityController extends Controller
 
             return redirect()
                 ->route('login')
+                ->withErrors(['sl1' => $e->getMessage()]);
+        }
+    }
+
+    public function intentRedirect(PendingIntent $intent, Request $request, Sl1IdentityService $sl1)
+    {
+        try {
+            return redirect()->away($sl1->intentAuthorizationUrl($request, $intent));
+        } catch (Throwable $e) {
+            Log::warning('SL1 intent signing start failed: '.$e->getMessage());
+
+            return redirect()
+                ->route('infra.ledger.index')
+                ->withErrors(['sl1' => $e->getMessage()]);
+        }
+    }
+
+    public function intentCallback(Request $request, Sl1IdentityService $sl1)
+    {
+        try {
+            $intent = $sl1->completeIntentCallback($request);
+
+            return redirect()
+                ->route('infra.ledger.index')
+                ->with('success', $intent->status === 'executed'
+                    ? 'SL1 intent signed. Quorum reached and execution was released.'
+                    : 'SL1 intent signed. Waiting for remaining approvals.');
+        } catch (Throwable $e) {
+            Log::warning('SL1 intent signing failed: '.$e->getMessage());
+
+            return redirect()
+                ->route('infra.ledger.index')
                 ->withErrors(['sl1' => $e->getMessage()]);
         }
     }

@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
+use App\Actions\Application\StopApplication;
 use App\Actions\Server\DeleteServer;
-use App\Livewire\Project\Application\Heading;
 use App\Models\Application;
 use App\Models\PendingIntent;
 use App\Models\Server;
@@ -12,6 +12,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Visus\Cuid2\Cuid2;
 
 /**
  * Sovereign Infrastructure Policy Engine
@@ -236,7 +237,7 @@ class PolicyEngine
     /**
      * Appends a cryptographic signature to a staged intent.
      */
-    public function addSignature(PendingIntent $intent, string $actorDid, string $role): bool
+    public function addSignature(PendingIntent $intent, string $actorDid, string $role, array $evidence = []): bool
     {
         $signatures = $intent->signatures;
 
@@ -246,11 +247,16 @@ class PolicyEngine
         }
 
         // Attach signature hash
-        $signatures[$actorDid] = [
+        $signature = [
             'signed_at' => now()->toIso8601String(),
             'role' => $role,
             'hash' => hash('sha256', $intent->uuid.$actorDid.$role.now()->timestamp),
         ];
+        if ($evidence !== []) {
+            $signature['evidence'] = $evidence;
+        }
+
+        $signatures[$actorDid] = $signature;
 
         $timeline = $intent->timeline;
         $timeline[] = [
@@ -357,28 +363,57 @@ class PolicyEngine
                 break;
 
             case 'application.deploy':
-                // Substrate: Trigger docker deploy (Heading.php actions)
                 $application = Application::find($payload['application_id']);
-                if ($application) {
-                    // Call deploy on Heading livewire directly or trigger via custom action
-                    // To make it simple & robust, we call queue_application_deployment like Heading does:
-                    $deploymentUuid = new Heading;
-                    $deploymentUuid->application = $application;
-                    $deploymentUuid->deploy(
-                        force_rebuild: $payload['force_rebuild'] ?? false,
-                        mandateApproved: true
-                    );
+                if (! $application) {
+                    throw new \Exception('Application target not found for approved deploy intent.');
                 }
+
+                $deploymentUuid = (string) new Cuid2;
+                $result = queue_application_deployment(
+                    application: $application,
+                    deployment_uuid: $deploymentUuid,
+                    force_rebuild: $payload['force_rebuild'] ?? false,
+                );
+                if (in_array($result['status'] ?? null, ['queue_full', 'skipped'], true)) {
+                    throw new \Exception('Deployment release failed: '.($result['message'] ?? $result['status']));
+                }
+
+                app(InfraLedgerService::class)->record(
+                    eventType: 'application.deploy',
+                    entity: $application,
+                    payload: [
+                        'deployment_uuid' => $deploymentUuid,
+                        'force_rebuild' => $payload['force_rebuild'] ?? false,
+                        'server_uuid' => $application->destination?->server?->uuid,
+                        'build_pack' => $application->build_pack,
+                    ],
+                    inputState: [
+                        'status' => $application->status,
+                    ],
+                );
                 break;
 
             case 'application.stop':
-                // Substrate: Stop container
                 $application = Application::find($payload['application_id']);
-                if ($application) {
-                    $deploymentUuid = new Heading;
-                    $deploymentUuid->application = $application;
-                    $deploymentUuid->stop(mandateApproved: true);
+                if (! $application) {
+                    throw new \Exception('Application target not found for approved stop intent.');
                 }
+
+                $result = StopApplication::run($application);
+                if (is_string($result) && $result !== '') {
+                    throw new \Exception('Stop release failed: '.$result);
+                }
+
+                app(InfraLedgerService::class)->record(
+                    eventType: 'application.stop',
+                    entity: $application,
+                    payload: [
+                        'server_uuid' => $application->destination?->server?->uuid,
+                    ],
+                    inputState: [
+                        'status' => $application->status,
+                    ],
+                );
                 break;
 
             default:

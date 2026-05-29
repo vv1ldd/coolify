@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\InstanceSettings;
+use App\Models\PendingIntent;
 use App\Models\Sl1IdentityBinding;
 use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
@@ -15,6 +16,8 @@ use RuntimeException;
 class Sl1IdentityService
 {
     private const SESSION_KEY = 'sl1_connect_login';
+
+    private const INTENT_SESSION_KEY = 'sl1_intent_signing';
 
     public function authorizationUrl(Request $request, ?string $claimToken = null): string
     {
@@ -47,6 +50,66 @@ class Sl1IdentityService
         ], '', '&', PHP_QUERY_RFC3986);
     }
 
+    public function intentAuthorizationUrl(Request $request, PendingIntent $intent): string
+    {
+        $user = $request->user();
+        if (! $user) {
+            throw new RuntimeException('SL1 intent signing requires an active Coolify session.');
+        }
+
+        if ($intent->status !== 'pending') {
+            throw new RuntimeException('This execution intent is no longer pending.');
+        }
+
+        if (! $user->teams()->whereKey($intent->team_id)->exists()) {
+            throw new RuntimeException('This execution intent belongs to a different team.');
+        }
+
+        $binding = $user->sl1IdentityBinding;
+        if (! $binding?->entity_address) {
+            throw new RuntimeException('Bind this Coolify user to SL1 Identity before signing intents.');
+        }
+
+        $state = Str::random(40);
+        $nonce = Str::random(40);
+        $redirectUri = route('auth.sl1.intent.callback');
+        $intentHash = $this->canonicalIntentHash($intent);
+        $intentResource = $this->intentResource($intent, $intentHash);
+
+        $request->session()->put(self::INTENT_SESSION_KEY, [
+            'state' => $state,
+            'nonce' => $nonce,
+            'redirect_uri' => $redirectUri,
+            'intent_id' => $intent->id,
+            'intent_uuid' => $intent->uuid,
+            'intent_hash' => $intentHash,
+            'intent_resource' => $intentResource,
+            'user_id' => $user->id,
+            'team_id' => $intent->team_id,
+            'entity_address' => $binding->entity_address,
+            'created_at' => now()->toIso8601String(),
+        ]);
+
+        $rule = app(PolicyEngine::class)->getRule($intent->event_type);
+
+        return $this->issuerUrl('/authorize').'?'.http_build_query([
+            'client_id' => $this->clientId(),
+            'client_name' => config('sovereign.sl1_connect.client_name', 'Sovereign Coolify'),
+            'redirect_uri' => $redirectUri,
+            'state' => $state,
+            'nonce' => $nonce,
+            'mode' => 'connect',
+            'flow' => 'connect',
+            'identity_hint' => $binding->entity_address,
+            'intent_type' => $intent->event_type,
+            'intent_title' => $rule['title'] ?? 'Sovereign Execution Intent',
+            'intent_description' => 'Sign this canonical Coolify execution intent before it is released from the Pending Pool.',
+            'intent_cta' => 'Sign Execution Intent',
+            'intent_nonce' => $intentHash,
+            'intent_resource' => $intentResource,
+        ], '', '&', PHP_QUERY_RFC3986);
+    }
+
     /**
      * @return array{identity: array<string, mixed>, proof: array<string, mixed>, exchange: array<string, mixed>, introspection: array<string, mixed>, session: array<string, mixed>}
      *
@@ -63,57 +126,88 @@ class Sl1IdentityService
             throw new RuntimeException('SL1 login state mismatch.');
         }
 
-        $code = (string) $request->query('code', '');
-        if ($code === '') {
-            throw new RuntimeException('SL1 authorization code is missing.');
-        }
-
-        $exchange = Http::timeout($this->timeout())
-            ->acceptJson()
-            ->post($this->issuerUrl('/api/sl1e/authorization-code/exchange'), [
-                'code' => $code,
-                'client_id' => $this->clientId(),
-                'redirect_uri' => $expected['redirect_uri'],
-            ]);
-
-        if ($exchange->failed()) {
-            throw new RuntimeException('SL1 authorization code exchange failed.');
-        }
-
-        $exchangePayload = $exchange->json();
-        $proofToken = data_get($exchangePayload, 'proof_token');
-        if (! is_string($proofToken) || $proofToken === '') {
-            throw new RuntimeException('SL1 proof token is missing.');
-        }
-
-        $introspection = Http::timeout($this->timeout())
-            ->acceptJson()
-            ->post($this->issuerUrl('/api/sl1e/proofs/introspect'), [
-                'proof_token' => $proofToken,
-                'audience' => $this->clientId(),
-            ]);
-
-        if ($introspection->failed()) {
-            throw new RuntimeException('SL1 proof introspection failed.');
-        }
-
-        $introspectionPayload = $introspection->json();
-        $proof = data_get($introspectionPayload, 'proof');
-        $identity = data_get($introspectionPayload, 'identity', []);
-
-        if (! is_array($proof)) {
-            throw new RuntimeException('SL1 identity proof is missing.');
-        }
-
+        $verified = $this->exchangeAndIntrospect($request, $expected);
+        $proof = $verified['proof'];
         $this->assertProofMatchesSession($proof, $expected);
 
-        return [
-            'identity' => is_array($identity) ? $identity : [],
-            'proof' => $proof,
-            'exchange' => is_array($exchangePayload) ? $exchangePayload : [],
-            'introspection' => is_array($introspectionPayload) ? $introspectionPayload : [],
-            'session' => $expected,
-        ];
+        return $verified;
+    }
+
+    public function completeIntentCallback(Request $request): PendingIntent
+    {
+        $expected = $request->session()->pull(self::INTENT_SESSION_KEY);
+        if (! is_array($expected)) {
+            throw new RuntimeException('SL1 intent signing session expired. Start again.');
+        }
+
+        if ($request->query('state') !== ($expected['state'] ?? null)) {
+            throw new RuntimeException('SL1 intent signing state mismatch.');
+        }
+
+        $user = $request->user();
+        if (! $user || (int) $user->id !== (int) ($expected['user_id'] ?? -1)) {
+            throw new RuntimeException('SL1 intent signing requires the same active Coolify user session.');
+        }
+
+        $intent = PendingIntent::query()
+            ->whereKey($expected['intent_id'] ?? null)
+            ->where('uuid', $expected['intent_uuid'] ?? null)
+            ->first();
+        if (! $intent || $intent->status !== 'pending') {
+            throw new RuntimeException('Pending intent not found or already processed.');
+        }
+
+        if (! $user->teams()->whereKey($intent->team_id)->exists()) {
+            throw new RuntimeException('This execution intent belongs to a different team.');
+        }
+
+        $verified = $this->exchangeAndIntrospect($request, $expected);
+        $proof = $verified['proof'];
+        $identity = $verified['identity'];
+        $this->assertProofMatchesSession($proof, $expected);
+
+        if ((string) data_get($proof, 'type') !== 'sl1e.intent.proof.v1') {
+            throw new RuntimeException('SL1 proof is not an intent approval proof.');
+        }
+
+        $entityAddress = (string) (data_get($proof, 'entity_l1_address') ?: data_get($identity, 'entity_l1_address'));
+        if ($entityAddress === '' || $entityAddress !== (string) ($expected['entity_address'] ?? '')) {
+            throw new RuntimeException('SL1 signer does not match the current Coolify identity binding.');
+        }
+
+        $intentHash = $this->canonicalIntentHash($intent);
+        if (! hash_equals((string) ($expected['intent_hash'] ?? ''), $intentHash)) {
+            throw new RuntimeException('Pending intent changed before signing completed.');
+        }
+
+        $proofIntent = data_get($proof, 'intent', []);
+        if (! is_array($proofIntent)
+            || (string) data_get($proofIntent, 'type') !== $intent->event_type
+            || (string) data_get($proofIntent, 'nonce') !== $intentHash
+            || (string) data_get($proofIntent, 'resource') !== $this->intentResource($intent, $intentHash)) {
+            throw new RuntimeException('SL1 proof does not match the pending execution intent.');
+        }
+
+        $user->sl1IdentityBinding?->forceFill($this->bindingAttributes($verified))->save();
+
+        $signed = app(PolicyEngine::class)->addSignature(
+            intent: $intent,
+            actorDid: 'DID:SL1|ENTITY:#'.$entityAddress,
+            role: 'sl1-intent-approval',
+            evidence: [
+                'proof_id' => data_get($proof, 'proof_id') ?: data_get($proof, 'proofId'),
+                'proof_type' => data_get($proof, 'type'),
+                'controller_address' => data_get($proof, 'controller_l1_address') ?: data_get($proof, 'keyAddress'),
+                'intent_hash' => $intentHash,
+                'signature' => data_get($proof, 'signature'),
+            ],
+        );
+
+        if (! $signed) {
+            throw new RuntimeException('This SL1 identity has already signed the pending intent.');
+        }
+
+        return $intent->refresh();
     }
 
     /**
@@ -182,6 +276,101 @@ class Sl1IdentityService
         if ($expiresAt->isPast()) {
             throw new RuntimeException('SL1 proof expired.');
         }
+    }
+
+    /**
+     * @return array{identity: array<string, mixed>, proof: array<string, mixed>, exchange: array<string, mixed>, introspection: array<string, mixed>, session: array<string, mixed>}
+     *
+     * @throws ConnectionException
+     */
+    private function exchangeAndIntrospect(Request $request, array $expected): array
+    {
+        $code = (string) $request->query('code', '');
+        if ($code === '') {
+            throw new RuntimeException('SL1 authorization code is missing.');
+        }
+
+        $exchange = Http::timeout($this->timeout())
+            ->acceptJson()
+            ->post($this->issuerUrl('/api/sl1e/authorization-code/exchange'), [
+                'code' => $code,
+                'client_id' => $this->clientId(),
+                'redirect_uri' => $expected['redirect_uri'],
+            ]);
+
+        if ($exchange->failed()) {
+            throw new RuntimeException('SL1 authorization code exchange failed.');
+        }
+
+        $exchangePayload = $exchange->json();
+        $proofToken = data_get($exchangePayload, 'proof_token');
+        if (! is_string($proofToken) || $proofToken === '') {
+            throw new RuntimeException('SL1 proof token is missing.');
+        }
+
+        $introspection = Http::timeout($this->timeout())
+            ->acceptJson()
+            ->post($this->issuerUrl('/api/sl1e/proofs/introspect'), [
+                'proof_token' => $proofToken,
+                'audience' => $this->clientId(),
+            ]);
+
+        if ($introspection->failed()) {
+            throw new RuntimeException('SL1 proof introspection failed.');
+        }
+
+        $introspectionPayload = $introspection->json();
+        $proof = data_get($introspectionPayload, 'proof');
+        $identity = data_get($introspectionPayload, 'identity', []);
+
+        if (! is_array($proof)) {
+            throw new RuntimeException('SL1 identity proof is missing.');
+        }
+
+        return [
+            'identity' => is_array($identity) ? $identity : [],
+            'proof' => $proof,
+            'exchange' => is_array($exchangePayload) ? $exchangePayload : [],
+            'introspection' => is_array($introspectionPayload) ? $introspectionPayload : [],
+            'session' => $expected,
+        ];
+    }
+
+    private function canonicalIntentHash(PendingIntent $intent): string
+    {
+        return hash('sha256', json_encode(
+            $this->sortCanonicalValue([
+                'protocol' => 'coolify.sovereign.intent.v1',
+                'uuid' => $intent->uuid,
+                'event_type' => $intent->event_type,
+                'target_type' => $intent->target_type,
+                'target_id' => $intent->target_id,
+                'team_id' => $intent->team_id,
+                'payload' => $intent->payload ?? [],
+                'created_at' => $intent->created_at?->toIso8601String(),
+            ]),
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+        ));
+    }
+
+    private function intentResource(PendingIntent $intent, string $intentHash): string
+    {
+        return "coolify:pending_intent:{$intent->uuid}:{$intentHash}";
+    }
+
+    private function sortCanonicalValue(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        if (array_is_list($value)) {
+            return array_map(fn ($item) => $this->sortCanonicalValue($item), $value);
+        }
+
+        ksort($value);
+
+        return array_map(fn ($item) => $this->sortCanonicalValue($item), $value);
     }
 
     /**

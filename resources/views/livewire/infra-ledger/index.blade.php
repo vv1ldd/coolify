@@ -27,6 +27,19 @@
         </div>
 
         {{-- ═══ INTEGRITY STATUS BANNER ═══ --}}
+        @if(session('success'))
+            <div class="flex items-center gap-3 px-4 py-3 border-[3px] border-green-500 bg-green-500/5">
+                <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                <span class="font-black text-xs uppercase tracking-widest text-green-700 font-mono">{{ session('success') }}</span>
+            </div>
+        @endif
+        @if($errors->has('sl1'))
+            <div class="flex items-center gap-3 px-4 py-3 border-[3px] border-red-600 bg-red-600/5">
+                <div class="w-2 h-2 rounded-full bg-red-600 animate-pulse"></div>
+                <span class="font-black text-xs uppercase tracking-widest text-red-700 font-mono">{{ $errors->first('sl1') }}</span>
+            </div>
+        @endif
+
         @if($integrityChecked)
             @if($integrityStatus === 'valid')
                 <div class="flex items-center gap-3 px-4 py-3 border-[3px] border-green-500 bg-green-500/5">
@@ -105,13 +118,14 @@
                                         </div>
                                     </div>
 
-                                    {{-- Action co-sign button --}}
-                                    <button wire:click="coSign({{ $intent->id }})"
+                                    {{-- Action SL1 signing button --}}
+                                    <a href="{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id]) }}"
                                         class="w-full mt-2 py-2.5 px-4 text-[10px] font-black uppercase tracking-widest font-mono text-center
+                                               block
                                                border-[2px] border-amber-500 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-black
                                                transition-all duration-100 cursor-pointer">
-                                        [ CO-SIGN INTENT ]
-                                    </button>
+                                        [ SIGN WITH SL1 IDENTITY ]
+                                    </a>
                                 </div>
 
                                 {{-- 2. Intent Diff View (Col 5-8) --}}
