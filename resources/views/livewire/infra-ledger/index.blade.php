@@ -1,6 +1,26 @@
 <div>
     <x-slot:title>Audit Ledger | Sovereign</x-slot>
 
+    @php
+        $ledgerValue = function ($value, int $limit = 80): string {
+            if (is_bool($value)) {
+                return $value ? 'true' : 'false';
+            }
+
+            if ($value === null) {
+                return 'null';
+            }
+
+            if (is_scalar($value)) {
+                return \Illuminate\Support\Str::limit((string) $value, $limit);
+            }
+
+            $encoded = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            return \Illuminate\Support\Str::limit($encoded ?: get_debug_type($value), $limit);
+        };
+    @endphp
+
     <div class="flex flex-col gap-6 pb-10">
 
         {{-- ═══ PAGE HEADER ═══ --}}
@@ -105,7 +125,7 @@
                                         </div>
                                         <div>
                                             <span class="text-[9px] text-neutral-500 block uppercase">TARGET ENTITY:</span>
-                                            <span class="text-xs text-white font-bold">{{ data_get($intent->payload, 'server_name') ?? data_get($intent->payload, 'application_name') ?? 'System Substrate' }}</span>
+                                            <span class="text-xs text-white font-bold">{{ $ledgerValue(data_get($intent->payload, 'server_name') ?? data_get($intent->payload, 'application_name') ?? 'System Substrate') }}</span>
                                         </div>
                                         <div>
                                             <span class="text-[9px] text-neutral-500 block uppercase">CONSTITUTIONAL RULE:</span>
@@ -170,7 +190,7 @@
                                             <div class="text-green-500">+ active_replicas: 0</div>
                                         @else
                                             @foreach($intent->payload as $k => $v)
-                                                <div><span class="text-neutral-500">{{ $k }}</span>: {{ is_array($v) ? json_encode($v) : $v }}</div>
+                                                <div><span class="text-neutral-500">{{ $k }}</span>: {{ $ledgerValue($v, 160) }}</div>
                                             @endforeach
                                         @endif
                                     </div>
@@ -187,7 +207,7 @@
                                                 <span class="text-neutral-500 whitespace-nowrap">{{ \Carbon\Carbon::parse($step['timestamp'])->format('H:i:s') }}</span>
                                                 <div class="flex flex-col">
                                                     <span class="text-white font-bold">{{ $step['action'] }}</span>
-                                                    <span class="text-neutral-500 break-all">{{ $step['actor'] }} — {{ $step['detail'] }}</span>
+                                                    <span class="text-neutral-500 break-all">{{ $ledgerValue(data_get($step, 'actor'), 120) }} — {{ $ledgerValue(data_get($step, 'detail'), 160) }}</span>
                                                 </div>
                                             </div>
                                         @endforeach
@@ -245,15 +265,15 @@
                                     <div class="grid grid-cols-2 gap-4 font-mono text-[10px] text-neutral-400 leading-relaxed bg-black/20 p-3 border border-neutral-800/60 rounded-sm">
                                         <div>
                                             <span class="text-neutral-500 block text-[9px] uppercase">OPERATIONAL IMPACT:</span>
-                                            <span class="text-white font-bold">{{ $risk['impact'] }}</span>
+                                            <span class="text-white font-bold">{{ $ledgerValue(data_get($risk, 'impact')) }}</span>
                                         </div>
                                         <div>
                                             <span class="text-neutral-500 block text-[9px] uppercase">AFFECTED INSTANCES:</span>
-                                            <span class="text-neutral-200 font-bold">{{ $risk['nodes'] }}</span>
+                                            <span class="text-neutral-200 font-bold">{{ $ledgerValue(data_get($risk, 'nodes')) }}</span>
                                         </div>
                                         <div class="col-span-2 border-t border-neutral-900 pt-2 mt-1">
                                             <span class="text-neutral-500 text-[9px] uppercase">PROJECTED RECOVERY DURATION:</span>
-                                            <span class="text-amber-500 font-bold ml-1">{{ $risk['recovery'] }}</span>
+                                            <span class="text-amber-500 font-bold ml-1">{{ $ledgerValue(data_get($risk, 'recovery')) }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -267,19 +287,19 @@
                                     <div class="grid grid-cols-2 gap-4 font-mono text-[10px] text-neutral-400 leading-relaxed bg-black/20 p-3 border border-neutral-800/60 rounded-sm">
                                         <div>
                                             <span class="text-neutral-500 block text-[9px] uppercase">PROJECTED HEALTH AFTER:</span>
-                                            <span class="text-white font-bold">{{ $sim['health'] }}</span>
+                                            <span class="text-white font-bold">{{ $ledgerValue(data_get($sim, 'health')) }}</span>
                                         </div>
                                         <div>
                                             <span class="text-neutral-500 block text-[9px] uppercase">CONSENSUS QUORUM:</span>
-                                            <span class="font-bold @if(str_contains($sim['quorum'], 'WARNING')) text-red-500 @else text-green-500 @endif">{{ $sim['quorum'] }}</span>
+                                            <span class="font-bold @if(str_contains($ledgerValue(data_get($sim, 'quorum')), 'WARNING')) text-red-500 @else text-green-500 @endif">{{ $ledgerValue(data_get($sim, 'quorum')) }}</span>
                                         </div>
                                         <div>
                                             <span class="text-neutral-500 block text-[9px] uppercase">AFFECTED WORKLOADS:</span>
-                                            <span class="text-neutral-200 font-bold">{{ $sim['affected'] }} live containers</span>
+                                            <span class="text-neutral-200 font-bold">{{ $ledgerValue(data_get($sim, 'affected')) }} live containers</span>
                                         </div>
                                         <div>
                                             <span class="text-neutral-500 block text-[9px] uppercase">PROJECTED FAILOVER:</span>
-                                            <span class="font-bold @if(str_contains($sim['failover'], 'WARNING')) text-red-500 @else text-green-500 @endif">{{ $sim['failover'] }}</span>
+                                            <span class="font-bold @if(str_contains($ledgerValue(data_get($sim, 'failover')), 'WARNING')) text-red-500 @else text-green-500 @endif">{{ $ledgerValue(data_get($sim, 'failover')) }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -379,7 +399,7 @@
                                 <div class="text-[9px] font-black uppercase tracking-widest text-neutral-400">Intent Payload</div>
                                 <div class="font-mono text-[10px] text-neutral-600 leading-relaxed">
                                     @foreach(array_slice($entry->payload ?? [], 0, 3) as $k => $v)
-                                        <span class="text-black font-bold">{{ $k }}</span>: {{ is_bool($v) ? ($v ? 'true' : 'false') : Str::limit((string)$v, 24) }}<br>
+                                        <span class="text-black font-bold">{{ $k }}</span>: {{ $ledgerValue($v, 48) }}<br>
                                     @endforeach
                                 </div>
                             </div>
@@ -391,28 +411,28 @@
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-[10px]">
                                     <div class="flex flex-col gap-1">
                                         <span class="text-neutral-400 uppercase text-[9px]">Approved Intent</span>
-                                        <span class="text-black font-bold break-all">{{ data_get($authority, 'approved_intent_uuid') }}</span>
-                                        <span class="text-neutral-500">{{ data_get($authority, 'signatures_collected') }} / {{ data_get($authority, 'signatures_required') }} approvals</span>
+                                        <span class="text-black font-bold break-all">{{ $ledgerValue(data_get($authority, 'approved_intent_uuid'), 120) }}</span>
+                                        <span class="text-neutral-500">{{ $ledgerValue(data_get($authority, 'signatures_collected'), 20) }} / {{ $ledgerValue(data_get($authority, 'signatures_required'), 20) }} approvals</span>
                                     </div>
                                     <div class="sm:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-2">
                                         @foreach($authorityApprovals as $approval)
                                             <div class="border border-black/10 bg-white p-2">
-                                                <div class="text-black font-bold uppercase">{{ data_get($approval, 'role', 'approval') }}</div>
-                                                <div class="text-neutral-600 break-all">{{ data_get($approval, 'actor') }}</div>
+                                                <div class="text-black font-bold uppercase">{{ $ledgerValue(data_get($approval, 'role', 'approval'), 80) }}</div>
+                                                <div class="text-neutral-600 break-all">{{ $ledgerValue(data_get($approval, 'actor'), 160) }}</div>
                                                 @if(data_get($approval, 'sl1_entity_address'))
-                                                    <div class="text-neutral-500 break-all">entity: {{ data_get($approval, 'sl1_entity_address') }}</div>
+                                                    <div class="text-neutral-500 break-all">entity: {{ $ledgerValue(data_get($approval, 'sl1_entity_address'), 160) }}</div>
                                                 @endif
                                                 @if(data_get($approval, 'controller_address'))
-                                                    <div class="text-neutral-500 break-all">controller: {{ data_get($approval, 'controller_address') }}</div>
+                                                    <div class="text-neutral-500 break-all">controller: {{ $ledgerValue(data_get($approval, 'controller_address'), 160) }}</div>
                                                 @endif
                                                 @if(data_get($approval, 'proof_id'))
-                                                    <div class="text-neutral-500 break-all">proof: {{ data_get($approval, 'proof_id') }}</div>
+                                                    <div class="text-neutral-500 break-all">proof: {{ $ledgerValue(data_get($approval, 'proof_id'), 160) }}</div>
                                                 @endif
                                                 @if(data_get($approval, 'intent_hash'))
-                                                    <div class="text-neutral-500 break-all">intent_hash: {{ substr(data_get($approval, 'intent_hash'), 0, 18) }}...</div>
+                                                    <div class="text-neutral-500 break-all">intent_hash: {{ substr($ledgerValue(data_get($approval, 'intent_hash'), 160), 0, 18) }}...</div>
                                                 @endif
                                                 @if(data_get($approval, 'signature_hash'))
-                                                    <div class="text-neutral-500 break-all">signature_hash: {{ substr(data_get($approval, 'signature_hash'), 0, 18) }}...</div>
+                                                    <div class="text-neutral-500 break-all">signature_hash: {{ substr($ledgerValue(data_get($approval, 'signature_hash'), 160), 0, 18) }}...</div>
                                                 @endif
                                             </div>
                                         @endforeach
@@ -424,11 +444,11 @@
                         {{-- MDK Kernel Proof footer --}}
                         <div class="flex items-center gap-2 px-4 py-1.5 bg-black/5 border-t border-black/10">
                             <span class="text-[9px] font-black uppercase tracking-widest text-neutral-400">
-                                KERNEL: {{ data_get($entry->meta, 'constitution', '—') }}
+                                KERNEL: {{ $ledgerValue(data_get($entry->meta, 'constitution', '—'), 80) }}
                             </span>
                             <span class="text-neutral-300">·</span>
                             <span class="text-[9px] font-mono text-neutral-400">
-                                {{ data_get($entry->meta, 'determinism', '—') }}
+                                {{ $ledgerValue(data_get($entry->meta, 'determinism', '—'), 80) }}
                             </span>
                         </div>
                     </div>

@@ -143,6 +143,47 @@ test('legacy invitation acceptance cannot consume team invitation v1 artifact', 
         ->and(TeamInvitationArtifact::first()->status)->toBe('issued');
 });
 
+test('audit ledger renders signed invite entries with nested authority payloads', function () {
+    actAsTeamMember($this, $this->owner, $this->team);
+
+    InfraLedger::create([
+        'team_id' => $this->team->id,
+        'trigger_source' => 'DID:SL1|ENTITY:#owner',
+        'event_type' => 'team.member.invite',
+        'entity_type' => TeamInvitation::class,
+        'entity_id' => 1,
+        'payload' => [
+            'email' => 'candidate@example.com',
+            'role' => 'admin',
+            'authority' => [
+                'approved_intent_uuid' => 'intent-test',
+                'signatures_collected' => 2,
+                'signatures_required' => 2,
+                'approvals' => [
+                    [
+                        'role' => 'sl1-intent-approval',
+                        'actor' => 'DID:SL1|ENTITY:#owner',
+                        'evidence' => [
+                            'proof' => ['nested' => true],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+        'input_state' => ['before' => ['artifact' => null]],
+        'output_state' => ['result' => 'success', 'artifact' => ['status' => 'issued']],
+        'fingerprint' => str_repeat('a', 64),
+        'previous_fingerprint' => null,
+        'meta' => ['constitution' => ['rfc' => 'team.invitation.v1'], 'determinism' => ['mode' => 'append-only']],
+        'created_at' => now(),
+    ]);
+
+    $this->get(route('infra.ledger.index'))
+        ->assertOk()
+        ->assertSee('team')
+        ->assertSee('candidate@example.com');
+});
+
 test('role drift on display invitation does not change frozen artifact scope', function () {
     actAsTeamMember($this, $this->owner, $this->team);
 
