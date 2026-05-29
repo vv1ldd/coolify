@@ -33,6 +33,46 @@
                 <x-forms.button type="button" wire:click="clearFilter">Clear</x-forms.button>
             @endif
         </form>
+        @if ($pendingIntents->isNotEmpty())
+            <div class="flex flex-col gap-3 border-l-2 border-warning bg-white p-4 dark:bg-coolgray-100">
+                <div class="flex flex-col gap-1">
+                    <div class="text-sm font-bold text-warning">Pending SL1 approvals required</div>
+                    <div class="text-xs text-gray-600 dark:text-gray-400">
+                        These execution intents are staged but not released. Sign the exact pending intent below to start the deployment queue.
+                    </div>
+                </div>
+                @foreach ($pendingIntents as $intent)
+                    @php
+                        $rule = app(\App\Services\PolicyEngine::class)->getRule($intent->event_type);
+                        $required = $rule['signatures_required'] ?? 1;
+                        $collected = count($intent->signatures ?? []);
+                        $latestTimeline = collect($intent->timeline ?? [])->last();
+                    @endphp
+                    <div class="flex flex-col gap-3 border border-warning/40 p-3 md:flex-row md:items-center md:justify-between">
+                        <div class="flex flex-col gap-1 text-sm">
+                            <div class="font-mono text-xs font-bold uppercase text-warning">
+                                {{ str_replace('.', ' › ', $intent->event_type) }}
+                            </div>
+                            <div class="font-mono text-xs text-gray-600 dark:text-gray-400">
+                                intent: {{ $intent->uuid }}
+                            </div>
+                            <div class="font-mono text-xs text-gray-600 dark:text-gray-400">
+                                approvals: {{ $collected }} / {{ $required }}
+                            </div>
+                            <div class="font-mono text-xs text-gray-500">
+                                {{ data_get($latestTimeline, 'actor', 'DID:SYS|SERVICE:#system') }} -
+                                {{ data_get($latestTimeline, 'detail', 'Awaiting SL1 signature') }}
+                            </div>
+                        </div>
+                        <a href="{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id]) }}"
+                            onclick="const popup = window.open('{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id, 'popup' => 1]) }}', 'sl1_intent_{{ $intent->id }}', 'popup,width=460,height=720'); if (popup) { window.addEventListener('message', (event) => { if (event.origin === window.location.origin && event.data?.type === 'sl1:intent-signature') window.location.reload(); }, { once: true }); return false; } return true;"
+                            class="inline-flex items-center justify-center rounded px-4 py-2 text-xs font-black uppercase tracking-widest text-white bg-warning hover:bg-warning/80">
+                            Sign with SL1 Identity
+                        </a>
+                    </div>
+                @endforeach
+            </div>
+        @endif
         @forelse ($deployments as $deployment)
             <div @class([
                 'p-2 border-l-2 bg-white dark:bg-coolgray-100',

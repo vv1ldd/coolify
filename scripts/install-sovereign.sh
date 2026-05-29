@@ -12,7 +12,7 @@ BRANCH="${SOVEREIGN_BRANCH:-sovereign}"
 RAW_BASE="${SOVEREIGN_RAW_BASE:-https://raw.githubusercontent.com/${REPOSITORY}/${BRANCH}}"
 COOLIFY_IMAGE="${COOLIFY_IMAGE:-ghcr.io/${REPOSITORY}:sovereign}"
 SOVEREIGN_REALTIME_IMAGE="${SOVEREIGN_REALTIME_IMAGE:-ghcr.io/coollabsio/coolify-realtime:1.0.13}"
-HELPER_IMAGE="${HELPER_IMAGE:-ghcr.io/coollabsio/coolify-helper:latest}"
+HELPER_IMAGE="${HELPER_IMAGE:-ghcr.io/coollabsio/coolify-helper}"
 APP_PORT="${APP_PORT:-8000}"
 SOKETI_PORT="${SOKETI_PORT:-6001}"
 AUTOUPDATE="${AUTOUPDATE:-false}"
@@ -123,6 +123,21 @@ strip_env_quotes() {
     value="${value%\'}"
     value="${value#\'}"
     printf '%s' "$value"
+}
+
+strip_image_tag() {
+    local image="$1"
+    local last_segment
+    if [[ "$image" == *@* ]]; then
+        printf '%s' "$image"
+        return
+    fi
+    last_segment="${image##*/}"
+    if [[ "$last_segment" == *:* ]]; then
+        printf '%s' "${image%:*}"
+        return
+    fi
+    printf '%s' "$image"
 }
 
 detect_public_ip() {
@@ -731,7 +746,7 @@ set_env_var "APP_PORT" "$APP_PORT"
 set_env_var "SOKETI_PORT" "$SOKETI_PORT"
 set_env_var "COOLIFY_IMAGE" "$COOLIFY_IMAGE"
 set_env_var "SOVEREIGN_REALTIME_IMAGE" "$SOVEREIGN_REALTIME_IMAGE"
-set_env_var "HELPER_IMAGE" "$HELPER_IMAGE"
+set_env_var "HELPER_IMAGE" "$(strip_image_tag "$HELPER_IMAGE")"
 set_env_var "SOVEREIGN_REPOSITORY" "$REPOSITORY"
 set_env_var "SOVEREIGN_BRANCH" "$BRANCH"
 set_env_var "AUTOUPDATE" "$AUTOUPDATE"

@@ -176,7 +176,8 @@ class PolicyEngine
         $rule = $this->getRule($eventType);
         $title = $rule ? $rule['title'] : 'Infrastructure Transition';
 
-        $actorDid = 'DID:SYS|USER:#'.(auth()->id() ?? 'system');
+        $actor = auth()->user();
+        $actorDid = 'DID:SYS|USER:#'.($actor?->id ?? 'system');
         $resolvedTeamId = $this->resolveTeamId($entity, $teamId);
 
         $intent = PendingIntent::create([
@@ -198,7 +199,7 @@ class PolicyEngine
         ]);
 
         // Auto-apply the proposer's signature as the first co-signer
-        $this->addSignature($intent, $actorDid, 'proposer');
+        $this->addSignature($intent, $actorDid, 'proposer', $this->actorEvidence($actor));
 
         Log::info("Sovereign Policy Engine: Staged '{$eventType}' in mempool [UUID: {$intent->uuid}]");
 
@@ -277,6 +278,58 @@ class PolicyEngine
         }
 
         return true;
+    }
+
+    protected function actorEvidence(?User $user): array
+    {
+        if (! $user) {
+            return [];
+        }
+
+        $binding = $user->sl1IdentityBinding;
+
+        return array_filter([
+            'coolify_user_id' => $user->id,
+            'coolify_user_name' => $user->name,
+            'sl1_entity_address' => $binding?->entity_address,
+            'sl1_controller_address' => $binding?->controller_address,
+            'sl1_alias' => $binding?->display_alias ?: $binding?->alias,
+            'sl1_proof_id' => $binding?->proof_id,
+        ], fn ($value) => $value !== null && $value !== '');
+    }
+
+    protected function approvalSummary(PendingIntent $intent): array
+    {
+        $rule = $this->getRule($intent->event_type);
+
+        return [
+            'approved_intent_uuid' => $intent->uuid,
+            'event_type' => $intent->event_type,
+            'target_type' => $intent->target_type,
+            'target_id' => $intent->target_id,
+            'team_id' => $intent->team_id,
+            'signatures_required' => $rule['signatures_required'] ?? 1,
+            'signatures_collected' => count($intent->signatures ?? []),
+            'approvals' => collect($intent->signatures ?? [])
+                ->map(function (array $signature, string $actor) {
+                    $evidence = $signature['evidence'] ?? [];
+
+                    return array_filter([
+                        'actor' => $actor,
+                        'role' => $signature['role'] ?? null,
+                        'signed_at' => $signature['signed_at'] ?? null,
+                        'hash' => $signature['hash'] ?? null,
+                        'proof_id' => data_get($evidence, 'proof_id') ?: data_get($evidence, 'sl1_proof_id'),
+                        'proof_type' => data_get($evidence, 'proof_type'),
+                        'sl1_entity_address' => data_get($evidence, 'sl1_entity_address'),
+                        'controller_address' => data_get($evidence, 'controller_address') ?: data_get($evidence, 'sl1_controller_address'),
+                        'intent_hash' => data_get($evidence, 'intent_hash'),
+                        'signature_hash' => data_get($evidence, 'signature') ? hash('sha256', (string) data_get($evidence, 'signature')) : null,
+                    ], fn ($value) => $value !== null && $value !== '');
+                })
+                ->values()
+                ->all(),
+        ];
     }
 
     /**
@@ -382,14 +435,18 @@ class PolicyEngine
                     eventType: 'application.deploy',
                     entity: $application,
                     payload: [
+                        'approved_intent_uuid' => $intent->uuid,
                         'deployment_uuid' => $deploymentUuid,
                         'force_rebuild' => $payload['force_rebuild'] ?? false,
                         'server_uuid' => $application->destination?->server?->uuid,
                         'build_pack' => $application->build_pack,
+                        'authority' => $this->approvalSummary($intent),
                     ],
                     inputState: [
                         'status' => $application->status,
                     ],
+                    actor: 'DID:SYS|SERVICE:#execution-substrate',
+                    teamId: $intent->team_id,
                 );
                 break;
 
@@ -408,11 +465,15 @@ class PolicyEngine
                     eventType: 'application.stop',
                     entity: $application,
                     payload: [
+                        'approved_intent_uuid' => $intent->uuid,
                         'server_uuid' => $application->destination?->server?->uuid,
+                        'authority' => $this->approvalSummary($intent),
                     ],
                     inputState: [
                         'status' => $application->status,
                     ],
+                    actor: 'DID:SYS|SERVICE:#execution-substrate',
+                    teamId: $intent->team_id,
                 );
                 break;
 

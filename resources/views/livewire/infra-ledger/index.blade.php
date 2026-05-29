@@ -75,6 +75,8 @@
                             $reqSigs = $rule ? $rule['signatures_required'] : 1;
                             $curSigs = count($intent->signatures);
                             $isSuccess = $curSigs >= $reqSigs;
+                            $intentSignatures = $intent->signatures ?? [];
+                            $initiator = collect($intent->timeline ?? [])->firstWhere('action', 'Proposed');
 
                             // Live simulation and risk computations
                             $risk = $policyService->getOperationalRisk($intent->event_type, $intent->payload);
@@ -120,6 +122,7 @@
 
                                     {{-- Action SL1 signing button --}}
                                     <a href="{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id]) }}"
+                                        onclick="const popup = window.open('{{ route('auth.sl1.intent.redirect', ['intent' => $intent->id, 'popup' => 1]) }}', 'sl1_intent_{{ $intent->id }}', 'popup,width=460,height=720'); if (popup) { window.addEventListener('message', (event) => { if (event.origin === window.location.origin && event.data?.type === 'sl1:intent-signature') window.location.reload(); }, { once: true }); return false; } return true;"
                                         class="w-full mt-2 py-2.5 px-4 text-[10px] font-black uppercase tracking-widest font-mono text-center
                                                block
                                                border-[2px] border-amber-500 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-black
@@ -177,7 +180,41 @@
                                 </div>
                             </div>
 
-                            {{-- Row 2: Strict Military Risk Assessment & Cluster State Simulation --}}
+                            {{-- Row 2: Authority trail --}}
+                            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 p-5 border-t border-neutral-800/80 bg-black/20">
+                                <div class="lg:col-span-3 flex flex-col gap-2 font-mono">
+                                    <div class="text-[9px] font-black uppercase tracking-widest text-neutral-500">AUTHORITY INITIATOR</div>
+                                    <div class="text-[10px] text-neutral-300 break-all">{{ data_get($initiator, 'actor', 'DID:SYS|SERVICE:#system') }}</div>
+                                    <div class="text-[9px] text-neutral-600">{{ data_get($initiator, 'timestamp') ? \Carbon\Carbon::parse(data_get($initiator, 'timestamp'))->format('Y-m-d H:i:s') : 'pending timestamp' }}</div>
+                                </div>
+                                <div class="lg:col-span-9 flex flex-col gap-2 font-mono">
+                                    <div class="text-[9px] font-black uppercase tracking-widest text-neutral-500">SIGNATURE / PROOF TRAIL</div>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        @foreach($intentSignatures as $actorDid => $signature)
+                                            @php
+                                                $evidence = data_get($signature, 'evidence', []);
+                                                $proofId = data_get($evidence, 'proof_id') ?: data_get($evidence, 'sl1_proof_id');
+                                                $entity = data_get($evidence, 'sl1_entity_address');
+                                                $controller = data_get($evidence, 'controller_address') ?: data_get($evidence, 'sl1_controller_address');
+                                                $intentHash = data_get($evidence, 'intent_hash');
+                                                $signatureHash = data_get($evidence, 'signature') ? hash('sha256', data_get($evidence, 'signature')) : data_get($signature, 'hash');
+                                            @endphp
+                                            <div class="border border-neutral-800 bg-neutral-950/70 p-3 rounded-sm">
+                                                <div class="text-[10px] text-amber-500 font-bold uppercase">{{ data_get($signature, 'role', 'approval') }}</div>
+                                                <div class="text-[9px] text-neutral-300 break-all mt-1">{{ $actorDid }}</div>
+                                                <div class="text-[9px] text-neutral-500 mt-1">signed_at: {{ data_get($signature, 'signed_at', 'pending') }}</div>
+                                                @if($entity)<div class="text-[9px] text-neutral-500 break-all">entity: {{ $entity }}</div>@endif
+                                                @if($controller)<div class="text-[9px] text-neutral-500 break-all">controller: {{ $controller }}</div>@endif
+                                                @if($proofId)<div class="text-[9px] text-neutral-500 break-all">proof: {{ $proofId }}</div>@endif
+                                                @if($intentHash)<div class="text-[9px] text-neutral-500 break-all">intent_hash: {{ substr($intentHash, 0, 18) }}...</div>@endif
+                                                <div class="text-[9px] text-neutral-600 break-all">sig_hash: {{ substr((string) $signatureHash, 0, 18) }}...</div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Row 3: Strict Military Risk Assessment & Cluster State Simulation --}}
                             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 p-5 border-t border-neutral-800/80 bg-neutral-950/40">
                                 
                                 {{-- 4. Operational Risk Classification (Col 1-6) --}}
@@ -277,6 +314,8 @@
                         $isSuccess = data_get($entry->output_state, 'result') !== 'failed';
                         $shortFp   = substr($entry->fingerprint, 0, 16);
                         $shortPrev = $entry->previous_fingerprint ? substr($entry->previous_fingerprint, 0, 8) : '0000000000000000';
+                        $authority = data_get($entry->payload, 'authority');
+                        $authorityApprovals = is_array(data_get($authority, 'approvals')) ? data_get($authority, 'approvals') : [];
                     @endphp
                     <div class="border-[3px] border-black bg-white shadow-[3px_3px_0_#000000] hover:shadow-[1px_1px_0_#000000] hover:translate-x-[2px] hover:translate-y-[2px] transition-all duration-100">
 
@@ -330,6 +369,42 @@
                                 </div>
                             </div>
                         </div>
+
+                        @if(is_array($authority) && count($authorityApprovals) > 0)
+                            <div class="border-t border-black/10 bg-black/[0.03] px-4 py-3">
+                                <div class="text-[9px] font-black uppercase tracking-widest text-neutral-400 mb-2">Authority Trail</div>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-[10px]">
+                                    <div class="flex flex-col gap-1">
+                                        <span class="text-neutral-400 uppercase text-[9px]">Approved Intent</span>
+                                        <span class="text-black font-bold break-all">{{ data_get($authority, 'approved_intent_uuid') }}</span>
+                                        <span class="text-neutral-500">{{ data_get($authority, 'signatures_collected') }} / {{ data_get($authority, 'signatures_required') }} approvals</span>
+                                    </div>
+                                    <div class="sm:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                        @foreach($authorityApprovals as $approval)
+                                            <div class="border border-black/10 bg-white p-2">
+                                                <div class="text-black font-bold uppercase">{{ data_get($approval, 'role', 'approval') }}</div>
+                                                <div class="text-neutral-600 break-all">{{ data_get($approval, 'actor') }}</div>
+                                                @if(data_get($approval, 'sl1_entity_address'))
+                                                    <div class="text-neutral-500 break-all">entity: {{ data_get($approval, 'sl1_entity_address') }}</div>
+                                                @endif
+                                                @if(data_get($approval, 'controller_address'))
+                                                    <div class="text-neutral-500 break-all">controller: {{ data_get($approval, 'controller_address') }}</div>
+                                                @endif
+                                                @if(data_get($approval, 'proof_id'))
+                                                    <div class="text-neutral-500 break-all">proof: {{ data_get($approval, 'proof_id') }}</div>
+                                                @endif
+                                                @if(data_get($approval, 'intent_hash'))
+                                                    <div class="text-neutral-500 break-all">intent_hash: {{ substr(data_get($approval, 'intent_hash'), 0, 18) }}...</div>
+                                                @endif
+                                                @if(data_get($approval, 'signature_hash'))
+                                                    <div class="text-neutral-500 break-all">signature_hash: {{ substr(data_get($approval, 'signature_hash'), 0, 18) }}...</div>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
 
                         {{-- MDK Kernel Proof footer --}}
                         <div class="flex items-center gap-2 px-4 py-1.5 bg-black/5 border-t border-black/10">

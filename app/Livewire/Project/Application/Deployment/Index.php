@@ -3,6 +3,7 @@
 namespace App\Livewire\Project\Application\Deployment;
 
 use App\Models\Application;
+use App\Models\PendingIntent;
 use Illuminate\Support\Collection;
 use Livewire\Component;
 
@@ -11,6 +12,8 @@ class Index extends Component
     public Application $application;
 
     public ?Collection $deployments;
+
+    public Collection $pendingIntents;
 
     public int $deployments_count = 0;
 
@@ -67,6 +70,7 @@ class Index extends Component
         ['deployments' => $deployments, 'count' => $count] = $application->deployments(0, $this->defaultTake, $this->pull_request_id);
         $this->application = $application;
         $this->deployments = $deployments;
+        $this->pendingIntents = $this->pendingIntentsForApplication($application);
         $this->deployments_count = $count;
         $this->current_url = url()->current();
         $this->updateCurrentPage();
@@ -88,6 +92,7 @@ class Index extends Component
     public function reloadDeployments()
     {
         $this->loadDeployments();
+        $this->pendingIntents = $this->pendingIntentsForApplication($this->application);
     }
 
     public function previousPage(?int $take = null)
@@ -119,7 +124,19 @@ class Index extends Component
         ['deployments' => $deployments, 'count' => $count] = $this->application->deployments($this->skip, $this->defaultTake, $this->pull_request_id);
         $this->deployments = $deployments;
         $this->deployments_count = $count;
+        $this->pendingIntents = $this->pendingIntentsForApplication($this->application);
         $this->showMore();
+    }
+
+    private function pendingIntentsForApplication(Application $application): Collection
+    {
+        return PendingIntent::query()
+            ->where('target_type', Application::class)
+            ->where('target_id', $application->id)
+            ->whereIn('event_type', ['application.deploy', 'application.stop'])
+            ->where('status', 'pending')
+            ->orderByDesc('id')
+            ->get();
     }
 
     public function updatedPullRequestId($value)

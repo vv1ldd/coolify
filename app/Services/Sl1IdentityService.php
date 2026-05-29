@@ -50,7 +50,7 @@ class Sl1IdentityService
         ], '', '&', PHP_QUERY_RFC3986);
     }
 
-    public function intentAuthorizationUrl(Request $request, PendingIntent $intent): string
+    public function intentAuthorizationUrl(Request $request, PendingIntent $intent, bool $popup = false): string
     {
         $user = $request->user();
         if (! $user) {
@@ -72,7 +72,7 @@ class Sl1IdentityService
 
         $state = Str::random(40);
         $nonce = Str::random(40);
-        $redirectUri = route('auth.sl1.intent.callback');
+        $redirectUri = route('auth.sl1.intent.callback', $popup ? ['popup' => 1] : []);
         $intentHash = $this->canonicalIntentHash($intent);
         $intentResource = $this->intentResource($intent, $intentHash);
 
@@ -91,6 +91,10 @@ class Sl1IdentityService
         ]);
 
         $rule = app(PolicyEngine::class)->getRule($intent->event_type);
+        $targetName = (string) (data_get($intent->payload, 'application_name')
+            ?: data_get($intent->payload, 'server_name')
+            ?: class_basename((string) $intent->target_type).' #'.$intent->target_id);
+        $intentAction = str_replace('.', ' > ', $intent->event_type);
 
         return $this->issuerUrl('/authorize').'?'.http_build_query([
             'client_id' => $this->clientId(),
@@ -102,9 +106,13 @@ class Sl1IdentityService
             'flow' => 'connect',
             'identity_hint' => $binding->entity_address,
             'intent_type' => $intent->event_type,
-            'intent_title' => $rule['title'] ?? 'Sovereign Execution Intent',
-            'intent_description' => 'Sign this canonical Coolify execution intent before it is released from the Pending Pool.',
-            'intent_cta' => 'Sign Execution Intent',
+            'intent_title' => 'Confirm intent: '.$intentAction,
+            'intent_description' => sprintf(
+                'Sovereign Coolify will release "%s" for "%s" only after your SL1 passkey signs this canonical intent hash.',
+                $rule['title'] ?? $intentAction,
+                $targetName,
+            ),
+            'intent_cta' => 'Confirm Intent in Wallet',
             'intent_nonce' => $intentHash,
             'intent_resource' => $intentResource,
         ], '', '&', PHP_QUERY_RFC3986);
