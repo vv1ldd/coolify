@@ -7,9 +7,11 @@ SOURCE_DIR="${COOLIFY_SOURCE_DIR:-/data/coolify/source}"
 ENV_FILE="${SOURCE_DIR}/.env"
 STATUS_FILE="${SOURCE_DIR}/.upgrade-sovereign-status"
 LOG_FILE="${SOURCE_DIR}/upgrade-sovereign-${DATE}.log"
+CONVERGE_STATE_FILE="${SOVEREIGN_CONVERGE_STATE_FILE:-/var/lib/sovereign/converge.state}"
 REPOSITORY="${SOVEREIGN_REPOSITORY:-vv1ldd/coolify}"
 BRANCH="${SOVEREIGN_BRANCH:-sovereign}"
 RAW_BASE="${SOVEREIGN_RAW_BASE:-https://raw.githubusercontent.com/${REPOSITORY}/${BRANCH}}"
+SOVEREIGN_RUNTIME_CONVERGE_OWNER="${SOVEREIGN_RUNTIME_CONVERGE_OWNER:-false}"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
@@ -17,6 +19,21 @@ log() {
 
 write_status() {
     echo "$1|$2|$(date -Iseconds)" > "$STATUS_FILE"
+}
+
+require_runtime_converge_owner() {
+    if [ "${SOVEREIGN_RUNTIME_CONVERGE_OWNER}" != "true" ]; then
+        echo "[runtime] converge owner = external, skipping mutations"
+        exit 0
+    fi
+
+    echo "[runtime] converge owner = runtime, executing mutations"
+}
+
+mark_converge_state() {
+    local state="$1"
+    mkdir -p "$(dirname "${CONVERGE_STATE_FILE}")"
+    printf '%s|%s|repository=%s|branch=%s\n' "${state}" "$(date -Iseconds)" "${REPOSITORY}" "${BRANCH}" >> "${CONVERGE_STATE_FILE}"
 }
 
 get_env_var() {
@@ -171,6 +188,7 @@ sync_host_domain() {
     if ! docker exec coolify php artisan sovereign:sync-host-domain --url="$app_url" --domain="$host_domain"; then
         log "Host domain sync did not complete automatically. You can run manually:"
         log "docker exec coolify php artisan sovereign:sync-host-domain --url=${app_url} --domain=${host_domain}"
+        return 1
     fi
 }
 
@@ -181,6 +199,7 @@ sync_identity_policy() {
     if ! docker exec coolify php artisan sovereign:sync-identity-policy; then
         log "SL1 identity policy sync did not complete automatically. You can run manually:"
         log "docker exec coolify php artisan sovereign:sync-identity-policy"
+        return 1
     fi
 }
 
@@ -210,6 +229,8 @@ run_host_hardening() {
     bash "${SOURCE_DIR}/sovereign-host-hardening.sh"
 }
 
+require_runtime_converge_owner
+
 if [ "$EUID" -ne 0 ]; then
     echo "Please run this script as root or with sudo."
     exit 1
@@ -219,6 +240,7 @@ mkdir -p "$SOURCE_DIR"
 touch "$LOG_FILE"
 
 log "Starting Sovereign Coolify upgrade"
+mark_converge_state "BOOTSTRAP_STARTED"
 write_status "1" "Downloading compose files"
 
 download_file docker-compose.yml "${SOURCE_DIR}/docker-compose.yml"
@@ -284,11 +306,16 @@ write_status "3" "Starting containers"
 log "Starting containers"
 COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
+mark_converge_state "CONTAINERS_STARTED"
 
 run_migrations
+mark_converge_state "MIGRATIONS_DONE"
 sync_identity_policy
+mark_converge_state "POLICY_SYNCED"
 sync_host_domain
+mark_converge_state "DOMAIN_SYNCED"
 generate_admin_claim
 
 write_status "done" "Sovereign Coolify upgrade complete"
+mark_converge_state "CONVERGE_COMPLETE"
 log "Sovereign Coolify upgrade complete"

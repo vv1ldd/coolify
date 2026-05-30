@@ -21,6 +21,7 @@ SOVEREIGN_HARDENING="${SOVEREIGN_HARDENING:-auto}"
 SOVEREIGN_HARDENING_PROFILE="${SOVEREIGN_HARDENING_PROFILE:-baseline}"
 SOVEREIGN_APP_SCHEME="${SOVEREIGN_APP_SCHEME:-https}"
 SOVEREIGN_HOST_DOMAIN="${SOVEREIGN_HOST_DOMAIN:-}"
+SOVEREIGN_RUNTIME_CONVERGE_OWNER="${SOVEREIGN_RUNTIME_CONVERGE_OWNER:-false}"
 SL1_CONNECT_ISSUER="${SL1_CONNECT_ISSUER:-https://simplel1.online}"
 SL1_CONNECT_CLIENT_ID="${SL1_CONNECT_CLIENT_ID:-coolify.sovereign}"
 SL1_CONNECT_CLIENT_NAME="${SL1_CONNECT_CLIENT_NAME:-Sovereign-Coolify}"
@@ -78,6 +79,15 @@ warning() {
 die() {
     term_line "${C_RED}ERROR: $*${C_RESET}"
     exit 1
+}
+
+require_runtime_converge_owner() {
+    if [ "${SOVEREIGN_RUNTIME_CONVERGE_OWNER}" != "true" ]; then
+        term_line "[runtime] converge owner = external, skipping mutations"
+        exit 0
+    fi
+
+    term_line "[runtime] converge owner = runtime, executing mutations"
 }
 
 log() {
@@ -580,7 +590,9 @@ run_existing_upgrade() {
     download_file scripts/upgrade-sovereign.sh "${SOURCE_DIR}/upgrade-sovereign.sh"
     chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh"
 
-    SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE="$generate_claim" bash "${SOURCE_DIR}/upgrade-sovereign.sh"
+    SOVEREIGN_RUNTIME_CONVERGE_OWNER="$SOVEREIGN_RUNTIME_CONVERGE_OWNER" \
+        SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE="$generate_claim" \
+        bash "${SOURCE_DIR}/upgrade-sovereign.sh"
 
     echo ""
     term_line "${C_GREEN}Sovereign Coolify ${SELECTED_INSTALL_MODE} complete.${C_RESET}"
@@ -680,6 +692,8 @@ prepare_ssh_key() {
     fi
 }
 
+require_runtime_converge_owner
+
 if [ "$EUID" -ne 0 ]; then
     die "Please run this script as root or with sudo."
 fi
@@ -777,7 +791,7 @@ chown -R 9999:root "$INSTALL_ROOT"
 chmod -R 700 "$INSTALL_ROOT"
 
 log "Starting Sovereign Coolify"
-bash "${SOURCE_DIR}/upgrade-sovereign.sh"
+SOVEREIGN_RUNTIME_CONVERGE_OWNER="$SOVEREIGN_RUNTIME_CONVERGE_OWNER" bash "${SOURCE_DIR}/upgrade-sovereign.sh"
 
 echo ""
 echo "Sovereign Coolify installation complete."
