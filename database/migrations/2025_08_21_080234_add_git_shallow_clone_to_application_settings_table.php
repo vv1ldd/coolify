@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('application_settings', function (Blueprint $table) {
-            $table->boolean('is_git_shallow_clone_enabled')->default(true)->after('is_git_lfs_enabled');
-        });
+        if (! Schema::hasColumn('application_settings', 'is_git_shallow_clone_enabled')) {
+            Schema::table('application_settings', function (Blueprint $table) {
+                $table->boolean('is_git_shallow_clone_enabled')->default(true)->after('is_git_lfs_enabled');
+            });
+        }
     }
 
     /**
@@ -21,8 +23,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('application_settings', function (Blueprint $table) {
-            $table->dropColumn('is_git_shallow_clone_enabled');
-        });
+        if (Schema::hasColumn('application_settings', 'is_git_shallow_clone_enabled')) {
+            Schema::table('application_settings', function (Blueprint $table) {
+                $table->dropColumn('is_git_shallow_clone_enabled');
+            });
+        }
     }
 };

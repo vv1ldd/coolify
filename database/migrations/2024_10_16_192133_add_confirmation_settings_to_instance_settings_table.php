@@ -8,15 +8,19 @@ return new class extends Migration
 {
     public function up()
     {
-        Schema::table('instance_settings', function (Blueprint $table) {
-            $table->boolean('disable_two_step_confirmation')->default(false);
-        });
+        if (! Schema::hasColumn('instance_settings', 'disable_two_step_confirmation')) {
+            Schema::table('instance_settings', function (Blueprint $table) {
+                $table->boolean('disable_two_step_confirmation')->default(false);
+            });
+        }
     }
 
     public function down()
     {
-        Schema::table('instance_settings', function (Blueprint $table) {
-            $table->dropColumn('disable_two_step_confirmation');
-        });
+        if (Schema::hasColumn('instance_settings', 'disable_two_step_confirmation')) {
+            Schema::table('instance_settings', function (Blueprint $table) {
+                $table->dropColumn('disable_two_step_confirmation');
+            });
+        }
     }
 };

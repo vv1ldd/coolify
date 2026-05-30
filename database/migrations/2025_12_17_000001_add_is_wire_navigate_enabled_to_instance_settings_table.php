@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('instance_settings', function (Blueprint $table) {
-            $table->boolean('is_wire_navigate_enabled')->default(true);
-        });
+        if (! Schema::hasColumn('instance_settings', 'is_wire_navigate_enabled')) {
+            Schema::table('instance_settings', function (Blueprint $table) {
+                $table->boolean('is_wire_navigate_enabled')->default(true);
+            });
+        }
     }
 
     /**
@@ -21,8 +23,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('instance_settings', function (Blueprint $table) {
-            $table->dropColumn('is_wire_navigate_enabled');
-        });
+        if (Schema::hasColumn('instance_settings', 'is_wire_navigate_enabled')) {
+            Schema::table('instance_settings', function (Blueprint $table) {
+                $table->dropColumn('is_wire_navigate_enabled');
+            });
+        }
     }
 };

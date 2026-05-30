@@ -184,6 +184,17 @@ sync_identity_policy() {
     fi
 }
 
+run_migrations() {
+    write_status "4" "Running database migrations"
+    log "Running Coolify migrations"
+
+    if ! docker exec coolify php artisan migrate --force; then
+        log "Coolify migrations did not complete automatically. You can run manually:"
+        log "docker exec coolify php artisan migrate --force"
+        return 1
+    fi
+}
+
 run_host_hardening() {
     if [ "${SOVEREIGN_HARDENING:-false}" != "true" ]; then
         return
@@ -274,6 +285,7 @@ log "Starting containers"
 COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
 
+run_migrations
 sync_identity_policy
 sync_host_domain
 generate_admin_claim
