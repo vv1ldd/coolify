@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (! Schema::hasTable('oauth_settings') || Schema::hasColumn('oauth_settings', 'base_url')) {
+            return;
+        }
+
         Schema::table('oauth_settings', function (Blueprint $table) {
             $table->string('base_url')->nullable();
         });
@@ -21,6 +25,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (! Schema::hasTable('oauth_settings') || ! Schema::hasColumn('oauth_settings', 'base_url')) {
+            return;
+        }
+
         Schema::table('oauth_settings', function (Blueprint $table) {
             $table->dropColumn('base_url');
         });

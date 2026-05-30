@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('oauth_settings')) {
+            return;
+        }
+
         Schema::create('oauth_settings', function (Blueprint $table) {
             $table->id();
             $table->string('provider')->unique();

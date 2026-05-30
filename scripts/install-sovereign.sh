@@ -22,6 +22,7 @@ SOVEREIGN_HARDENING_PROFILE="${SOVEREIGN_HARDENING_PROFILE:-baseline}"
 SOVEREIGN_APP_SCHEME="${SOVEREIGN_APP_SCHEME:-https}"
 SOVEREIGN_HOST_DOMAIN="${SOVEREIGN_HOST_DOMAIN:-}"
 SOVEREIGN_RUNTIME_CONVERGE_OWNER="${SOVEREIGN_RUNTIME_CONVERGE_OWNER:-false}"
+SOVEREIGN_VERBOSE="${SOVEREIGN_VERBOSE:-false}"
 SL1_CONNECT_ISSUER="${SL1_CONNECT_ISSUER:-https://simplel1.online}"
 SL1_CONNECT_CLIENT_ID="${SL1_CONNECT_CLIENT_ID:-coolify.sovereign}"
 SL1_CONNECT_CLIENT_NAME="${SL1_CONNECT_CLIENT_NAME:-Sovereign-Coolify}"
@@ -92,6 +93,23 @@ require_runtime_converge_owner() {
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+show_log_tail() {
+    warning "Command failed. Last log lines from ${LOG_FILE}:"
+    tail -n 80 "$LOG_FILE" 2>/dev/null || true
+}
+
+run_logged() {
+    if [ "${SOVEREIGN_VERBOSE}" = "true" ]; then
+        "$@"
+        return $?
+    fi
+
+    "$@" >> "$LOG_FILE" 2>&1 || {
+        show_log_tail
+        return 1
+    }
 }
 
 download_file() {
@@ -610,17 +628,31 @@ install_docker() {
     fi
 
     log "Installing Docker Engine"
-    curl -fsSL https://get.docker.com | sh
+    if [ "${SOVEREIGN_VERBOSE}" = "true" ]; then
+        curl -fsSL https://get.docker.com | sh
+    else
+        { curl -fsSL https://get.docker.com | sh; } >> "$LOG_FILE" 2>&1 || {
+            show_log_tail
+            return 1
+        }
+    fi
 
     if command -v systemctl >/dev/null 2>&1; then
-        systemctl enable --now docker
+        run_logged systemctl enable --now docker
     fi
 }
 
 login_to_registry() {
     if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
         log "Logging in to ghcr.io as ${GHCR_USERNAME}"
-        echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+        if [ "${SOVEREIGN_VERBOSE}" = "true" ]; then
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+        else
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin >> "$LOG_FILE" 2>&1 || {
+                show_log_tail
+                return 1
+            }
+        fi
     fi
 }
 

@@ -12,9 +12,27 @@ REPOSITORY="${SOVEREIGN_REPOSITORY:-vv1ldd/coolify}"
 BRANCH="${SOVEREIGN_BRANCH:-sovereign}"
 RAW_BASE="${SOVEREIGN_RAW_BASE:-https://raw.githubusercontent.com/${REPOSITORY}/${BRANCH}}"
 SOVEREIGN_RUNTIME_CONVERGE_OWNER="${SOVEREIGN_RUNTIME_CONVERGE_OWNER:-false}"
+SOVEREIGN_VERBOSE="${SOVEREIGN_VERBOSE:-false}"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+show_log_tail() {
+    echo "ERROR: Command failed. Last log lines from ${LOG_FILE}:"
+    tail -n 80 "$LOG_FILE" 2>/dev/null || true
+}
+
+run_logged() {
+    if [ "${SOVEREIGN_VERBOSE}" = "true" ]; then
+        "$@"
+        return $?
+    fi
+
+    "$@" >> "$LOG_FILE" 2>&1 || {
+        show_log_tail
+        return 1
+    }
 }
 
 write_status() {
@@ -167,7 +185,7 @@ generate_admin_claim() {
     local base_url
     base_url="$(public_base_url)"
 
-    if ! docker exec coolify php artisan sovereign:admin-claim --auto --base-url="$base_url"; then
+    if ! run_logged docker exec coolify php artisan sovereign:admin-claim --auto --base-url="$base_url"; then
         log "Automatic admin claim link was not generated. Run manually after selecting an admin user:"
         log "docker exec -it coolify php artisan sovereign:admin-claim --user-id=<id> --base-url=${base_url}"
     fi
@@ -185,7 +203,7 @@ sync_host_domain() {
     write_status "5" "Syncing host domain"
     log "Syncing host domain and panel URL"
 
-    if ! docker exec coolify php artisan sovereign:sync-host-domain --url="$app_url" --domain="$host_domain"; then
+    if ! run_logged docker exec coolify php artisan sovereign:sync-host-domain --url="$app_url" --domain="$host_domain"; then
         log "Host domain sync did not complete automatically. You can run manually:"
         log "docker exec coolify php artisan sovereign:sync-host-domain --url=${app_url} --domain=${host_domain}"
         return 1
@@ -196,7 +214,7 @@ sync_identity_policy() {
     write_status "4" "Syncing SL1 identity policy"
     log "Syncing SL1 identity policy"
 
-    if ! docker exec coolify php artisan sovereign:sync-identity-policy; then
+    if ! run_logged docker exec coolify php artisan sovereign:sync-identity-policy; then
         log "SL1 identity policy sync did not complete automatically. You can run manually:"
         log "docker exec coolify php artisan sovereign:sync-identity-policy"
         return 1
@@ -207,7 +225,7 @@ run_migrations() {
     write_status "4" "Running database migrations"
     log "Running Coolify migrations"
 
-    if ! docker exec coolify php artisan migrate --force; then
+    if ! run_logged docker exec coolify php artisan migrate --force; then
         log "Coolify migrations did not complete automatically. You can run manually:"
         log "docker exec coolify php artisan migrate --force"
         return 1
@@ -299,12 +317,12 @@ COMPOSE_FILES+=(-f "${SOURCE_DIR}/docker-compose.sovereign.prod.yml")
 
 write_status "2" "Pulling images"
 log "Pulling images"
-COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
+run_logged env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" pull
 
 write_status "3" "Starting containers"
 log "Starting containers"
-COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
+run_logged env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
 mark_converge_state "CONTAINERS_STARTED"
 
