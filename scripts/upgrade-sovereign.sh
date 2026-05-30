@@ -14,8 +14,51 @@ RAW_BASE="${SOVEREIGN_RAW_BASE:-https://raw.githubusercontent.com/${REPOSITORY}/
 SOVEREIGN_RUNTIME_CONVERGE_OWNER="${SOVEREIGN_RUNTIME_CONVERGE_OWNER:-false}"
 SOVEREIGN_VERBOSE="${SOVEREIGN_VERBOSE:-false}"
 
+if [ -z "${NO_COLOR:-}" ]; then
+    C_RESET="$(printf '\033[0m')"
+    C_DIM="$(printf '\033[2m')"
+    C_CYAN="$(printf '\033[36m')"
+    C_MAGENTA="$(printf '\033[35m')"
+    C_GREEN="$(printf '\033[32m')"
+else
+    C_RESET=""
+    C_DIM=""
+    C_CYAN=""
+    C_MAGENTA=""
+    C_GREEN=""
+fi
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+phase() {
+    echo "${C_MAGENTA}▸${C_RESET} ${C_CYAN}$*${C_RESET}" | tee -a "$LOG_FILE"
+}
+
+progress() {
+    local current="$1"
+    local total="$2"
+    local label="$3"
+    local width=24
+    local filled empty bar=""
+
+    if [ "${total}" -le 0 ]; then
+        total=1
+    fi
+    filled=$((current * width / total))
+    empty=$((width - filled))
+
+    while [ "${filled}" -gt 0 ]; do
+        bar="${bar}█"
+        filled=$((filled - 1))
+    done
+    while [ "${empty}" -gt 0 ]; do
+        bar="${bar}░"
+        empty=$((empty - 1))
+    done
+
+    echo "${C_MAGENTA}[${bar}]${C_RESET} ${C_CYAN}${current}/${total}${C_RESET} ${label}" | tee -a "$LOG_FILE"
 }
 
 show_log_tail() {
@@ -24,14 +67,42 @@ show_log_tail() {
 }
 
 run_logged() {
+    local label="$1"
+    shift
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local frame_index=0 pid rc
+
     if [ "${SOVEREIGN_VERBOSE}" = "true" ]; then
         "$@"
         return $?
     fi
 
-    "$@" >> "$LOG_FILE" 2>&1 || {
+    "$@" >> "$LOG_FILE" 2>&1 &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ -t 1 ]; then
+            printf '\r%b %s %b' "${C_MAGENTA}${frames[$frame_index]}${C_RESET}" "${label}" "${C_DIM}(log: ${LOG_FILE})${C_RESET}"
+        fi
+        frame_index=$(((frame_index + 1) % ${#frames[@]}))
+        sleep 0.15
+    done
+    set +e
+    wait "$pid"
+    rc=$?
+    set -e
+
+    if [ -t 1 ]; then
+        printf '\r\033[K'
+    fi
+
+    if [ "${rc}" -eq 0 ]; then
+        echo "${C_GREEN}✓${C_RESET} ${label}" | tee -a "$LOG_FILE"
+        return 0
+    fi
+
+    {
         show_log_tail
-        return 1
+        return "${rc}"
     }
 }
 
@@ -185,7 +256,7 @@ generate_admin_claim() {
     local base_url
     base_url="$(public_base_url)"
 
-    if ! run_logged docker exec coolify php artisan sovereign:admin-claim --auto --base-url="$base_url"; then
+    if ! run_logged "generating admin claim" docker exec coolify php artisan sovereign:admin-claim --auto --base-url="$base_url"; then
         log "Automatic admin claim link was not generated. Run manually after selecting an admin user:"
         log "docker exec -it coolify php artisan sovereign:admin-claim --user-id=<id> --base-url=${base_url}"
     fi
@@ -203,7 +274,7 @@ sync_host_domain() {
     write_status "5" "Syncing host domain"
     log "Syncing host domain and panel URL"
 
-    if ! run_logged docker exec coolify php artisan sovereign:sync-host-domain --url="$app_url" --domain="$host_domain"; then
+    if ! run_logged "syncing host domain" docker exec coolify php artisan sovereign:sync-host-domain --url="$app_url" --domain="$host_domain"; then
         log "Host domain sync did not complete automatically. You can run manually:"
         log "docker exec coolify php artisan sovereign:sync-host-domain --url=${app_url} --domain=${host_domain}"
         return 1
@@ -214,7 +285,7 @@ sync_identity_policy() {
     write_status "4" "Syncing SL1 identity policy"
     log "Syncing SL1 identity policy"
 
-    if ! run_logged docker exec coolify php artisan sovereign:sync-identity-policy; then
+    if ! run_logged "syncing identity policy" docker exec coolify php artisan sovereign:sync-identity-policy; then
         log "SL1 identity policy sync did not complete automatically. You can run manually:"
         log "docker exec coolify php artisan sovereign:sync-identity-policy"
         return 1
@@ -225,7 +296,7 @@ run_migrations() {
     write_status "4" "Running database migrations"
     log "Running Coolify migrations"
 
-    if ! run_logged docker exec coolify php artisan migrate --force; then
+    if ! run_logged "running database migrations" docker exec coolify php artisan migrate --force; then
         log "Coolify migrations did not complete automatically. You can run manually:"
         log "docker exec coolify php artisan migrate --force"
         return 1
@@ -257,7 +328,8 @@ fi
 mkdir -p "$SOURCE_DIR"
 touch "$LOG_FILE"
 
-log "Starting Sovereign Coolify upgrade"
+phase "runtime converge started"
+progress 1 7 "bootstrap"
 mark_converge_state "BOOTSTRAP_STARTED"
 write_status "1" "Downloading compose files"
 
@@ -316,24 +388,30 @@ fi
 COMPOSE_FILES+=(-f "${SOURCE_DIR}/docker-compose.sovereign.prod.yml")
 
 write_status "2" "Pulling images"
-log "Pulling images"
-run_logged env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
+progress 2 7 "pull images"
+phase "pulling runtime images"
+run_logged "pulling runtime images" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" pull
 
 write_status "3" "Starting containers"
-log "Starting containers"
-run_logged env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
+progress 3 7 "start containers"
+phase "starting containers"
+run_logged "starting containers" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
 mark_converge_state "CONTAINERS_STARTED"
 
+progress 4 7 "migrations"
 run_migrations
 mark_converge_state "MIGRATIONS_DONE"
+progress 5 7 "identity policy"
 sync_identity_policy
 mark_converge_state "POLICY_SYNCED"
+progress 6 7 "domain routing"
 sync_host_domain
 mark_converge_state "DOMAIN_SYNCED"
 generate_admin_claim
 
 write_status "done" "Sovereign Coolify upgrade complete"
 mark_converge_state "CONVERGE_COMPLETE"
+progress 7 7 "converge complete"
 log "Sovereign Coolify upgrade complete"

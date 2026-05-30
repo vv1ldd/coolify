@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Actions\Proxy\StartProxy;
 use App\Models\InstanceSettings;
 use App\Models\Server;
 use Illuminate\Console\Command;
@@ -60,6 +61,8 @@ class SovereignSyncHostDomainCommand extends Command
         try {
             $server->setupDynamicProxyConfiguration();
             $this->info('Synced proxy dynamic configuration for the local Coolify server.');
+            StartProxy::run($server, false, true);
+            $this->info('Ensured local Coolify proxy is running for the panel domain.');
         } catch (\Throwable $e) {
             if ($this->isLocalSshRefusal($server, $e)) {
                 $this->warn('Local proxy sync could not use localhost SSH. Panel URL was updated; proxy sync was skipped.');

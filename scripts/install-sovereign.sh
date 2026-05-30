@@ -58,15 +58,15 @@ term_line() {
 
 banner() {
     echo ""
-    term_line "${C_MAGENTA}============================================================${C_RESET}"
+    term_line "${C_MAGENTA}╔════════════════════════════════════════════════════════════╗${C_RESET}"
     term_line "${C_CYAN}  SOVEREIGN COOLIFY // SL1 CONTROL-PLANE BOOTSTRAP${C_RESET}"
-    term_line "${C_MAGENTA}============================================================${C_RESET}"
+    term_line "${C_MAGENTA}╚════════════════════════════════════════════════════════════╝${C_RESET}"
     term_line "${C_DIM}  identity: SL1-only  theme: cyberpunk  mode: auto-aware${C_RESET}"
     echo ""
 }
 
 section() {
-    term_line "${C_CYAN}>> $*${C_RESET}"
+    term_line "${C_MAGENTA}▸${C_RESET} ${C_CYAN}$*${C_RESET}"
 }
 
 note() {
@@ -74,7 +74,32 @@ note() {
 }
 
 warning() {
-    term_line "${C_YELLOW}!! $*${C_RESET}"
+    term_line "${C_YELLOW}!${C_RESET} $*"
+}
+
+progress() {
+    local current="$1"
+    local total="$2"
+    local label="$3"
+    local width=24
+    local filled empty bar=""
+
+    if [ "${total}" -le 0 ]; then
+        total=1
+    fi
+    filled=$((current * width / total))
+    empty=$((width - filled))
+
+    while [ "${filled}" -gt 0 ]; do
+        bar="${bar}█"
+        filled=$((filled - 1))
+    done
+    while [ "${empty}" -gt 0 ]; do
+        bar="${bar}░"
+        empty=$((empty - 1))
+    done
+
+    term_line "${C_MAGENTA}[${bar}]${C_RESET} ${C_CYAN}${current}/${total}${C_RESET} ${label}"
 }
 
 die() {
@@ -101,14 +126,42 @@ show_log_tail() {
 }
 
 run_logged() {
+    local label="$1"
+    shift
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local frame_index=0 pid rc
+
     if [ "${SOVEREIGN_VERBOSE}" = "true" ]; then
         "$@"
         return $?
     fi
 
-    "$@" >> "$LOG_FILE" 2>&1 || {
+    "$@" >> "$LOG_FILE" 2>&1 &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ -t 1 ]; then
+            printf '\r%b %s %b' "${C_MAGENTA}${frames[$frame_index]}${C_RESET}" "${label}" "${C_DIM}(log: ${LOG_FILE})${C_RESET}"
+        fi
+        frame_index=$(((frame_index + 1) % ${#frames[@]}))
+        sleep 0.15
+    done
+    set +e
+    wait "$pid"
+    rc=$?
+    set -e
+
+    if [ -t 1 ]; then
+        printf '\r\033[K'
+    fi
+
+    if [ "${rc}" -eq 0 ]; then
+        term_line "${C_GREEN}✓${C_RESET} ${label}"
+        return 0
+    fi
+
+    {
         show_log_tail
-        return 1
+        return "${rc}"
     }
 }
 
@@ -622,8 +675,10 @@ run_existing_upgrade() {
 }
 
 install_docker() {
+    progress 1 4 "docker engine"
     if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
         log "Docker and Docker Compose are already installed"
+        term_line "${C_GREEN}✓${C_RESET} docker engine ready"
         return
     fi
 
@@ -631,14 +686,11 @@ install_docker() {
     if [ "${SOVEREIGN_VERBOSE}" = "true" ]; then
         curl -fsSL https://get.docker.com | sh
     else
-        { curl -fsSL https://get.docker.com | sh; } >> "$LOG_FILE" 2>&1 || {
-            show_log_tail
-            return 1
-        }
+        run_logged "installing Docker Engine" bash -c 'curl -fsSL https://get.docker.com | sh'
     fi
 
     if command -v systemctl >/dev/null 2>&1; then
-        run_logged systemctl enable --now docker
+        run_logged "starting Docker service" systemctl enable --now docker
     fi
 }
 
@@ -648,10 +700,7 @@ login_to_registry() {
         if [ "${SOVEREIGN_VERBOSE}" = "true" ]; then
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
         else
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin >> "$LOG_FILE" 2>&1 || {
-                show_log_tail
-                return 1
-            }
+            run_logged "logging in to ghcr.io" bash -c 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin'
         fi
     fi
 }
@@ -740,6 +789,7 @@ check_host_resources
 install_docker
 login_to_registry
 
+progress 2 4 "host detection"
 DETECTED_INSTALL_STATE="$(detected_install_state)"
 resolve_install_mode "$DETECTED_INSTALL_STATE"
 choose_host_domain
@@ -756,8 +806,10 @@ echo ""
 
 case "$SELECTED_INSTALL_MODE" in
     upgrade|refresh)
+        progress 3 4 "runtime configuration"
         apply_host_domain_env
         run_host_hardening
+        progress 4 4 "runtime converge"
         run_existing_upgrade "$SELECTED_ADMIN_CLAIM"
         exit 0
         ;;
@@ -769,6 +821,7 @@ case "$SELECTED_INSTALL_MODE" in
 esac
 
 log "Downloading Sovereign Coolify configuration"
+progress 3 4 "runtime configuration"
 download_file docker-compose.yml "${SOURCE_DIR}/docker-compose.yml"
 download_file docker-compose.prod.yml "${SOURCE_DIR}/docker-compose.prod.yml"
 download_file docker-compose.sovereign.prod.yml "${SOURCE_DIR}/docker-compose.sovereign.prod.yml"
@@ -823,6 +876,7 @@ chown -R 9999:root "$INSTALL_ROOT"
 chmod -R 700 "$INSTALL_ROOT"
 
 log "Starting Sovereign Coolify"
+progress 4 4 "runtime converge"
 SOVEREIGN_RUNTIME_CONVERGE_OWNER="$SOVEREIGN_RUNTIME_CONVERGE_OWNER" bash "${SOURCE_DIR}/upgrade-sovereign.sh"
 
 echo ""
