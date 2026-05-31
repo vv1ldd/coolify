@@ -140,7 +140,7 @@ run_logged() {
     pid=$!
     while kill -0 "$pid" 2>/dev/null; do
         if [ -t 1 ]; then
-            printf '\r%b %s %b' "${C_MAGENTA}${frames[$frame_index]}${C_RESET}" "${label}" "${C_DIM}(log: ${LOG_FILE})${C_RESET}"
+            printf '\r%b %s...' "${C_MAGENTA}${frames[$frame_index]}${C_RESET}" "${label}"
         fi
         frame_index=$(((frame_index + 1) % ${#frames[@]}))
         sleep 0.15
@@ -657,7 +657,7 @@ run_host_hardening() {
 run_existing_upgrade() {
     local generate_claim="${1:-false}"
 
-    log "Existing Coolify installation detected. Running sovereign ${SELECTED_INSTALL_MODE} path."
+    log "Existing Coolify installation detected. Running sovereign runtime converge path (${SELECTED_INSTALL_MODE})."
     download_file scripts/upgrade-sovereign.sh "${SOURCE_DIR}/upgrade-sovereign.sh"
     chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh"
 
@@ -666,7 +666,7 @@ run_existing_upgrade() {
         bash "${SOURCE_DIR}/upgrade-sovereign.sh"
 
     echo ""
-    term_line "${C_GREEN}Sovereign Coolify ${SELECTED_INSTALL_MODE} complete.${C_RESET}"
+    term_line "${C_GREEN}Sovereign runtime converge complete (${SELECTED_INSTALL_MODE}).${C_RESET}"
     if [ "$generate_claim" = "true" ]; then
         echo "Use the printed CLAIM_URL to bind the existing admin to SimpleL1 Identity."
     else

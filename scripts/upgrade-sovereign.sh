@@ -81,7 +81,7 @@ run_logged() {
     pid=$!
     while kill -0 "$pid" 2>/dev/null; do
         if [ -t 1 ]; then
-            printf '\r%b %s %b' "${C_MAGENTA}${frames[$frame_index]}${C_RESET}" "${label}" "${C_DIM}(log: ${LOG_FILE})${C_RESET}"
+            printf '\r%b %s...' "${C_MAGENTA}${frames[$frame_index]}${C_RESET}" "${label}"
         fi
         frame_index=$(((frame_index + 1) % ${#frames[@]}))
         sleep 0.15
@@ -123,6 +123,44 @@ mark_converge_state() {
     local state="$1"
     mkdir -p "$(dirname "${CONVERGE_STATE_FILE}")"
     printf '%s|%s|repository=%s|branch=%s\n' "${state}" "$(date -Iseconds)" "${REPOSITORY}" "${BRANCH}" >> "${CONVERGE_STATE_FILE}"
+}
+
+observe_panel_tls() {
+    local app_url="$1"
+    local timeout="${SOVEREIGN_PANEL_TLS_TIMEOUT:-180}"
+    local interval="${SOVEREIGN_PANEL_TLS_INTERVAL:-5}"
+    local elapsed=0
+    local tls_state="pending_acme"
+
+    case "${app_url}" in
+        https://*) ;;
+        *) return 0 ;;
+    esac
+
+    write_status "postflight" "Observing panel TLS certificate"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Postflight observing panel TLS at ${app_url}" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] panel_tls_state=${tls_state} url=${app_url}" >> "$LOG_FILE"
+
+    while [ "${elapsed}" -le "${timeout}" ]; do
+        if curl -sS -I --max-time 10 "${app_url}" >/dev/null 2>>"$LOG_FILE"; then
+            tls_state="trusted"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] panel_tls_state=${tls_state} url=${app_url}" >> "$LOG_FILE"
+            return 0
+        fi
+
+        sleep "${interval}"
+        elapsed=$((elapsed + interval))
+    done
+
+    if curl -k -sS -I --max-time 10 "${app_url}" >/dev/null 2>>"$LOG_FILE"; then
+        tls_state="fallback_self_signed"
+    else
+        tls_state="unreachable"
+    fi
+
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] panel_tls_state=${tls_state} url=${app_url}" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] TLS is postflight-only; converge remains complete. Check DNS A, ports 80/443, and Traefik ACME logs if this does not settle." >> "$LOG_FILE"
+    return 0
 }
 
 get_env_var() {
@@ -279,6 +317,8 @@ sync_host_domain() {
         log "docker exec coolify php artisan sovereign:sync-host-domain --url=${app_url} --domain=${host_domain}"
         return 1
     fi
+
+    run_logged "postflight panel TLS" observe_panel_tls "$app_url"
 }
 
 sync_identity_policy() {
@@ -411,7 +451,7 @@ sync_host_domain
 mark_converge_state "DOMAIN_SYNCED"
 generate_admin_claim
 
-write_status "done" "Sovereign Coolify upgrade complete"
+write_status "done" "Sovereign runtime converge complete"
 mark_converge_state "CONVERGE_COMPLETE"
 progress 7 7 "converge complete"
-log "Sovereign Coolify upgrade complete"
+log "Sovereign runtime converge complete"

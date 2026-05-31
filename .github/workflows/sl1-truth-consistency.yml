@@ -1,0 +1,33 @@
+name: SL1 Truth Consistency
+
+permissions:
+  contents: read
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  truth-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout coolify
+        uses: actions/checkout@v4
+        with:
+          path: coolify
+
+      - name: Checkout simple-l1 truth spec
+        uses: actions/checkout@v4
+        with:
+          repository: vv1ldd/simple-l1
+          path: simple-l1
+
+      - name: Validate Coolify SL1 truth consistency
+        working-directory: coolify
+        env:
+          SL1_TRUTH_SPEC_PATH: ../simple-l1/docs/specs/sl1-truth-spec.v1.json
+        run: |
+          php scripts/check-sl1-truth-consistency.php
+          php -l app/Livewire/Server/Index.php
+          bash -n scripts/install-sovereign.sh
+          bash -n scripts/upgrade-sovereign.sh

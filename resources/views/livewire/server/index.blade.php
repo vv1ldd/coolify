@@ -49,14 +49,14 @@
                     Sovereign Authority Mesh
                 </h3>
                 <p class="text-neutral-600 dark:text-neutral-400 mt-1.5 text-xs font-semibold max-w-3xl leading-relaxed">
-                    Remote peers are displayed as observed evidence only. Peer events can be synced, signed, evaluated, and explained here without mutating the local authority graph.
+                    Mesh truth is split by boundary: bridge discovery is evidence, host admission is membership, and this UI is a read-only projection.
                 </p>
             </div>
 
             @if (data_get($sl1Network, 'available'))
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0 w-full xl:w-auto">
                     <div class="rounded border-2 border-black bg-neutral-50 dark:bg-neutral-900/60 p-3 shadow-[2px_2px_0px_#000000]">
-                        <div class="text-[9px] font-black uppercase tracking-widest text-neutral-500">Peers</div>
+                        <div class="text-[9px] font-black uppercase tracking-widest text-neutral-500">Admitted</div>
                         <div class="text-xl font-black text-black dark:text-white">{{ data_get($sl1Network, 'summary.peers', 0) }}</div>
                     </div>
                     <div class="rounded border-2 border-black bg-[#22d3ee]/10 p-3 shadow-[2px_2px_0px_#000000]">
@@ -68,8 +68,8 @@
                         <div class="text-xl font-black text-black dark:text-white">{{ data_get($sl1Network, 'summary.observed_events', 0) }}</div>
                     </div>
                     <div class="rounded border-2 border-black bg-[#f59e0b]/10 p-3 shadow-[2px_2px_0px_#000000]">
-                        <div class="text-[9px] font-black uppercase tracking-widest text-[#fbbf24]">Dry Run OK</div>
-                        <div class="text-xl font-black text-black dark:text-white">{{ data_get($sl1Network, 'summary.dry_run_admissible', 0) }}</div>
+                        <div class="text-[9px] font-black uppercase tracking-widest text-[#fbbf24]">Discovery</div>
+                        <div class="text-xl font-black text-black dark:text-white">{{ data_get($sl1Network, 'summary.discovery_candidates', 0) }}</div>
                     </div>
                 </div>
             @endif
@@ -117,9 +117,9 @@
                     <div class="flex items-center justify-between gap-3 mb-3">
                         <div>
                             <div class="text-[9px] font-black uppercase tracking-widest text-neutral-500">Peer Observation Layer</div>
-                            <div class="text-sm font-black text-black dark:text-white">Registered SL1 Peers</div>
+                            <div class="text-sm font-black text-black dark:text-white">Admitted SL1 Peers</div>
                         </div>
-                        <span class="text-[9px] font-black uppercase tracking-widest text-neutral-500">No Projection Mutation</span>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-neutral-500">Host Authority Only</span>
                     </div>
 
                     <div class="grid gap-2">
@@ -167,10 +167,63 @@
                             </div>
                         @empty
                             <div class="rounded border-2 border-dashed border-black bg-white dark:bg-black/20 p-4 text-xs font-bold text-neutral-500 dark:text-neutral-400">
-                                No SL1 peers registered yet. Register peers with <span class="font-black text-black dark:text-white">php artisan sl1:peer-register</span>.
+                                No SL1 peers admitted yet. Admission is a local host authority decision; bridge discovery alone is not membership.
                             </div>
                         @endforelse
                     </div>
+                </div>
+            </div>
+
+            <div class="mt-4 rounded border-2 border-black bg-neutral-50 dark:bg-neutral-900/50 p-4 shadow-[2px_2px_0px_#000000]">
+                <div class="flex items-center justify-between gap-3 mb-3">
+                    <div>
+                        <div class="text-[9px] font-black uppercase tracking-widest text-neutral-500">Discovery Layer</div>
+                        <div class="text-sm font-black text-black dark:text-white">Bridge-Visible Candidates</div>
+                    </div>
+                    <span class="text-[9px] font-black uppercase tracking-widest text-neutral-500">Evidence Only</span>
+                </div>
+
+                <div class="grid gap-2">
+                    @forelse (data_get($sl1Network, 'discovery_candidates', []) as $candidate)
+                        <div class="rounded border border-dashed border-black bg-white dark:bg-black/30 p-3">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div class="min-w-0">
+                                    <div class="font-black text-sm text-black dark:text-white truncate">{{ data_get($candidate, 'host_domain') ?: 'unknown host' }}</div>
+                                    <div class="text-[10px] font-bold text-neutral-500 uppercase tracking-widest truncate">{{ data_get($candidate, 'issuer') ?: 'issuer pending' }}</div>
+                                </div>
+                                <div class="flex flex-wrap gap-1.5">
+                                    <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-[#fbbf24] bg-[#f59e0b]/10">
+                                        {{ strtoupper(data_get($candidate, 'verification_state', 'join_request')) }}
+                                    </span>
+                                    <span class="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border border-black text-neutral-500 bg-neutral-100 dark:bg-neutral-900">
+                                        NOT ADMITTED
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="mt-2 grid grid-cols-2 lg:grid-cols-4 gap-2 text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                                <div>
+                                    <div>Request</div>
+                                    <div class="text-black dark:text-white normal-case tracking-normal truncate">{{ data_get($candidate, 'request_id') }}</div>
+                                </div>
+                                <div>
+                                    <div>Status</div>
+                                    <div class="text-black dark:text-white">{{ data_get($candidate, 'status', 'observed') }}</div>
+                                </div>
+                                <div>
+                                    <div>Artifacts</div>
+                                    <div class="text-black dark:text-white">{{ data_get($candidate, 'artifact_count', 0) }}</div>
+                                </div>
+                                <div>
+                                    <div>Authority</div>
+                                    <div class="text-black dark:text-white">host-only</div>
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="rounded border-2 border-dashed border-black bg-white dark:bg-black/20 p-4 text-xs font-bold text-neutral-500 dark:text-neutral-400">
+                            No bridge-visible discovery candidates. This does not affect already admitted peers.
+                        </div>
+                    @endforelse
                 </div>
             </div>
         @endif

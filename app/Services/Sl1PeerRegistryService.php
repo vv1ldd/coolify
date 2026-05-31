@@ -12,6 +12,8 @@ class Sl1PeerRegistryService
 {
     public function register(string $issuer, ?string $name = null): Sl1PeerNode
     {
+        $this->requireHostAdmissionActor('host');
+
         $issuer = $this->normalizeIssuer($issuer);
 
         return Sl1PeerNode::query()->updateOrCreate(
@@ -22,6 +24,13 @@ class Sl1PeerRegistryService
                 'last_error' => null,
             ]
         );
+    }
+
+    private function requireHostAdmissionActor(string $actor): void
+    {
+        if ($actor !== 'host') {
+            throw new RuntimeException('ADMISSION_AUTHORITY_VIOLATION: admitted_peer requires host admission actor.');
+        }
     }
 
     /**
