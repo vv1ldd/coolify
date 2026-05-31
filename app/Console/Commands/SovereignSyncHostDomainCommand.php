@@ -53,7 +53,7 @@ class SovereignSyncHostDomainCommand extends Command
     private function syncProxyConfiguration(Server $server): void
     {
         if ($this->shouldSkipLocalSshProxySync($server)) {
-            $this->warn('Local server #0 is configured for localhost SSH, but SSH is not required for Sovereign host-domain sync. Panel URL was updated; proxy sync was skipped.');
+            $this->warn('Local server #0 uses local substrate routing; SSH proxy sync is not required for Sovereign host-domain sync. Panel URL was updated; proxy sync was skipped.');
 
             return;
         }
@@ -77,12 +77,17 @@ class SovereignSyncHostDomainCommand extends Command
     private function shouldSkipLocalSshProxySync(Server $server): bool
     {
         return $server->isLocalhost()
-            && in_array(strtolower((string) $server->ip), ['localhost', '127.0.0.1', '::1'], true);
+            && in_array(strtolower((string) $server->ip), ['localhost', '127.0.0.1', '::1', 'host.docker.internal'], true);
     }
 
     private function isLocalSshRefusal(Server $server, \Throwable $e): bool
     {
+        $message = $e->getMessage();
+
         return $server->isLocalhost()
-            && str_contains($e->getMessage(), 'ssh: connect to host localhost port 22');
+            && (
+                str_contains($message, 'ssh: connect to host localhost port 22')
+                || str_contains($message, 'Could not resolve hostname host.docker.internal')
+            );
     }
 }
