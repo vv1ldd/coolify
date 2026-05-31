@@ -340,9 +340,10 @@ print_detection() {
             ;;
         sovereign)
             term_line "${C_CYAN}   Detected: existing Sovereign Coolify state${C_RESET}"
-            note "Recommended action: refresh compose/image and restart containers."
+            note "Recommended action: choose [1] to pull the latest Sovereign image and restart safely."
             ;;
     esac
+    note "Non-interactive: SOVEREIGN_RUNTIME_CONVERGE_OWNER=true SOVEREIGN_INSTALL_MODE=refresh SOVEREIGN_ASSUME_YES=true bash"
     echo ""
 }
 
@@ -419,13 +420,13 @@ choose_auto_mode() {
             done
             ;;
         sovereign)
-            term_line "${C_MAGENTA}[1]${C_RESET} Refresh Sovereign Coolify"
-            note "Pulls the latest ghcr.io image, updates compose/env defaults, restarts containers."
-            term_line "${C_MAGENTA}[2]${C_RESET} Refresh and generate a new admin claim"
-            note "Use this only if an existing admin still needs to bind SL1 Identity."
+            term_line "${C_MAGENTA}[1]${C_RESET} Update this Sovereign Coolify now ${C_GREEN}(recommended)${C_RESET}"
+            note "Pulls the latest image, keeps your data, updates runtime files, and restarts containers."
+            term_line "${C_MAGENTA}[2]${C_RESET} Update and print a new admin SL1 claim link"
+            note "Choose this only if an existing admin still needs to bind their SL1 Identity."
             term_line "${C_MAGENTA}[q]${C_RESET} Abort"
             while true; do
-                printf 'Select action [1/2/q]: ' > /dev/tty
+                printf 'What should I do? [1 = update, 2 = update + claim, q = abort]: ' > /dev/tty
                 read -r choice < /dev/tty
                 case "$choice" in
                     1|"")
