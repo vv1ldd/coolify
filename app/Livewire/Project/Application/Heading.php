@@ -78,7 +78,7 @@ class Heading extends Component
 
         // 🏛️ Sovereign operational approval interception for deploying production workloads
         if (! $mandateApproved && app(PolicyEngine::class)->requiresApproval('application.deploy')) {
-            app(PolicyEngine::class)->stage(
+            $intent = app(PolicyEngine::class)->stage(
                 eventType: 'application.deploy',
                 entity: $this->application,
                 payload: [
@@ -89,6 +89,10 @@ class Heading extends Component
                 teamId: $this->application->team_id
             );
 
+            $this->dispatch('open-sl1-intent-popup', url: route('auth.sl1.intent.redirect', [
+                'intent' => $intent->id,
+                'popup' => 1,
+            ]));
             $this->dispatch('success', 'Deployment Intent staged in Pending Pool for cryptographic clearance.');
 
             return;
@@ -166,7 +170,7 @@ class Heading extends Component
 
         // 🏛️ Sovereign operational approval interception for terminating container workloads
         if (! $mandateApproved && app(PolicyEngine::class)->requiresApproval('application.stop')) {
-            app(PolicyEngine::class)->stage(
+            $intent = app(PolicyEngine::class)->stage(
                 eventType: 'application.stop',
                 entity: $this->application,
                 payload: [
@@ -176,6 +180,10 @@ class Heading extends Component
                 teamId: $this->application->team_id
             );
 
+            $this->dispatch('open-sl1-intent-popup', url: route('auth.sl1.intent.redirect', [
+                'intent' => $intent->id,
+                'popup' => 1,
+            ]));
             $this->dispatch('success', 'Termination Intent staged in Pending Pool for cryptographic clearance.');
 
             return;

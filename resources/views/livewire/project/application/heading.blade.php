@@ -183,3 +183,21 @@
         </div>
     </div>
 </nav>
+
+<script>
+    document.addEventListener('livewire:init', () => {
+        Livewire.on('open-sl1-intent-popup', ({ url }) => {
+            const popup = window.open(url, 'sl1_intent_signature', 'popup,width=460,height=720');
+            if (!popup) {
+                window.location.href = url;
+                return;
+            }
+
+            window.addEventListener('message', (event) => {
+                if (event.origin === window.location.origin && event.data?.type === 'sl1:intent-signature') {
+                    window.location.reload();
+                }
+            }, { once: true });
+        });
+    });
+</script>
