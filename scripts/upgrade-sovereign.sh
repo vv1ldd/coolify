@@ -438,6 +438,12 @@ progress 3 7 "start containers"
 phase "starting containers"
 run_logged "starting containers" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
+
+if ! docker exec coolify getent hosts host.docker.internal >/dev/null 2>&1; then
+    log "Recreating Coolify container so host.docker.internal resolves through host-gateway"
+    run_logged "recreating Coolify host gateway" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
+        docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --force-recreate --no-deps --wait --wait-timeout 120 coolify
+fi
 mark_converge_state "CONTAINERS_STARTED"
 
 progress 4 7 "migrations"
