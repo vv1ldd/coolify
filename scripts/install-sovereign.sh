@@ -6,6 +6,7 @@ DATE="$(date +"%Y%m%d-%H%M%S")"
 INSTALL_ROOT="${COOLIFY_INSTALL_ROOT:-/data/coolify}"
 SOURCE_DIR="${COOLIFY_SOURCE_DIR:-${INSTALL_ROOT}/source}"
 ENV_FILE="${SOURCE_DIR}/.env"
+STATUS_FILE="${SOURCE_DIR}/.install-sovereign-status"
 LOG_FILE="${SOURCE_DIR}/installation-sovereign-${DATE}.log"
 REPOSITORY="${SOVEREIGN_REPOSITORY:-vv1ldd/coolify}"
 BRANCH="${SOVEREIGN_BRANCH:-sovereign}"
@@ -13,6 +14,8 @@ RAW_BASE="${SOVEREIGN_RAW_BASE:-https://raw.githubusercontent.com/${REPOSITORY}/
 COOLIFY_IMAGE="${COOLIFY_IMAGE:-ghcr.io/${REPOSITORY}:sovereign}"
 SOVEREIGN_REALTIME_IMAGE="${SOVEREIGN_REALTIME_IMAGE:-ghcr.io/coollabsio/coolify-realtime:1.0.13}"
 HELPER_IMAGE="${HELPER_IMAGE:-ghcr.io/coollabsio/coolify-helper}"
+SOVEREIGN_RUN_ID="${SOVEREIGN_RUN_ID:-$DATE}"
+SOVEREIGN_EXPECTED_RESULT="${SOVEREIGN_EXPECTED_RESULT:-sovereign-coolify-runtime-converged}"
 APP_PORT="${APP_PORT:-8000}"
 SOKETI_PORT="${SOKETI_PORT:-6001}"
 AUTOUPDATE="${AUTOUPDATE:-false}"
@@ -82,11 +85,12 @@ progress() {
     local total="$2"
     local label="$3"
     local width=24
-    local filled empty bar=""
+    local filled empty percent bar=""
 
     if [ "${total}" -le 0 ]; then
         total=1
     fi
+    percent=$((current * 100 / total))
     filled=$((current * width / total))
     empty=$((width - filled))
 
@@ -99,7 +103,61 @@ progress() {
         empty=$((empty - 1))
     done
 
-    term_line "${C_MAGENTA}[${bar}]${C_RESET} ${C_CYAN}${current}/${total}${C_RESET} ${label}"
+    term_line "${C_MAGENTA}[${bar}]${C_RESET} ${C_CYAN}${current}/${total}${C_RESET} ${C_GREEN}${percent}%${C_RESET} ${label}"
+}
+
+fingerprint() {
+    local seed="$1"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$seed" | sha256sum | awk '{ print substr($1, 1, 12) }'
+        return
+    fi
+
+    if command -v shasum >/dev/null 2>&1; then
+        printf '%s' "$seed" | shasum -a 256 | awk '{ print substr($1, 1, 12) }'
+        return
+    fi
+
+    printf '%s' "$seed" | cksum | awk '{ printf "%012x", $1 }'
+}
+
+checkpoint() {
+    local current="$1"
+    local total="$2"
+    local code="$3"
+    local message="$4"
+    local detail="${5:-}"
+    local percent fp timestamp
+
+    if [ "${total}" -le 0 ]; then
+        total=1
+    fi
+
+    percent=$((current * 100 / total))
+    timestamp="$(date -Iseconds)"
+    fp="$(fingerprint "${SOVEREIGN_RUN_ID}|${SOVEREIGN_EXPECTED_RESULT}|${current}/${total}|${code}|${message}|${REPOSITORY}|${BRANCH}")"
+
+    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "${SOVEREIGN_RUN_ID}" "${current}" "${total}" "${percent}" "${code}" "${fp}" "${SOVEREIGN_EXPECTED_RESULT}" "${message}" "${timestamp}" > "$STATUS_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] run=${SOVEREIGN_RUN_ID} checkpoint=${code} progress=${percent}% fingerprint=${fp} expected=${SOVEREIGN_EXPECTED_RESULT} ${message} ${detail}" >> "$LOG_FILE"
+    term_line "${C_GREEN}✓${C_RESET} ${C_CYAN}${percent}%${C_RESET} ${code} ${C_DIM}fp:${fp}${C_RESET} ${message}"
+    if [ -n "$detail" ]; then
+        note "$detail"
+    fi
+}
+
+final_fingerprint() {
+    fingerprint "${SOVEREIGN_RUN_ID}|${SOVEREIGN_EXPECTED_RESULT}|4/4|RUNTIME_CONVERGED|Sovereign runtime converge finished|${REPOSITORY}|${BRANCH}"
+}
+
+progress_contract() {
+    section "Install contract"
+    note "Run:      ${SOVEREIGN_RUN_ID}"
+    note "Target:   ${SOVEREIGN_EXPECTED_RESULT}"
+    note "Final fp: $(final_fingerprint)"
+    note "Status:   ${STATUS_FILE}"
+    note "Format:   ✓ <percent> <checkpoint> fp:<fingerprint> <result>"
+    echo ""
 }
 
 die() {
@@ -663,8 +721,10 @@ run_existing_upgrade() {
     chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh"
 
     SOVEREIGN_RUNTIME_CONVERGE_OWNER="$SOVEREIGN_RUNTIME_CONVERGE_OWNER" \
-        SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE="$generate_claim" \
-        bash "${SOURCE_DIR}/upgrade-sovereign.sh"
+    SOVEREIGN_RUN_ID="$SOVEREIGN_RUN_ID" \
+    SOVEREIGN_EXPECTED_RESULT="$SOVEREIGN_EXPECTED_RESULT" \
+    SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE="$generate_claim" \
+    bash "${SOURCE_DIR}/upgrade-sovereign.sh"
 
     echo ""
     term_line "${C_GREEN}Sovereign runtime converge complete (${SELECTED_INSTALL_MODE}).${C_RESET}"
@@ -680,6 +740,7 @@ install_docker() {
     if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
         log "Docker and Docker Compose are already installed"
         term_line "${C_GREEN}✓${C_RESET} docker engine ready"
+        checkpoint 1 4 "DOCKER_READY" "Docker engine and Compose are available"
         return
     fi
 
@@ -693,6 +754,7 @@ install_docker() {
     if command -v systemctl >/dev/null 2>&1; then
         run_logged "starting Docker service" systemctl enable --now docker
     fi
+    checkpoint 1 4 "DOCKER_READY" "Docker engine and Compose are available"
 }
 
 login_to_registry() {
@@ -786,6 +848,7 @@ touch "$LOG_FILE"
 
 banner
 
+progress_contract
 check_host_resources
 install_docker
 login_to_registry
@@ -804,14 +867,17 @@ if [ -n "$SELECTED_APP_URL" ]; then
     note "APP_URL:     ${SELECTED_APP_URL}"
 fi
 echo ""
+checkpoint 2 4 "HOST_DETECTED" "Install mode selected" "state=${DETECTED_INSTALL_STATE} mode=${SELECTED_INSTALL_MODE} app_url=${SELECTED_APP_URL:-unset}"
 
 case "$SELECTED_INSTALL_MODE" in
     upgrade|refresh)
         progress 3 4 "runtime configuration"
         apply_host_domain_env
         run_host_hardening
+        checkpoint 3 4 "RUNTIME_CONFIGURED" "Runtime environment prepared" "mode=${SELECTED_INSTALL_MODE} hardening=${SELECTED_HARDENING}"
         progress 4 4 "runtime converge"
         run_existing_upgrade "$SELECTED_ADMIN_CLAIM"
+        checkpoint 4 4 "RUNTIME_CONVERGED" "Sovereign runtime converge finished" "mode=${SELECTED_INSTALL_MODE}"
         exit 0
         ;;
     fresh)
@@ -875,10 +941,15 @@ prepare_ssh_key
 run_host_hardening
 chown -R 9999:root "$INSTALL_ROOT"
 chmod -R 700 "$INSTALL_ROOT"
+checkpoint 3 4 "RUNTIME_CONFIGURED" "Runtime environment prepared" "mode=${SELECTED_INSTALL_MODE} app_url=${SELECTED_APP_URL:-unset}"
 
 log "Starting Sovereign Coolify"
 progress 4 4 "runtime converge"
-SOVEREIGN_RUNTIME_CONVERGE_OWNER="$SOVEREIGN_RUNTIME_CONVERGE_OWNER" bash "${SOURCE_DIR}/upgrade-sovereign.sh"
+SOVEREIGN_RUNTIME_CONVERGE_OWNER="$SOVEREIGN_RUNTIME_CONVERGE_OWNER" \
+    SOVEREIGN_RUN_ID="$SOVEREIGN_RUN_ID" \
+    SOVEREIGN_EXPECTED_RESULT="$SOVEREIGN_EXPECTED_RESULT" \
+    bash "${SOURCE_DIR}/upgrade-sovereign.sh"
+checkpoint 4 4 "RUNTIME_CONVERGED" "Sovereign runtime converge finished" "mode=${SELECTED_INSTALL_MODE}"
 
 echo ""
 echo "Sovereign Coolify installation complete."

@@ -13,6 +13,13 @@ BRANCH="${SOVEREIGN_BRANCH:-sovereign}"
 RAW_BASE="${SOVEREIGN_RAW_BASE:-https://raw.githubusercontent.com/${REPOSITORY}/${BRANCH}}"
 SOVEREIGN_RUNTIME_CONVERGE_OWNER="${SOVEREIGN_RUNTIME_CONVERGE_OWNER:-false}"
 SOVEREIGN_VERBOSE="${SOVEREIGN_VERBOSE:-false}"
+SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE="${SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE:-false}"
+SOVEREIGN_RUN_ID="${SOVEREIGN_RUN_ID:-$DATE}"
+SOVEREIGN_EXPECTED_RESULT="${SOVEREIGN_EXPECTED_RESULT:-sovereign-coolify-runtime-converged}"
+CONVERGE_TOTAL="${SOVEREIGN_CONVERGE_TOTAL:-7}"
+if [ "${SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE}" = "true" ] && [ -z "${SOVEREIGN_CONVERGE_TOTAL:-}" ]; then
+    CONVERGE_TOTAL=8
+fi
 
 if [ -z "${NO_COLOR:-}" ]; then
     C_RESET="$(printf '\033[0m')"
@@ -36,16 +43,21 @@ phase() {
     echo "${C_MAGENTA}▸${C_RESET} ${C_CYAN}$*${C_RESET}" | tee -a "$LOG_FILE"
 }
 
+note() {
+    echo "${C_DIM}   $*${C_RESET}" | tee -a "$LOG_FILE"
+}
+
 progress() {
     local current="$1"
     local total="$2"
     local label="$3"
     local width=24
-    local filled empty bar=""
+    local filled empty percent bar=""
 
     if [ "${total}" -le 0 ]; then
         total=1
     fi
+    percent=$((current * 100 / total))
     filled=$((current * width / total))
     empty=$((width - filled))
 
@@ -58,7 +70,7 @@ progress() {
         empty=$((empty - 1))
     done
 
-    echo "${C_MAGENTA}[${bar}]${C_RESET} ${C_CYAN}${current}/${total}${C_RESET} ${label}" | tee -a "$LOG_FILE"
+    echo "${C_MAGENTA}[${bar}]${C_RESET} ${C_CYAN}${current}/${total}${C_RESET} ${C_GREEN}${percent}%${C_RESET} ${label}" | tee -a "$LOG_FILE"
 }
 
 show_log_tail() {
@@ -108,6 +120,59 @@ run_logged() {
 
 write_status() {
     echo "$1|$2|$(date -Iseconds)" > "$STATUS_FILE"
+}
+
+fingerprint() {
+    local seed="$1"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$seed" | sha256sum | awk '{ print substr($1, 1, 12) }'
+        return
+    fi
+
+    if command -v shasum >/dev/null 2>&1; then
+        printf '%s' "$seed" | shasum -a 256 | awk '{ print substr($1, 1, 12) }'
+        return
+    fi
+
+    printf '%s' "$seed" | cksum | awk '{ printf "%012x", $1 }'
+}
+
+checkpoint() {
+    local current="$1"
+    local total="$2"
+    local code="$3"
+    local message="$4"
+    local detail="${5:-}"
+    local percent fp timestamp
+
+    if [ "${total}" -le 0 ]; then
+        total=1
+    fi
+
+    percent=$((current * 100 / total))
+    timestamp="$(date -Iseconds)"
+    fp="$(fingerprint "${SOVEREIGN_RUN_ID}|${SOVEREIGN_EXPECTED_RESULT}|${current}/${total}|${code}|${message}|${REPOSITORY}|${BRANCH}")"
+
+    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "${SOVEREIGN_RUN_ID}" "${current}" "${total}" "${percent}" "${code}" "${fp}" "${SOVEREIGN_EXPECTED_RESULT}" "${message}" "${timestamp}" > "$STATUS_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] run=${SOVEREIGN_RUN_ID} checkpoint=${code} progress=${percent}% fingerprint=${fp} expected=${SOVEREIGN_EXPECTED_RESULT} ${message} ${detail}" >> "$LOG_FILE"
+    echo "${C_GREEN}✓${C_RESET} ${C_CYAN}${percent}%${C_RESET} ${code} ${C_DIM}fp:${fp}${C_RESET} ${message}" | tee -a "$LOG_FILE"
+    if [ -n "$detail" ]; then
+        echo "${C_DIM}   ${detail}${C_RESET}" | tee -a "$LOG_FILE"
+    fi
+}
+
+final_fingerprint() {
+    fingerprint "${SOVEREIGN_RUN_ID}|${SOVEREIGN_EXPECTED_RESULT}|${CONVERGE_TOTAL}/${CONVERGE_TOTAL}|CONVERGE_COMPLETE|Sovereign runtime converge complete|${REPOSITORY}|${BRANCH}"
+}
+
+progress_contract() {
+    phase "runtime converge contract"
+    note "Run:      ${SOVEREIGN_RUN_ID}"
+    note "Target:   ${SOVEREIGN_EXPECTED_RESULT}"
+    note "Final fp: $(final_fingerprint)"
+    note "Status:   ${STATUS_FILE}"
+    note "Format:   ✓ <percent> <checkpoint> fp:<fingerprint> <result>"
 }
 
 require_runtime_converge_owner() {
@@ -288,15 +353,22 @@ generate_admin_claim() {
         return
     fi
 
-    write_status "6" "Generating admin claim link"
+    local claim_step
+    claim_step=$((CONVERGE_TOTAL - 1))
+
+    progress "$claim_step" "$CONVERGE_TOTAL" "admin claim"
+    write_status "$claim_step" "Generating admin claim link"
     log "Generating one-time SimpleL1 admin claim link"
 
     local base_url
     base_url="$(public_base_url)"
 
-    if ! run_logged "generating admin claim" docker exec coolify php artisan sovereign:admin-claim --auto --base-url="$base_url"; then
+    if run_logged "generating admin claim" docker exec coolify php artisan sovereign:admin-claim --auto --base-url="$base_url"; then
+        checkpoint "$claim_step" "$CONVERGE_TOTAL" "ADMIN_CLAIM_READY" "One-time SL1 admin claim generated" "base_url=${base_url}"
+    else
         log "Automatic admin claim link was not generated. Run manually after selecting an admin user:"
         log "docker exec -it coolify php artisan sovereign:admin-claim --user-id=<id> --base-url=${base_url}"
+        checkpoint "$claim_step" "$CONVERGE_TOTAL" "ADMIN_CLAIM_MANUAL" "Admin claim needs manual generation" "base_url=${base_url}"
     fi
 }
 
@@ -306,6 +378,7 @@ sync_host_domain() {
     host_domain="$(strip_env_quotes "$(get_env_var SOVEREIGN_HOST_DOMAIN)")"
 
     if [ -z "$app_url" ] || [ "$app_url" = "http://localhost" ] || [ "$app_url" = "https://localhost" ]; then
+        checkpoint 6 "$CONVERGE_TOTAL" "DOMAIN_ROUTING_SKIPPED" "No public panel URL configured"
         return
     fi
 
@@ -319,6 +392,7 @@ sync_host_domain() {
     fi
 
     run_logged "postflight panel TLS" observe_panel_tls "$app_url"
+    checkpoint 6 "$CONVERGE_TOTAL" "DOMAIN_ROUTING_READY" "Panel domain synced and TLS postflight observed" "url=${app_url}"
 }
 
 sync_identity_policy() {
@@ -330,6 +404,7 @@ sync_identity_policy() {
         log "docker exec coolify php artisan sovereign:sync-identity-policy"
         return 1
     fi
+    checkpoint 5 "$CONVERGE_TOTAL" "IDENTITY_POLICY_SYNCED" "SL1 identity policy is active"
 }
 
 run_migrations() {
@@ -341,6 +416,7 @@ run_migrations() {
         log "docker exec coolify php artisan migrate --force"
         return 1
     fi
+    checkpoint 4 "$CONVERGE_TOTAL" "MIGRATIONS_APPLIED" "Database schema is current"
 }
 
 run_host_hardening() {
@@ -368,8 +444,9 @@ fi
 mkdir -p "$SOURCE_DIR"
 touch "$LOG_FILE"
 
+progress_contract
 phase "runtime converge started"
-progress 1 7 "bootstrap"
+progress 1 "$CONVERGE_TOTAL" "bootstrap"
 mark_converge_state "BOOTSTRAP_STARTED"
 write_status "1" "Downloading compose files"
 
@@ -410,6 +487,7 @@ set_env_var "SL1_CONNECT_CLIENT_ID" "${SL1_CONNECT_CLIENT_ID:-$(get_env_var SL1_
 set_env_var "SL1_CONNECT_CLIENT_NAME" "$SL1_CONNECT_CLIENT_NAME_VALUE"
 set_env_var "SL1_CONNECT_CALLBACK_PATH" "${SL1_CONNECT_CALLBACK_PATH:-$(get_env_var SL1_CONNECT_CALLBACK_PATH)}"
 set_env_var "SL1_CONNECT_TIMEOUT" "${SL1_CONNECT_TIMEOUT:-$(get_env_var SL1_CONNECT_TIMEOUT)}"
+checkpoint 1 "$CONVERGE_TOTAL" "BOOTSTRAP_READY" "Runtime files and environment are prepared" "repository=${REPOSITORY} branch=${BRANCH}"
 
 run_host_hardening
 
@@ -428,13 +506,14 @@ fi
 COMPOSE_FILES+=(-f "${SOURCE_DIR}/docker-compose.sovereign.prod.yml")
 
 write_status "2" "Pulling images"
-progress 2 7 "pull images"
+progress 2 "$CONVERGE_TOTAL" "pull images"
 phase "pulling runtime images"
 run_logged "pulling runtime images" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" pull
+checkpoint 2 "$CONVERGE_TOTAL" "IMAGES_PULLED" "Runtime images are present locally" "coolify_image=${COOLIFY_IMAGE}"
 
 write_status "3" "Starting containers"
-progress 3 7 "start containers"
+progress 3 "$CONVERGE_TOTAL" "start containers"
 phase "starting containers"
 run_logged "starting containers" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
@@ -445,19 +524,21 @@ if ! docker exec coolify getent hosts host.docker.internal >/dev/null 2>&1; then
         docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --force-recreate --no-deps --wait --wait-timeout 120 coolify
 fi
 mark_converge_state "CONTAINERS_STARTED"
+checkpoint 3 "$CONVERGE_TOTAL" "CONTAINERS_STARTED" "Runtime containers are healthy" "host_gateway=ready"
 
-progress 4 7 "migrations"
+progress 4 "$CONVERGE_TOTAL" "migrations"
 run_migrations
 mark_converge_state "MIGRATIONS_DONE"
-progress 5 7 "identity policy"
+progress 5 "$CONVERGE_TOTAL" "identity policy"
 sync_identity_policy
 mark_converge_state "POLICY_SYNCED"
-progress 6 7 "domain routing"
+progress 6 "$CONVERGE_TOTAL" "domain routing"
 sync_host_domain
 mark_converge_state "DOMAIN_SYNCED"
 generate_admin_claim
 
 write_status "done" "Sovereign runtime converge complete"
 mark_converge_state "CONVERGE_COMPLETE"
-progress 7 7 "converge complete"
+progress "$CONVERGE_TOTAL" "$CONVERGE_TOTAL" "converge complete"
+checkpoint "$CONVERGE_TOTAL" "$CONVERGE_TOTAL" "CONVERGE_COMPLETE" "Sovereign runtime converge complete"
 log "Sovereign runtime converge complete"
