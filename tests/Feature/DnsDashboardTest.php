@@ -173,3 +173,66 @@ test('dns record upsert forces ru records to cloudflare dns only', function () {
     Http::assertSent(fn ($request) => $request->method() === 'POST'
         && data_get($request->data(), 'proxied') === false);
 });
+
+test('dns zone page supports AAAA records from ui and cloudflare sync', function () {
+    $zone = DnsZone::create([
+        'team_id' => $this->team->id,
+        'provider' => 'cloudflare',
+        'name' => 'example.com',
+        'provider_zone_id' => 'zone-ipv6',
+        'api_token' => 'cloudflare-test-token',
+    ]);
+
+    Http::fake([
+        'https://api.cloudflare.com/client/v4/zones/zone-ipv6/dns_records*' => Http::sequence()
+            ->push(['success' => true, 'result' => []])
+            ->push([
+                'success' => true,
+                'result' => [
+                    'id' => 'record-ipv6-ui',
+                    'type' => 'AAAA',
+                    'name' => 'ipv6.example.com',
+                    'content' => '2001:db8::10',
+                    'ttl' => 1,
+                    'proxied' => false,
+                ],
+            ])
+            ->push([
+                'success' => true,
+                'result' => [
+                    [
+                        'id' => 'record-ipv6-provider',
+                        'type' => 'AAAA',
+                        'name' => 'provider.example.com',
+                        'content' => '2001:db8::20',
+                        'ttl' => 1,
+                        'proxied' => false,
+                    ],
+                ],
+            ]),
+    ]);
+
+    Livewire::test(DnsShow::class, ['zone_uuid' => $zone->uuid])
+        ->set('type', 'AAAA')
+        ->set('record_name', 'ipv6.example.com')
+        ->set('content', '2001:db8::10')
+        ->set('ttl', 1)
+        ->call('upsertRecord')
+        ->call('syncProviderRecords');
+
+    $this->assertDatabaseHas('dns_records', [
+        'dns_zone_id' => $zone->id,
+        'type' => 'AAAA',
+        'name' => 'ipv6.example.com',
+        'content' => '2001:db8::10',
+        'provider_record_id' => 'record-ipv6-ui',
+    ]);
+
+    $this->assertDatabaseHas('dns_records', [
+        'dns_zone_id' => $zone->id,
+        'type' => 'AAAA',
+        'name' => 'provider.example.com',
+        'content' => '2001:db8::20',
+        'provider_record_id' => 'record-ipv6-provider',
+    ]);
+});

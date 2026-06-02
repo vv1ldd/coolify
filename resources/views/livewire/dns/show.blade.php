@@ -50,6 +50,7 @@
                     <div class="grid gap-3 lg:grid-cols-5">
                         <x-forms.select id="type" label="Type" required>
                             <option value="A">A</option>
+                            <option value="AAAA">AAAA</option>
                             <option value="CNAME">CNAME</option>
                             <option value="TXT">TXT</option>
                         </x-forms.select>
@@ -134,7 +135,7 @@
                 <div class="p-4 border rounded border-neutral-200 dark:border-neutral-700">
                     <h3>Cloudflare Records Preview</h3>
                     <div class="pb-3 text-sm text-neutral-500">
-                        Last provider list response. Sync imports supported A, CNAME and TXT records into Coolify.
+                        Last provider list response. Sync imports supported A, AAAA, CNAME and TXT records into Coolify.
                     </div>
                     <div class="grid gap-2">
                         @foreach ($providerRecords as $providerRecord)

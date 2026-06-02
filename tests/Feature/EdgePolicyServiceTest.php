@@ -1,8 +1,8 @@
 <?php
 
-use App\Http\Middleware\EdgeProtectionChallenge;
 use App\Models\EdgePolicy;
 use App\Models\Team;
+use App\Services\EdgeProtection\EdgeRequestClassifier;
 use App\Services\EdgeProtection\EdgePolicyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -58,11 +58,11 @@ test('under attack policy challenges requests without proof', function () {
         'scope_value' => 'attack.example.com',
     ]);
 
-    $response = app(EdgeProtectionChallenge::class)
-        ->handle(edgePolicyRequest('/checkout', host: 'attack.example.com'), fn () => response('trusted application'));
+    $decision = app(EdgeRequestClassifier::class)
+        ->classify(edgePolicyRequest('/checkout', host: 'attack.example.com'), ['team_id' => $team->id]);
 
-    expect($response->getStatusCode())->toBe(302)
-        ->and($response->headers->get('Location'))->toContain('/__edge/challenge');
+    expect($decision->challenges())->toBeTrue()
+        ->and($decision->reason)->toBe('missing proof');
 });
 
 test('off policy allows requests without proof or silent drop', function () {
@@ -75,11 +75,11 @@ test('off policy allows requests without proof or silent drop', function () {
         'silent_drop_enabled' => true,
     ]);
 
-    $response = app(EdgeProtectionChallenge::class)
-        ->handle(edgePolicyRequest('/.env', host: 'off.example.com', userAgent: 'sqlmap'), fn () => response('trusted application'));
+    $decision = app(EdgeRequestClassifier::class)
+        ->classify(edgePolicyRequest('/.env', host: 'off.example.com', userAgent: 'sqlmap'), ['team_id' => $team->id]);
 
-    expect($response->getStatusCode())->toBe(200)
-        ->and($response->getContent())->toBe('trusted application');
+    expect($decision->allows())->toBeTrue()
+        ->and($decision->reason)->toBe('edge policy off');
 });
 
 test('hostile request is silently blocked when policy enables silent drop', function () {
@@ -92,11 +92,26 @@ test('hostile request is silently blocked when policy enables silent drop', func
         'silent_drop_enabled' => true,
     ]);
 
-    $response = app(EdgeProtectionChallenge::class)
-        ->handle(edgePolicyRequest('/checkout', host: 'drop.example.com', userAgent: 'sqlmap'), fn () => response('trusted application'));
+    $decision = app(EdgeRequestClassifier::class)
+        ->classify(edgePolicyRequest('/checkout', host: 'drop.example.com', userAgent: 'sqlmap'), ['team_id' => $team->id]);
 
-    expect($response->getStatusCode())->toBe(404)
-        ->and($response->getContent())->toBe('');
+    expect($decision->blocks())->toBeTrue()
+        ->and($decision->reason)->toBe('bad user agent');
+});
+
+test('domain policies are not resolved across teams without explicit team context', function () {
+    $team = Team::factory()->create();
+    app(EdgePolicyService::class)->createForTeam($team->id, [
+        'name' => 'Tenant scoped policy',
+        'mode' => EdgePolicy::MODE_UNDER_ATTACK,
+        'scope_type' => EdgePolicy::SCOPE_DOMAIN,
+        'scope_value' => 'tenant.example.com',
+    ]);
+
+    $resolved = app(EdgePolicyService::class)->resolveByDomain(null, 'tenant.example.com');
+
+    expect($resolved->source)->toBe('config')
+        ->and($resolved->uuid)->toBeNull();
 });
 
 test('edge policy cannot be mutated outside service', function () {

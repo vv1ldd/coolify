@@ -109,12 +109,12 @@ class EdgePolicyService
 
     private function domainPolicies(?int $teamId): Collection
     {
-        if (! Schema::hasTable('edge_policies')) {
+        if ($teamId === null || ! Schema::hasTable('edge_policies')) {
             return collect();
         }
 
         return EdgePolicy::query()
-            ->when($teamId !== null, fn ($query) => $query->whereTeamId($teamId))
+            ->whereTeamId($teamId)
             ->where('scope_type', EdgePolicy::SCOPE_DOMAIN)
             ->whereNotNull('scope_value')
             ->get();

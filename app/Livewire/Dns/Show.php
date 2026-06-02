@@ -65,7 +65,7 @@ class Show extends Component
             'name' => ['required', 'string', 'max:255'],
             'provider_zone_id' => ['nullable', 'string', 'max:255'],
             'api_token' => ['nullable', 'string'],
-            'type' => ['required', 'string', Rule::in(['A', 'CNAME', 'TXT'])],
+            'type' => ['required', 'string', Rule::in($this->supportedRecordTypes())],
             'record_name' => ['required', 'string', 'max:255'],
             'content' => ['required', 'string'],
             'ttl' => ['required', 'integer', 'min:1'],
@@ -134,7 +134,7 @@ class Show extends Component
     {
         try {
             $records = collect($dnsZones->listProviderRecords($this->zone))
-                ->filter(fn (array $record) => in_array(strtoupper((string) data_get($record, 'type')), ['A', 'CNAME', 'TXT'], true));
+                ->filter(fn (array $record) => in_array(strtoupper((string) data_get($record, 'type')), $this->supportedRecordTypes(), true));
 
             foreach ($records as $record) {
                 $name = (string) data_get($record, 'name');
@@ -174,7 +174,7 @@ class Show extends Component
     {
         try {
             $this->providerRecords = collect($dnsZones->listProviderRecords($this->zone))
-                ->filter(fn (array $record) => in_array(strtoupper((string) data_get($record, 'type')), ['A', 'CNAME', 'TXT'], true))
+                ->filter(fn (array $record) => in_array(strtoupper((string) data_get($record, 'type')), $this->supportedRecordTypes(), true))
                 ->values()
                 ->all();
 
@@ -232,6 +232,11 @@ class Show extends Component
         $hostname = rtrim(trim($hostname), '.');
 
         return function_exists('mb_strtolower') ? mb_strtolower($hostname) : strtolower($hostname);
+    }
+
+    private function supportedRecordTypes(): array
+    {
+        return ['A', 'AAAA', 'CNAME', 'TXT'];
     }
 
     public function render()
