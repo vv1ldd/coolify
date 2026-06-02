@@ -173,6 +173,11 @@ class EmbeddedSl1RuntimeService
 
     public function issuerUrl(): string
     {
+        $configuredIssuer = config('sovereign.sl1_connect.embedded.issuer_url');
+        if (filled($configuredIssuer)) {
+            return rtrim((string) $configuredIssuer, '/');
+        }
+
         $path = '/'.trim((string) config('sovereign.sl1_connect.embedded.issuer_path', '/sl1'), '/');
         $base = rtrim((string) config('app.url'), '/');
 

@@ -5,6 +5,9 @@ namespace App\Services\Dns;
 use App\Models\Application;
 use App\Models\DnsRecord;
 use App\Models\DnsZone;
+use App\Models\EdgeControlAction;
+use App\Models\EdgeProjection;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class DnsZoneService
@@ -83,7 +86,7 @@ class DnsZoneService
             recordId: $existing?->provider_record_id,
         );
 
-        return DnsRecord::updateOrCreate(
+        $managedRecord = DnsRecord::updateOrCreate(
             [
                 'dns_zone_id' => $zone->id,
                 'type' => $record['type'],
@@ -102,6 +105,22 @@ class DnsZoneService
                 ], (array) data_get($data, 'metadata', [])),
             ],
         )->refresh();
+
+        $this->recordEdgeControlAction(
+            zone: $zone,
+            actionType: EdgeControlAction::TYPE_DNS_RECORD_UPSERT,
+            status: EdgeControlAction::STATUS_SUCCEEDED,
+            request: $record,
+            outcome: [
+                'provider_record_id' => $managedRecord->provider_record_id,
+                'record_uuid' => $managedRecord->uuid,
+                'content' => $managedRecord->content,
+            ],
+            domain: $managedRecord->name,
+            projectionHash: data_get($data, 'metadata.projection_hash'),
+        );
+
+        return $managedRecord;
     }
 
     public function deleteManagedRecord(DnsRecord $record): void
@@ -111,7 +130,51 @@ class DnsZoneService
             $this->provider($zone)->deleteRecord($zone->provider_zone_id, $record->provider_record_id);
         }
 
+        if ($zone) {
+            $this->recordEdgeControlAction(
+                zone: $zone,
+                actionType: EdgeControlAction::TYPE_DNS_RECORD_DELETE,
+                status: EdgeControlAction::STATUS_SUCCEEDED,
+                request: [
+                    'record_uuid' => $record->uuid,
+                    'provider_record_id' => $record->provider_record_id,
+                    'type' => $record->type,
+                    'name' => $record->name,
+                ],
+                outcome: [
+                    'deleted' => true,
+                ],
+                domain: $record->name,
+                projectionHash: data_get($record->metadata, 'projection_hash'),
+            );
+        }
+
         $record->delete();
+    }
+
+    private function recordEdgeControlAction(DnsZone $zone, string $actionType, string $status, array $request, array $outcome, ?string $domain = null, ?string $projectionHash = null): void
+    {
+        if (! Schema::hasTable('edge_control_actions')) {
+            return;
+        }
+
+        EdgeControlAction::create([
+            'team_id' => $zone->team_id,
+            'domain' => $domain ?: $zone->name,
+            'action_type' => $actionType,
+            'adapter' => EdgeProjection::ADAPTER_CLOUDFLARE,
+            'status' => $status,
+            'request' => $request,
+            'outcome' => $outcome,
+            'projection_hash' => $projectionHash,
+            'applied_projection_hash' => $projectionHash,
+            'metadata' => [
+                'schema' => 'edge.control_action.v1',
+                'zone_uuid' => $zone->uuid,
+                'zone_name' => $zone->name,
+            ],
+            'executed_at' => now(),
+        ]);
     }
 
     private function findCloudflareZoneId(string $token, string $name): string

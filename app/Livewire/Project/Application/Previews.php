@@ -126,8 +126,9 @@ class Previews extends Component
                     $fqdn = str($fqdn)->trim()->lower();
                     $this->previewFqdns[$previewKey] = $fqdn;
 
-                    if (! validateDNSEntry($fqdn, $this->application->destination->server)) {
-                        $this->dispatch('error', 'Validating DNS failed.', "Make sure you have added the DNS records correctly.<br><br>$fqdn->{$this->application->destination->server->ip}<br><br>Check this <a target='_blank' class='underline dark:text-white' href='https://coolify.io/docs/knowledge-base/dns-configuration'>documentation</a> for further help.");
+                    $server = data_get($this->application, 'destination.server');
+                    if ($server && ! validateDNSEntry($fqdn, $server)) {
+                        $this->dispatch('error', 'Validating DNS failed.', "Make sure you have added the DNS records correctly.<br><br>$fqdn->{$server->ip}<br><br>Check this <a target='_blank' class='underline dark:text-white' href='https://coolify.io/docs/knowledge-base/dns-configuration'>documentation</a> for further help.");
                         $success = false;
                     }
 
@@ -352,9 +353,14 @@ class Previews extends Component
         $this->authorize('deploy', $this->application);
 
         try {
-            $server = $this->application->destination->server;
+            $server = data_get($this->application, 'destination.server');
+            if (! $server) {
+                $this->dispatch('error', 'Cannot stop preview.', 'No server is configured for this application.');
 
-            if ($this->application->destination->server->isSwarm()) {
+                return;
+            }
+
+            if ($server->isSwarm()) {
                 instant_remote_process(["docker stack rm {$this->application->uuid}-{$pull_request_id}"], $server);
             } else {
                 $containers = getCurrentApplicationContainerStatus($server, $this->application->id, $pull_request_id)->toArray();

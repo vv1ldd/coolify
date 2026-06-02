@@ -2,6 +2,14 @@
 
 use App\Models\Application;
 use App\Models\Server;
+use App\Models\StandaloneClickhouse;
+use App\Models\StandaloneDragonfly;
+use App\Models\StandaloneKeydb;
+use App\Models\StandaloneMariadb;
+use App\Models\StandaloneMongodb;
+use App\Models\StandaloneMysql;
+use App\Models\StandalonePostgresql;
+use App\Models\StandaloneRedis;
 
 /**
  * Test the Application::serverStatus() accessor
@@ -51,3 +59,18 @@ it('has correct logic in serverStatus accessor', function () {
         ->not->toContain('str($status)->before(\':\')')
         ->not->toContain('if ($server_status !== \'running\')');
 })->note('Verifies that the serverStatus accessor uses the correct logic');
+
+it('treats standalone database resources without a server as non functional', function (string $modelClass) {
+    $database = new $modelClass;
+
+    expect($database->server_status)->toBeFalse();
+})->with([
+    StandalonePostgresql::class,
+    StandaloneRedis::class,
+    StandaloneMysql::class,
+    StandaloneMongodb::class,
+    StandaloneMariadb::class,
+    StandaloneKeydb::class,
+    StandaloneDragonfly::class,
+    StandaloneClickhouse::class,
+]);

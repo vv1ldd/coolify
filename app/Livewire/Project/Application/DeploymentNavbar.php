@@ -15,7 +15,7 @@ class DeploymentNavbar extends Component
 
     public Application $application;
 
-    public Server $server;
+    public ?Server $server = null;
 
     public bool $is_debug_enabled = false;
 
@@ -24,7 +24,7 @@ class DeploymentNavbar extends Component
     public function mount()
     {
         $this->application = Application::ownedByCurrentTeam()->find($this->application_deployment_queue->application_id);
-        $this->server = $this->application->destination->server;
+        $this->server = data_get($this->application, 'destination.server');
         $this->is_debug_enabled = $this->application->settings->is_debug_enabled;
     }
 
@@ -76,8 +76,9 @@ class DeploymentNavbar extends Component
     {
         $deployment_uuid = $this->application_deployment_queue->deployment_uuid;
         $kill_command = "docker rm -f {$deployment_uuid}";
-        $build_server_id = $this->application_deployment_queue->build_server_id ?? $this->application->destination->server_id;
-        $server_id = $this->application_deployment_queue->server_id ?? $this->application->destination->server_id;
+        $destinationServerId = data_get($this->application, 'destination.server_id');
+        $build_server_id = $this->application_deployment_queue->build_server_id ?? $destinationServerId;
+        $server_id = $this->application_deployment_queue->server_id ?? $destinationServerId;
 
         // First, mark the deployment as cancelled to prevent further processing
         $this->application_deployment_queue->update([
@@ -89,6 +90,11 @@ class DeploymentNavbar extends Component
                 $server = Server::ownedByCurrentTeam()->find($build_server_id);
             } else {
                 $server = Server::ownedByCurrentTeam()->find($server_id);
+            }
+            if (! $server) {
+                $this->dispatch('error', 'Cannot cancel deployment.', 'No server is configured for this application.');
+
+                return;
             }
 
             // Add cancellation log entry

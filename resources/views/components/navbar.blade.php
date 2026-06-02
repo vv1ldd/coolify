@@ -241,7 +241,7 @@
                         </a>
                     </li>
                     <li>
-                        <a title="DNS Zones" {{ wireNavigate() }}
+                        <a title="Cloudflare" {{ wireNavigate() }}
                             class="{{ request()->is('dns*') ? 'menu-item-active menu-item' : 'menu-item' }}"
                             href="{{ route('dns.index') }}">
                             <svg xmlns="http://www.w3.org/2000/svg" class="menu-item-icon" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -252,23 +252,7 @@
                                 <path d="M11.5 3a17 17 0 0 0 0 18" />
                                 <path d="M12.5 3a17 17 0 0 1 0 18" />
                             </svg>
-                            <span class="menu-item-label tracking-tight">DNS Zones</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a title="Domains" {{ wireNavigate() }}
-                            class="{{ request()->is('domains*') ? 'menu-item-active menu-item' : 'menu-item' }}"
-                            href="{{ route('domains.index') }}">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="menu-item-icon" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                                <path d="M4 8h16" />
-                                <path d="M4 16h16" />
-                                <path d="M9 4v16" />
-                                <path d="M15 4v16" />
-                                <path d="M4 8c1.5 -2.5 4.2 -4 8 -4s6.5 1.5 8 4" />
-                                <path d="M4 16c1.5 2.5 4.2 4 8 4s6.5 -1.5 8 -4" />
-                            </svg>
-                            <span class="menu-item-label tracking-tight">Domains</span>
+                            <span class="menu-item-label tracking-tight">Cloudflare</span>
                         </a>
                     </li>
 

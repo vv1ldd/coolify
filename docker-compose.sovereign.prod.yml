@@ -4,9 +4,67 @@ services:
     pull_policy: always
     extra_hosts:
       - host.docker.internal:host-gateway
+    depends_on:
+      simple-l1:
+        condition: service_healthy
 
   soketi:
     image: "${SOVEREIGN_REALTIME_IMAGE:-ghcr.io/coollabsio/coolify-realtime:1.0.13}"
     pull_policy: always
     extra_hosts:
       - host.docker.internal:host-gateway
+
+  simple-l1:
+    image: "${SIMPLE_L1_IMAGE:-ghcr.io/vv1ldd/simple-l1:latest}"
+    container_name: simple-l1
+    pull_policy: always
+    restart: always
+    networks:
+      - coolify
+    expose:
+      - "3000"
+    environment:
+      PORT: "3000"
+      SL1_DATA_DIR: /data/simple-l1
+      NODE_NAME: "${SIMPLE_L1_NODE_NAME:-sovereign-coolify-node}"
+      NETWORK_NAME: "${SIMPLE_L1_NETWORK_NAME:-Simple-L1}"
+      NODE_TYPE_LABEL: "${SIMPLE_L1_NODE_TYPE_LABEL:-Sovereign Coolify Node}"
+      SELF_WEBHOOK: "${SIMPLE_L1_SELF_WEBHOOK:-}"
+      PEERS: "${SIMPLE_L1_PEERS:-}"
+      SL1_NAMESPACE_AUTO_ALLOCATE: "${SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE:-false}"
+      SL1_NAMESPACE_ZONE: "${SIMPLE_L1_DOMAIN:-simplel1.online}"
+      CLOUDFLARE_API_TOKEN: "${SIMPLE_L1_CLOUDFLARE_API_TOKEN:-}"
+      CLOUDFLARE_ZONE_ID: "${SIMPLE_L1_CLOUDFLARE_ZONE_ID:-}"
+      CLOUDFLARE_ZONE_NAME: "${SIMPLE_L1_DOMAIN:-simplel1.online}"
+      CLOUDFLARE_PROXIED: "${SIMPLE_L1_CLOUDFLARE_PROXIED:-false}"
+    volumes:
+      - simple-l1-data:/data/simple-l1
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.simple-l1-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.simple-l1-health.rule=Host(`${SIMPLE_L1_DOMAIN:-simplel1.online}`) && Path(`/healthcheck`)"
+      - "traefik.http.routers.simple-l1-health.entryPoints=http"
+      - "traefik.http.routers.simple-l1-health.priority=1000"
+      - "traefik.http.routers.simple-l1-health.service=simple-l1"
+      - "traefik.http.routers.simple-l1-http.rule=Host(`${SIMPLE_L1_DOMAIN:-simplel1.online}`)"
+      - "traefik.http.routers.simple-l1-http.entryPoints=http"
+      - "traefik.http.routers.simple-l1-http.middlewares=simple-l1-redirect"
+      - "traefik.http.routers.simple-l1-https.rule=Host(`${SIMPLE_L1_DOMAIN:-simplel1.online}`)"
+      - "traefik.http.routers.simple-l1-https.entryPoints=https"
+      - "traefik.http.routers.simple-l1-https.tls=true"
+      - "traefik.http.routers.simple-l1-https.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.simple-l1-https.service=simple-l1"
+      - "traefik.http.services.simple-l1.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthcheck || exit 1"]
+      interval: 5s
+      retries: 20
+      timeout: 3s
+
+volumes:
+  simple-l1-data:
+    name: simple-l1-data
+
+networks:
+  coolify:
+    external: true

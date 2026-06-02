@@ -8,6 +8,7 @@ use App\Models\Server;
 use App\Models\Service;
 use App\Models\ServiceApplication;
 use App\Models\ServiceDatabase;
+use App\Services\Dns\DomainDnsProvisioningService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -79,6 +80,8 @@ class Index extends Component
     public $requiredPort = null;
 
     public ?string $fqdn = null;
+
+    public bool $cloudflareProxied = false;
 
     public bool $isGzipEnabled = false;
 
@@ -553,6 +556,40 @@ class Index extends Component
 
             return handleError($e, $this);
         }
+    }
+
+    public function saveApplicationAndConfigureDns(DomainDnsProvisioningService $dnsProvisioning): void
+    {
+        try {
+            $this->authorize('update', $this->serviceApplication);
+            $this->submitApplication();
+
+            if ($this->showDomainConflictModal || $this->showPortWarningModal) {
+                return;
+            }
+
+            $this->serviceApplication->refresh();
+            $result = $dnsProvisioning->provisionServiceApplication(
+                serviceApplication: $this->serviceApplication,
+                teamId: currentTeam()->id,
+                domains: $this->fqdn,
+                proxied: $this->cloudflareProxied,
+            );
+
+            $this->dispatch(
+                ((int) data_get($result, 'configured_count')) > 0 ? 'success' : 'warning',
+                'Cloudflare DNS',
+                (string) data_get($result, 'message')
+            );
+        } catch (\Throwable $e) {
+            handleError($e, $this);
+        }
+    }
+
+    public function getCloudflareDnsStatusProperty(): array
+    {
+        return app(DomainDnsProvisioningService::class)
+            ->availabilityForDomains(currentTeam()->id, $this->fqdn);
     }
 
     public function render()

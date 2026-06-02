@@ -34,6 +34,7 @@ abstract class AbstractProviderServerActionAdapter implements ProviderServerActi
     {
         $metadata = $server->server_metadata ?? [];
         $candidates = [
+            data_get($metadata, 'provider_control.provider_server_id'),
             data_get($metadata, 'provider_server_id'),
             data_get($metadata, $this->providerKey().'_server_id'),
             data_get($metadata, 'selectel_vds_ctid'),

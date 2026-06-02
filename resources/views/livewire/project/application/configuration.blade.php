@@ -1,4 +1,9 @@
 <div>
+    @php
+        $server = data_get($application, 'destination.server');
+        $isSwarm = $server?->isSwarm() ?? false;
+    @endphp
+
     <x-slot:title>
         {{ data_get_str($application, 'name')->limit(10) }} > Configuration | Coolify
     </x-slot>
@@ -12,7 +17,7 @@
                 href="{{ route('project.application.configuration', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'application_uuid' => $application->uuid]) }}"><span class="menu-item-label">General</span></a>
             <a class='sub-menu-item' {{ wireNavigate() }} wire:current.exact="menu-item-active"
                 href="{{ route('project.application.advanced', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'application_uuid' => $application->uuid]) }}"><span class="menu-item-label">Advanced</span></a>
-            @if ($application->destination->server->isSwarm())
+            @if ($isSwarm)
                 <a class="sub-menu-item" {{ wireNavigate() }} wire:current.exact="menu-item-active"
                     href="{{ route('project.application.swarm', ['project_uuid' => $project->uuid, 'environment_uuid' => $environment->uuid, 'application_uuid' => $application->uuid]) }}"><span class="menu-item-label">Swarm</span>
                 </a>
@@ -71,7 +76,7 @@
         <div class="w-full sm:flex-grow">
             @if ($currentRoute === 'project.application.configuration')
                 <livewire:project.application.general :application="$application" />
-            @elseif ($currentRoute === 'project.application.swarm' && $application->destination->server->isSwarm())
+            @elseif ($currentRoute === 'project.application.swarm' && $isSwarm)
                 <livewire:project.application.swarm :application="$application" />
             @elseif ($currentRoute === 'project.application.advanced')
                 <livewire:project.application.advanced :application="$application" />

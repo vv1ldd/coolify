@@ -1,11 +1,11 @@
 <div>
     <x-slot:title>
-        {{ data_get_str($zone, 'name')->limit(20) }} > DNS | Coolify
+        {{ data_get_str($zone, 'name')->limit(20) }} > Cloudflare DNS | Coolify
     </x-slot>
 
     <div class="flex flex-wrap items-center gap-2">
-        <h1>DNS Zone</h1>
-        <a {{ wireNavigate() }} class="text-sm underline" href="{{ route('dns.index') }}">Back to DNS Zones</a>
+        <h1>Cloudflare DNS Provider</h1>
+        <a {{ wireNavigate() }} class="text-sm underline" href="{{ route('dns.index') }}">Back to DNS Providers</a>
     </div>
     <div class="subtitle">{{ $zone->name }}</div>
 
@@ -23,7 +23,7 @@
                     <x-forms.button type="submit" form="dns-zone-form">Save</x-forms.button>
                 </div>
                 <div class="pb-4 text-sm text-neutral-500">
-                    Update zone metadata. Leave the token blank to keep the existing encrypted token.
+                    Update provider metadata. Leave the token blank to keep the existing encrypted Cloudflare token.
                 </div>
 
                 <form id="dns-zone-form" class="flex flex-col gap-3" wire:submit="saveZone">
@@ -43,7 +43,7 @@
                     <x-forms.button wire:click="syncProviderRecords">Sync from Cloudflare</x-forms.button>
                 </div>
                 <div class="pb-4 text-sm text-neutral-500">
-                    Coolify manages DNS records here. Optional application association is composition-only and does not transfer ownership from DNS Zones to Applications.
+                    Provider-level records are visible here for audit and manual repair. Day-to-day domain assignment belongs in project and resource settings.
                 </div>
 
                 <form class="flex flex-col gap-3 pb-6" wire:submit="upsertRecord">

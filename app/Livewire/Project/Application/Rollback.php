@@ -29,8 +29,8 @@ class Rollback extends Component
     {
         $this->parameters = get_route_parameters();
         $this->dockerImagesToKeep = $this->application->settings->docker_images_to_keep ?? 2;
-        $server = $this->application->destination->server;
-        $this->serverRetentionDisabled = $server->settings->disable_application_image_retention ?? false;
+        $server = data_get($this->application, 'destination.server');
+        $this->serverRetentionDisabled = data_get($server, 'settings.disable_application_image_retention', false);
     }
 
     public function saveSettings()
@@ -82,16 +82,23 @@ class Rollback extends Component
 
         try {
             $image = $this->application->docker_registry_image_name ?? $this->application->uuid;
-            if ($this->application->destination->server->isFunctional()) {
+            $server = data_get($this->application, 'destination.server');
+            if (! $server) {
+                $this->dispatch('error', 'Cannot load images.', 'No server is configured for this application.');
+
+                return [];
+            }
+
+            if ($server->isFunctional()) {
                 $output = instant_remote_process([
                     "docker inspect --format='{{.Config.Image}}' {$this->application->uuid}",
-                ], $this->application->destination->server, throwError: false);
+                ], $server, throwError: false);
                 $current_tag = str($output)->trim()->explode(':');
                 $this->current = data_get($current_tag, 1);
 
                 $output = instant_remote_process([
                     "docker images --format '{{.Repository}}#{{.Tag}}#{{.CreatedAt}}'",
-                ], $this->application->destination->server);
+                ], $server);
                 $this->images = str($output)->trim()->explode("\n")->filter(function ($item) use ($image) {
                     return str($item)->contains($image);
                 })->map(function ($item) {

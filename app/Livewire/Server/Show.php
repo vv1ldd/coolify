@@ -628,10 +628,7 @@ BASH;
             ->orderBy('name')
             ->get();
 
-        $boundToken = $this->server->cloudProviderToken;
-        $this->selectedProviderControlTokenId = $boundToken && in_array($boundToken->provider, $providerKeys, true)
-            ? $boundToken->id
-            : null;
+        $this->selectedProviderControlTokenId = $this->providerControlTokenIdFromMetadata();
         $this->providerControlServerId = $this->providerControlServerIdFromMetadata();
         $this->providerControlStatus = data_get($this->server->server_metadata, 'provider_control.last_inspect');
     }
@@ -649,11 +646,11 @@ BASH;
 
             data_set($metadata, 'provider_server_id', $providerServerId);
             data_set($metadata, 'provider_control.provider', $token->provider);
+            data_set($metadata, 'provider_control.token_id', $token->id);
             data_set($metadata, 'provider_control.provider_server_id', $providerServerId);
             data_set($metadata, 'provider_control.bound_at', now()->toIso8601String());
 
             $this->server->update([
-                'cloud_provider_token_id' => $token->id,
                 'server_metadata' => $metadata,
             ]);
             $this->server->refresh();
@@ -682,10 +679,11 @@ BASH;
                 'inspected_at' => now()->toIso8601String(),
             ]);
 
-            if ((int) $this->server->cloud_provider_token_id === (int) $token->id) {
+            if ((int) data_get($this->server->server_metadata, 'provider_control.token_id') === (int) $token->id) {
                 $metadata = $this->server->server_metadata ?? [];
                 data_set($metadata, 'provider_server_id', $providerServerId);
                 data_set($metadata, 'provider_control.provider', $token->provider);
+                data_set($metadata, 'provider_control.token_id', $token->id);
                 data_set($metadata, 'provider_control.provider_server_id', $providerServerId);
                 data_set($metadata, 'provider_control.last_inspect', $this->providerControlStatus);
                 $this->server->update(['server_metadata' => $metadata]);
@@ -888,13 +886,28 @@ BASH;
     {
         $metadata = $this->server->server_metadata ?? [];
         $providerServerId = collect([
-            data_get($metadata, 'provider_server_id'),
             data_get($metadata, 'provider_control.provider_server_id'),
+            data_get($metadata, 'provider_server_id'),
             data_get($metadata, 'selectel_vds_ctid'),
             data_get($metadata, 'hostinger_vps_id'),
         ])->first(fn (mixed $candidate): bool => filled($candidate));
 
         return filled($providerServerId) ? (string) $providerServerId : null;
+    }
+
+    private function providerControlTokenIdFromMetadata(): ?int
+    {
+        $tokenId = data_get($this->server->server_metadata, 'provider_control.token_id');
+        if (filled($tokenId)) {
+            return (int) $tokenId;
+        }
+
+        $boundToken = $this->server->cloudProviderToken;
+        if ($boundToken && in_array($boundToken->provider, $this->providerControlProviderKeys(), true)) {
+            return $boundToken->id;
+        }
+
+        return null;
     }
 
     private function validateProviderControlBinding(): void

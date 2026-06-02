@@ -3,6 +3,7 @@
 use App\Livewire\Project\Application\General;
 use App\Models\Application;
 use App\Models\Environment;
+use App\Models\InstanceSettings;
 use App\Models\Project;
 use App\Models\Team;
 use App\Models\User;
@@ -15,6 +16,7 @@ beforeEach(function () {
     $this->team = Team::factory()->create();
     $this->user = User::factory()->create();
     $this->team->members()->attach($this->user->id, ['role' => 'owner']);
+    InstanceSettings::unguarded(fn () => InstanceSettings::create(['id' => 0]));
 
     $this->actingAs($this->user);
     session(['currentTeam' => $this->team]);

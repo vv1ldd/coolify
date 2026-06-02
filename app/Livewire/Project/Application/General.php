@@ -5,6 +5,7 @@ namespace App\Livewire\Project\Application;
 use App\Actions\Application\GenerateConfig;
 use App\Jobs\ApplicationDeploymentJob;
 use App\Models\Application;
+use App\Services\Dns\DomainDnsProvisioningService;
 use App\Support\ValidationPatterns;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -44,9 +45,9 @@ class General extends Component
 
     public string $buildPack;
 
-    public string $staticImage;
+    public ?string $staticImage = null;
 
-    public string $baseDirectory;
+    public ?string $baseDirectory = null;
 
     public ?string $publishDirectory = null;
 
@@ -130,6 +131,8 @@ class General extends Component
     public $showDomainConflictModal = false;
 
     public $forceSaveDomains = false;
+
+    public bool $cloudflareProxied = false;
 
     protected $listeners = [
         'resetDefaultLabels',
@@ -309,8 +312,9 @@ class General extends Component
         }
         $this->parsedServiceDomains = $sanitizedDomains;
 
+        $server = data_get($this->application, 'destination.server');
         $this->customLabels = $this->application->parseContainerLabels();
-        if (! $this->customLabels && $this->application->destination->server->proxyType() !== 'NONE' && $this->application->settings->is_container_label_readonly_enabled === true) {
+        if (! $this->customLabels && $server && $server->proxyType() !== 'NONE' && $this->application->settings->is_container_label_readonly_enabled === true) {
             // Only update custom labels if user has permission
             try {
                 $this->authorize('update', $this->application);
@@ -434,19 +438,19 @@ class General extends Component
             $this->postDeploymentCommand = $this->application->post_deployment_command;
             $this->postDeploymentCommandContainer = $this->application->post_deployment_command_container;
             $this->customNginxConfiguration = $this->application->custom_nginx_configuration;
-            $this->isHttpBasicAuthEnabled = $this->application->is_http_basic_auth_enabled;
+            $this->isHttpBasicAuthEnabled = (bool) $this->application->is_http_basic_auth_enabled;
             $this->httpBasicAuthUsername = $this->application->http_basic_auth_username;
             $this->httpBasicAuthPassword = $this->application->http_basic_auth_password;
             $this->watchPaths = $this->application->watch_paths;
             $this->redirect = $this->application->redirect;
 
             // Application settings properties
-            $this->isStatic = $this->application->settings->is_static;
-            $this->isSpa = $this->application->settings->is_spa;
-            $this->isBuildServerEnabled = $this->application->settings->is_build_server_enabled;
-            $this->isPreserveRepositoryEnabled = $this->application->settings->is_preserve_repository_enabled;
-            $this->isContainerLabelEscapeEnabled = $this->application->settings->is_container_label_escape_enabled;
-            $this->isContainerLabelReadonlyEnabled = $this->application->settings->is_container_label_readonly_enabled;
+            $this->isStatic = (bool) $this->application->settings->is_static;
+            $this->isSpa = (bool) $this->application->settings->is_spa;
+            $this->isBuildServerEnabled = (bool) $this->application->settings->is_build_server_enabled;
+            $this->isPreserveRepositoryEnabled = (bool) $this->application->settings->is_preserve_repository_enabled;
+            $this->isContainerLabelEscapeEnabled = (bool) $this->application->settings->is_container_label_escape_enabled;
+            $this->isContainerLabelReadonlyEnabled = (bool) $this->application->settings->is_container_label_readonly_enabled;
         }
     }
 
@@ -550,7 +554,14 @@ class General extends Component
             $this->authorize('update', $this->application);
 
             $uuid = new Cuid2;
-            $domain = generateUrl(server: $this->application->destination->server, random: $uuid);
+            $server = data_get($this->application, 'destination.server');
+            if (! $server) {
+                $this->dispatch('error', 'Cannot generate domain.', 'No server is configured for this application.');
+
+                return null;
+            }
+
+            $domain = generateUrl(server: $server, random: $uuid);
             $sanitizedKey = str($serviceName)->replace('-', '_')->replace('.', '_')->toString();
             $this->parsedServiceDomains[$sanitizedKey]['domain'] = $domain;
 
@@ -695,10 +706,11 @@ class General extends Component
     {
         if ($this->fqdn) {
             $domains = str($this->fqdn)->trim()->explode(',');
-            if ($this->application->additional_servers->count() === 0) {
+            $server = data_get($this->application, 'destination.server');
+            if ($server && $this->application->additional_servers->count() === 0) {
                 foreach ($domains as $domain) {
-                    if (! validateDNSEntry($domain, $this->application->destination->server)) {
-                        $showToaster && $this->dispatch('error', 'Validating DNS failed.', "Make sure you have added the DNS records correctly.<br><br>$domain->{$this->application->destination->server->ip}<br><br>Check this <a target='_blank' class='underline dark:text-white' href='https://coolify.io/docs/knowledge-base/dns-configuration'>documentation</a> for further help.");
+                    if (! validateDNSEntry($domain, $server)) {
+                        $showToaster && $this->dispatch('error', 'Validating DNS failed.', "Make sure you have added the DNS records correctly.<br><br>$domain->{$server->ip}<br><br>Check this <a target='_blank' class='underline dark:text-white' href='https://coolify.io/docs/knowledge-base/dns-configuration'>documentation</a> for further help.");
                     }
                 }
             }
@@ -837,7 +849,8 @@ class General extends Component
             }
 
             $this->application->save();
-            if (! $this->customLabels && $this->application->destination->server->proxyType() !== 'NONE' && ! $this->application->settings->is_container_label_readonly_enabled) {
+            $server = data_get($this->application, 'destination.server');
+            if (! $this->customLabels && $server && $server->proxyType() !== 'NONE' && ! $this->application->settings->is_container_label_readonly_enabled) {
                 $this->customLabels = str(implode('|coolify|', generateLabelsApplication($this->application)))->replace('|coolify|', "\n");
                 $this->application->custom_labels = base64_encode($this->customLabels);
                 $this->application->save();
@@ -868,9 +881,9 @@ class General extends Component
                 if ($this->application->isDirty('docker_compose_domains')) {
                     foreach ($this->parsedServiceDomains as $service) {
                         $domain = data_get($service, 'domain');
-                        if ($domain) {
-                            if (! validateDNSEntry($domain, $this->application->destination->server)) {
-                                $showToaster && $this->dispatch('error', 'Validating DNS failed.', "Make sure you have added the DNS records correctly.<br><br>$domain->{$this->application->destination->server->ip}<br><br>Check this <a target='_blank' class='underline dark:text-white' href='https://coolify.io/docs/knowledge-base/dns-configuration'>documentation</a> for further help.");
+                        if ($domain && $server) {
+                            if (! validateDNSEntry($domain, $server)) {
+                                $showToaster && $this->dispatch('error', 'Validating DNS failed.', "Make sure you have added the DNS records correctly.<br><br>$domain->{$server->ip}<br><br>Check this <a target='_blank' class='underline dark:text-white' href='https://coolify.io/docs/knowledge-base/dns-configuration'>documentation</a> for further help.");
                             }
                         }
                     }
@@ -905,6 +918,40 @@ class General extends Component
         } finally {
             $this->dispatch('configurationChanged');
         }
+    }
+
+    public function saveAndConfigureDns(DomainDnsProvisioningService $dnsProvisioning): void
+    {
+        try {
+            $this->authorize('update', $this->application);
+            $this->submit(showToaster: false);
+
+            if ($this->showDomainConflictModal) {
+                return;
+            }
+
+            $this->application->refresh();
+            $result = $dnsProvisioning->provisionApplication(
+                application: $this->application,
+                teamId: currentTeam()->id,
+                domains: $this->fqdn,
+                proxied: $this->cloudflareProxied,
+            );
+
+            $this->dispatch(
+                ((int) data_get($result, 'configured_count')) > 0 ? 'success' : 'warning',
+                'Cloudflare DNS',
+                (string) data_get($result, 'message')
+            );
+        } catch (\Throwable $e) {
+            handleError($e, $this);
+        }
+    }
+
+    public function getCloudflareDnsStatusProperty(): array
+    {
+        return app(DomainDnsProvisioningService::class)
+            ->availabilityForDomains(currentTeam()->id, $this->fqdn);
     }
 
     public function downloadConfig()

@@ -13,6 +13,7 @@ BRANCH="${SOVEREIGN_BRANCH:-sovereign}"
 RAW_BASE="${SOVEREIGN_RAW_BASE:-https://raw.githubusercontent.com/${REPOSITORY}/${BRANCH}}"
 COOLIFY_IMAGE="${COOLIFY_IMAGE:-ghcr.io/${REPOSITORY}:sovereign}"
 SOVEREIGN_REALTIME_IMAGE="${SOVEREIGN_REALTIME_IMAGE:-ghcr.io/coollabsio/coolify-realtime:1.0.13}"
+SIMPLE_L1_IMAGE="${SIMPLE_L1_IMAGE:-ghcr.io/vv1ldd/simple-l1:latest}"
 HELPER_IMAGE="${HELPER_IMAGE:-ghcr.io/coollabsio/coolify-helper}"
 SOVEREIGN_RUN_ID="${SOVEREIGN_RUN_ID:-$DATE}"
 SOVEREIGN_EXPECTED_RESULT="${SOVEREIGN_EXPECTED_RESULT:-sovereign-coolify-runtime-converged}"
@@ -31,11 +32,32 @@ SL1_CONNECT_CLIENT_ID="${SL1_CONNECT_CLIENT_ID:-coolify.sovereign}"
 SL1_CONNECT_CLIENT_NAME="${SL1_CONNECT_CLIENT_NAME:-Sovereign-Coolify}"
 SL1_CONNECT_CALLBACK_PATH="${SL1_CONNECT_CALLBACK_PATH:-/auth/sl1/callback}"
 SL1_CONNECT_TIMEOUT="${SL1_CONNECT_TIMEOUT:-10}"
+SIMPLE_L1_DOMAIN="${SIMPLE_L1_DOMAIN:-simplel1.online}"
+SIMPLE_L1_ISSUER_URL="${SIMPLE_L1_ISSUER_URL:-https://simplel1.online/sl1}"
+SIMPLE_L1_NODE_NAME="${SIMPLE_L1_NODE_NAME:-sovereign-coolify-node}"
+SIMPLE_L1_NETWORK_NAME="${SIMPLE_L1_NETWORK_NAME:-Simple-L1}"
+SIMPLE_L1_NODE_TYPE_LABEL="${SIMPLE_L1_NODE_TYPE_LABEL:-Sovereign Coolify Node}"
+SIMPLE_L1_SELF_WEBHOOK="${SIMPLE_L1_SELF_WEBHOOK:-}"
+SIMPLE_L1_PEERS="${SIMPLE_L1_PEERS:-}"
+SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE="${SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE:-false}"
+SIMPLE_L1_DNS_TTL="${SIMPLE_L1_DNS_TTL:-60}"
+SIMPLE_L1_DNS_STEERING_ENABLED="${SIMPLE_L1_DNS_STEERING_ENABLED:-false}"
+SIMPLE_L1_CLOUDFLARE_PROXIED="${SIMPLE_L1_CLOUDFLARE_PROXIED:-false}"
+SIMPLE_L1_CLOUDFLARE_API_TOKEN="${SIMPLE_L1_CLOUDFLARE_API_TOKEN:-}"
+SIMPLE_L1_CLOUDFLARE_ZONE_ID="${SIMPLE_L1_CLOUDFLARE_ZONE_ID:-}"
+SIMPLE_L1_PUBLIC_IP="${SIMPLE_L1_PUBLIC_IP:-}"
+SIMPLE_L1_FAILOVER_NODES="${SIMPLE_L1_FAILOVER_NODES:-}"
+SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND="${SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND:-false}"
+SOVEREIGN_DNS_STEERING_SCHEDULE="${SOVEREIGN_DNS_STEERING_SCHEDULE:-off}"
+SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_CONFIGURED="${SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE+x}"
+SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE="${SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE:-off}"
+SOVEREIGN_SIMPLE_L1_BOOTSTRAP="${SOVEREIGN_SIMPLE_L1_BOOTSTRAP:-auto}"
 SELECTED_INSTALL_MODE=""
 SELECTED_ADMIN_CLAIM="false"
 SELECTED_HARDENING="false"
 SELECTED_APP_URL=""
 SELECTED_HOST_DOMAIN="$SOVEREIGN_HOST_DOMAIN"
+SELECTED_SIMPLE_L1_CLOUDFLARE="false"
 
 if [ -z "${NO_COLOR:-}" ]; then
     C_RESET="$(printf '\033[0m')"
@@ -611,6 +633,94 @@ apply_host_domain_env() {
     fi
 }
 
+choose_simple_l1_cloudflare() {
+    local token_choice zone_choice public_ip_choice current_token
+
+    current_token="${SIMPLE_L1_CLOUDFLARE_API_TOKEN:-${CLOUDFLARE_API_TOKEN:-$(strip_env_quotes "$(get_env_var SIMPLE_L1_CLOUDFLARE_API_TOKEN)")}}"
+    current_token="${current_token:-$(strip_env_quotes "$(get_env_var CLOUDFLARE_API_TOKEN)")}"
+    if [ -n "$current_token" ]; then
+        SIMPLE_L1_CLOUDFLARE_API_TOKEN="$current_token"
+        SELECTED_SIMPLE_L1_CLOUDFLARE="true"
+        if [ -z "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_CONFIGURED" ]; then
+            SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE="apply"
+        fi
+        export SIMPLE_L1_CLOUDFLARE_API_TOKEN
+        export SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE
+        note "Simple L1 Cloudflare token detected from environment or existing .env."
+        return 0
+    fi
+
+    if ! can_prompt; then
+        note "No Cloudflare token configured. Simple L1 will start, but DNS failover bootstrap will wait for SIMPLE_L1_CLOUDFLARE_API_TOKEN."
+        return 0
+    fi
+
+    section "Simple L1 Cloudflare failover"
+    note "Optional now. Use a scoped token with Zone:Read and DNS:Edit for ${SIMPLE_L1_DOMAIN}."
+    printf 'Configure Cloudflare token for Simple L1 DNS failover now? [y/N]: ' > /dev/tty
+    read -r token_choice < /dev/tty
+    case "$token_choice" in
+        y|Y|yes|YES)
+            printf 'Cloudflare API token: ' > /dev/tty
+            read -rs SIMPLE_L1_CLOUDFLARE_API_TOKEN < /dev/tty
+            printf '\n' > /dev/tty
+            SIMPLE_L1_CLOUDFLARE_API_TOKEN="$(strip_env_quotes "$SIMPLE_L1_CLOUDFLARE_API_TOKEN")"
+            if [ -z "$SIMPLE_L1_CLOUDFLARE_API_TOKEN" ]; then
+                warning "Cloudflare token was empty. Skipping DNS failover bootstrap."
+                return 0
+            fi
+
+            printf 'Cloudflare zone ID (blank to auto-discover): ' > /dev/tty
+            read -r zone_choice < /dev/tty
+            SIMPLE_L1_CLOUDFLARE_ZONE_ID="$(strip_env_quotes "$zone_choice")"
+
+            if [ -z "$SIMPLE_L1_PUBLIC_IP" ]; then
+                public_ip_choice="$(detect_public_ip)"
+                if [ -n "$public_ip_choice" ]; then
+                    SIMPLE_L1_PUBLIC_IP="$public_ip_choice"
+                    note "Using detected public IP for this Simple L1 node: ${SIMPLE_L1_PUBLIC_IP}"
+                fi
+            fi
+
+            SIMPLE_L1_DNS_STEERING_ENABLED="${SIMPLE_L1_DNS_STEERING_ENABLED:-true}"
+            if [ "$SIMPLE_L1_DNS_STEERING_ENABLED" = "false" ]; then
+                SIMPLE_L1_DNS_STEERING_ENABLED="true"
+            fi
+            if [ -z "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_CONFIGURED" ]; then
+                SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE="apply"
+            fi
+            SELECTED_SIMPLE_L1_CLOUDFLARE="true"
+            export SIMPLE_L1_CLOUDFLARE_API_TOKEN SIMPLE_L1_CLOUDFLARE_ZONE_ID SIMPLE_L1_PUBLIC_IP SIMPLE_L1_DNS_STEERING_ENABLED SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE
+            ;;
+        *)
+            note "Skipping Cloudflare token. You can add SIMPLE_L1_CLOUDFLARE_API_TOKEN later and rerun sovereign:simple-l1-bootstrap."
+            ;;
+    esac
+}
+
+apply_simple_l1_env() {
+    set_env_var "SIMPLE_L1_IMAGE" "$SIMPLE_L1_IMAGE"
+    set_env_var "SIMPLE_L1_DOMAIN" "$SIMPLE_L1_DOMAIN"
+    set_env_var "SIMPLE_L1_ISSUER_URL" "$SIMPLE_L1_ISSUER_URL"
+    set_env_var "SIMPLE_L1_NODE_NAME" "$SIMPLE_L1_NODE_NAME"
+    set_env_var "SIMPLE_L1_NETWORK_NAME" "$SIMPLE_L1_NETWORK_NAME"
+    set_env_var "SIMPLE_L1_NODE_TYPE_LABEL" "$SIMPLE_L1_NODE_TYPE_LABEL"
+    set_env_var "SIMPLE_L1_SELF_WEBHOOK" "$SIMPLE_L1_SELF_WEBHOOK"
+    set_env_var "SIMPLE_L1_PEERS" "$SIMPLE_L1_PEERS"
+    set_env_var "SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE" "$SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE"
+    set_env_var "SIMPLE_L1_DNS_TTL" "$SIMPLE_L1_DNS_TTL"
+    set_env_var "SIMPLE_L1_DNS_STEERING_ENABLED" "$SIMPLE_L1_DNS_STEERING_ENABLED"
+    set_env_var "SIMPLE_L1_CLOUDFLARE_PROXIED" "$SIMPLE_L1_CLOUDFLARE_PROXIED"
+    set_env_var "SIMPLE_L1_CLOUDFLARE_API_TOKEN" "$SIMPLE_L1_CLOUDFLARE_API_TOKEN"
+    set_env_var "SIMPLE_L1_CLOUDFLARE_ZONE_ID" "$SIMPLE_L1_CLOUDFLARE_ZONE_ID"
+    set_env_var "SIMPLE_L1_PUBLIC_IP" "$SIMPLE_L1_PUBLIC_IP"
+    set_env_var "SIMPLE_L1_FAILOVER_NODES" "$SIMPLE_L1_FAILOVER_NODES"
+    set_env_var "SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND" "$SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND"
+    set_env_var "SOVEREIGN_DNS_STEERING_SCHEDULE" "$SOVEREIGN_DNS_STEERING_SCHEDULE"
+    set_env_var "SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE" "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE"
+    set_env_var "SOVEREIGN_SIMPLE_L1_BOOTSTRAP" "$SOVEREIGN_SIMPLE_L1_BOOTSTRAP"
+}
+
 choose_smtp_mode() {
     local mode_choice
 
@@ -857,12 +967,14 @@ progress 2 4 "host detection"
 DETECTED_INSTALL_STATE="$(detected_install_state)"
 resolve_install_mode "$DETECTED_INSTALL_STATE"
 choose_host_domain
+choose_simple_l1_cloudflare
 choose_hardening
 
 section "Selected action"
 note "Mode:        ${SELECTED_INSTALL_MODE}"
 note "Admin claim: ${SELECTED_ADMIN_CLAIM}"
 note "Hardening:   ${SELECTED_HARDENING}"
+note "SL1 DNS:     ${SELECTED_SIMPLE_L1_CLOUDFLARE}"
 if [ -n "$SELECTED_APP_URL" ]; then
     note "APP_URL:     ${SELECTED_APP_URL}"
 fi
@@ -873,6 +985,7 @@ case "$SELECTED_INSTALL_MODE" in
     upgrade|refresh)
         progress 3 4 "runtime configuration"
         apply_host_domain_env
+        apply_simple_l1_env
         run_host_hardening
         checkpoint 3 4 "RUNTIME_CONFIGURED" "Runtime environment prepared" "mode=${SELECTED_INSTALL_MODE} hardening=${SELECTED_HARDENING}"
         progress 4 4 "runtime converge"
@@ -912,6 +1025,7 @@ set_env_var "APP_PORT" "$APP_PORT"
 set_env_var "SOKETI_PORT" "$SOKETI_PORT"
 set_env_var "COOLIFY_IMAGE" "$COOLIFY_IMAGE"
 set_env_var "SOVEREIGN_REALTIME_IMAGE" "$SOVEREIGN_REALTIME_IMAGE"
+set_env_var "SIMPLE_L1_IMAGE" "$SIMPLE_L1_IMAGE"
 set_env_var "HELPER_IMAGE" "$(strip_image_tag "$HELPER_IMAGE")"
 set_env_var "SOVEREIGN_REPOSITORY" "$REPOSITORY"
 set_env_var "SOVEREIGN_BRANCH" "$BRANCH"
@@ -921,6 +1035,25 @@ set_env_var "SL1_CONNECT_CLIENT_ID" "$SL1_CONNECT_CLIENT_ID"
 set_env_var "SL1_CONNECT_CLIENT_NAME" "$SL1_CONNECT_CLIENT_NAME"
 set_env_var "SL1_CONNECT_CALLBACK_PATH" "$SL1_CONNECT_CALLBACK_PATH"
 set_env_var "SL1_CONNECT_TIMEOUT" "$SL1_CONNECT_TIMEOUT"
+set_env_var "SIMPLE_L1_DOMAIN" "$SIMPLE_L1_DOMAIN"
+set_env_var "SIMPLE_L1_ISSUER_URL" "$SIMPLE_L1_ISSUER_URL"
+set_env_var "SIMPLE_L1_NODE_NAME" "$SIMPLE_L1_NODE_NAME"
+set_env_var "SIMPLE_L1_NETWORK_NAME" "$SIMPLE_L1_NETWORK_NAME"
+set_env_var "SIMPLE_L1_NODE_TYPE_LABEL" "$SIMPLE_L1_NODE_TYPE_LABEL"
+set_env_var "SIMPLE_L1_SELF_WEBHOOK" "$SIMPLE_L1_SELF_WEBHOOK"
+set_env_var "SIMPLE_L1_PEERS" "$SIMPLE_L1_PEERS"
+set_env_var "SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE" "$SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE"
+set_env_var "SIMPLE_L1_DNS_TTL" "$SIMPLE_L1_DNS_TTL"
+set_env_var "SIMPLE_L1_DNS_STEERING_ENABLED" "$SIMPLE_L1_DNS_STEERING_ENABLED"
+set_env_var "SIMPLE_L1_CLOUDFLARE_PROXIED" "$SIMPLE_L1_CLOUDFLARE_PROXIED"
+set_env_var "SIMPLE_L1_CLOUDFLARE_API_TOKEN" "$SIMPLE_L1_CLOUDFLARE_API_TOKEN"
+set_env_var "SIMPLE_L1_CLOUDFLARE_ZONE_ID" "$SIMPLE_L1_CLOUDFLARE_ZONE_ID"
+set_env_var "SIMPLE_L1_PUBLIC_IP" "$SIMPLE_L1_PUBLIC_IP"
+set_env_var "SIMPLE_L1_FAILOVER_NODES" "$SIMPLE_L1_FAILOVER_NODES"
+set_env_var "SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND" "$SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND"
+set_env_var "SOVEREIGN_DNS_STEERING_SCHEDULE" "$SOVEREIGN_DNS_STEERING_SCHEDULE"
+set_env_var "SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE" "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE"
+set_env_var "SOVEREIGN_SIMPLE_L1_BOOTSTRAP" "$SOVEREIGN_SIMPLE_L1_BOOTSTRAP"
 set_env_var "SOVEREIGN_HARDENING_PROFILE" "$SOVEREIGN_HARDENING_PROFILE"
 if [ -n "${SOVEREIGN_WIREGUARD_CIDRS:-}" ]; then
     set_env_var "SOVEREIGN_WIREGUARD_CIDRS" "$SOVEREIGN_WIREGUARD_CIDRS"

@@ -163,7 +163,8 @@ class Advanced extends Component
             $this->authorize('update', $this->application);
             $reset = false;
             if ($this->isLogDrainEnabled) {
-                if (! $this->application->destination->server->isLogDrainEnabled()) {
+                $server = data_get($this->application, 'destination.server');
+                if (! $server || ! $server->isLogDrainEnabled()) {
                     $this->isLogDrainEnabled = false;
                     $this->syncData(true);
                     $this->dispatch('error', 'Log drain is not enabled on this server.');
@@ -232,7 +233,12 @@ class Advanced extends Component
                 return;
             }
             $customInternalName = $this->customInternalName;
-            $server = $this->application->destination->server;
+            $server = data_get($this->application, 'destination.server');
+            if (! $server) {
+                $this->dispatch('error', 'Cannot save custom name.', 'No server is configured for this application.');
+
+                return;
+            }
             $allApplications = $server->applications();
 
             $foundSameInternalName = $allApplications->filter(function ($application) {

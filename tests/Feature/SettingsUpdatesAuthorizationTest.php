@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Settings\Index;
 use App\Livewire\Settings\Updates;
 use App\Models\InstanceSettings;
 use App\Models\Server;
@@ -26,7 +27,7 @@ test('non-admin user is redirected from settings updates page', function () {
 test('instance admin can access settings updates page', function () {
     $rootTeam = Team::find(0) ?? Team::factory()->create(['id' => 0]);
     Server::factory()->create(['id' => 0, 'team_id' => $rootTeam->id]);
-    InstanceSettings::create(['id' => 0]);
+    InstanceSettings::unguarded(fn () => InstanceSettings::create(['id' => 0]));
     Once::flush();
 
     $user = User::factory()->create();
@@ -36,6 +37,22 @@ test('instance admin can access settings updates page', function () {
     session(['currentTeam' => ['id' => $rootTeam->id]]);
 
     Livewire::test(Updates::class)
+        ->assertOk()
+        ->assertNoRedirect();
+});
+
+test('instance settings page renders when root server record is missing', function () {
+    $rootTeam = Team::find(0) ?? Team::factory()->create(['id' => 0]);
+    InstanceSettings::unguarded(fn () => InstanceSettings::create(['id' => 0]));
+    Once::flush();
+
+    $user = User::factory()->create();
+    $rootTeam->members()->attach($user->id, ['role' => 'admin']);
+
+    $this->actingAs($user);
+    session(['currentTeam' => ['id' => $rootTeam->id]]);
+
+    Livewire::test(Index::class)
         ->assertOk()
         ->assertNoRedirect();
 });

@@ -3,6 +3,7 @@
 namespace App\Livewire\Security;
 
 use App\Models\CloudProviderToken;
+use App\Services\Provider\ProviderServerActionAdapterFactory;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Livewire\Component;
 
@@ -36,26 +37,28 @@ class CloudProviderTokens extends Component
             $token = CloudProviderToken::ownedByCurrentTeam()->findOrFail($tokenId);
             $this->authorize('view', $token);
 
-            if ($token->provider === 'hetzner') {
-                $isValid = $this->validateHetznerToken($token->token);
-                if ($isValid) {
-                    $this->dispatch('success', 'Hetzner token is valid.');
-                } else {
-                    $this->dispatch('error', 'Hetzner token validation failed. Please check the token.');
-                }
-            } elseif ($token->provider === 'digitalocean') {
-                $isValid = $this->validateDigitalOceanToken($token->token);
-                if ($isValid) {
-                    $this->dispatch('success', 'DigitalOcean token is valid.');
-                } else {
-                    $this->dispatch('error', 'DigitalOcean token validation failed. Please check the token.');
-                }
-            } else {
-                $this->dispatch('error', 'Unknown provider.');
-            }
+            $isValid = $this->validateProviderToken($token);
+            $providerName = str($token->provider)->replace('_', ' ')->title();
+
+            $this->dispatch(
+                $isValid ? 'success' : 'error',
+                $isValid
+                    ? "{$providerName} token is valid."
+                    : "{$providerName} token validation failed. Please check the token."
+            );
         } catch (\Throwable $e) {
             return handleError($e, $this);
         }
+    }
+
+    private function validateProviderToken(CloudProviderToken $token): bool
+    {
+        return match ($token->provider) {
+            'hetzner' => $this->validateHetznerToken($token->token),
+            'digitalocean' => $this->validateDigitalOceanToken($token->token),
+            'selectel_vds', 'hostinger_vps' => $this->validateProviderAdapterToken($token),
+            default => false,
+        };
     }
 
     private function validateHetznerToken(string $token): bool
@@ -79,6 +82,19 @@ class CloudProviderTokens extends Component
                 ->get('https://api.digitalocean.com/v2/account');
 
             return $response->successful();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private function validateProviderAdapterToken(CloudProviderToken $token): bool
+    {
+        try {
+            app(ProviderServerActionAdapterFactory::class)
+                ->make($token->provider, $token)
+                ->listServers($token);
+
+            return true;
         } catch (\Throwable $e) {
             return false;
         }

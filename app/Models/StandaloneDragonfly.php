@@ -102,7 +102,11 @@ class StandaloneDragonfly extends BaseModel
     {
         return Attribute::make(
             get: function () {
-                return $this->destination->server->isFunctional();
+                if (blank($this->destination_id) || blank($this->destination_type)) {
+                    return false;
+                }
+
+                return $this->destination?->server?->isFunctional() ?? false;
             }
         );
     }

@@ -407,6 +407,23 @@ sync_identity_policy() {
     checkpoint 5 "$CONVERGE_TOTAL" "IDENTITY_POLICY_SYNCED" "SL1 identity policy is active"
 }
 
+bootstrap_simple_l1_failover() {
+    local mode="${SOVEREIGN_SIMPLE_L1_BOOTSTRAP:-auto}"
+    case "$mode" in
+        skip|false|off)
+            log "Simple L1 failover bootstrap skipped."
+            return 0
+            ;;
+    esac
+
+    if run_logged "bootstrapping Simple L1 failover" docker exec coolify php artisan sovereign:simple-l1-bootstrap --json; then
+        log "Simple L1 failover policy is ready."
+    else
+        log "Simple L1 failover bootstrap did not complete. Set SIMPLE_L1_CLOUDFLARE_API_TOKEN and SIMPLE_L1_PUBLIC_IP/SIMPLE_L1_FAILOVER_NODES, then run:"
+        log "docker exec coolify php artisan sovereign:simple-l1-bootstrap --enable"
+    fi
+}
+
 run_migrations() {
     write_status "4" "Running database migrations"
     log "Running Coolify migrations"
@@ -470,11 +487,34 @@ COOLIFY_IMAGE="${COOLIFY_IMAGE:-$(get_env_var COOLIFY_IMAGE)}"
 COOLIFY_IMAGE="${COOLIFY_IMAGE:-ghcr.io/${REPOSITORY}:sovereign}"
 SOVEREIGN_REALTIME_IMAGE="${SOVEREIGN_REALTIME_IMAGE:-$(get_env_var SOVEREIGN_REALTIME_IMAGE)}"
 SOVEREIGN_REALTIME_IMAGE="${SOVEREIGN_REALTIME_IMAGE:-ghcr.io/coollabsio/coolify-realtime:1.0.13}"
+SIMPLE_L1_IMAGE="${SIMPLE_L1_IMAGE:-$(get_env_var SIMPLE_L1_IMAGE)}"
+SIMPLE_L1_IMAGE="${SIMPLE_L1_IMAGE:-ghcr.io/vv1ldd/simple-l1:latest}"
 HELPER_IMAGE="${HELPER_IMAGE:-$(get_env_var HELPER_IMAGE)}"
 HELPER_IMAGE="${HELPER_IMAGE:-ghcr.io/coollabsio/coolify-helper}"
+SIMPLE_L1_DOMAIN_VALUE="${SIMPLE_L1_DOMAIN:-$(get_env_var SIMPLE_L1_DOMAIN)}"
+SIMPLE_L1_DOMAIN_VALUE="${SIMPLE_L1_DOMAIN_VALUE:-simplel1.online}"
+SIMPLE_L1_ISSUER_URL_VALUE="${SIMPLE_L1_ISSUER_URL:-$(get_env_var SIMPLE_L1_ISSUER_URL)}"
+SIMPLE_L1_ISSUER_URL_VALUE="${SIMPLE_L1_ISSUER_URL_VALUE:-https://simplel1.online/sl1}"
+SIMPLE_L1_NODE_NAME_VALUE="${SIMPLE_L1_NODE_NAME:-$(get_env_var SIMPLE_L1_NODE_NAME)}"
+SIMPLE_L1_NODE_NAME_VALUE="${SIMPLE_L1_NODE_NAME_VALUE:-sovereign-coolify-node}"
+SIMPLE_L1_NETWORK_NAME_VALUE="${SIMPLE_L1_NETWORK_NAME:-$(get_env_var SIMPLE_L1_NETWORK_NAME)}"
+SIMPLE_L1_NETWORK_NAME_VALUE="${SIMPLE_L1_NETWORK_NAME_VALUE:-Simple-L1}"
+SIMPLE_L1_NODE_TYPE_LABEL_VALUE="${SIMPLE_L1_NODE_TYPE_LABEL:-$(get_env_var SIMPLE_L1_NODE_TYPE_LABEL)}"
+SIMPLE_L1_NODE_TYPE_LABEL_VALUE="${SIMPLE_L1_NODE_TYPE_LABEL_VALUE:-Sovereign Coolify Node}"
+SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE_VALUE="${SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE:-$(get_env_var SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE)}"
+SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE_VALUE="${SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE_VALUE:-false}"
+SIMPLE_L1_DNS_TTL_VALUE="${SIMPLE_L1_DNS_TTL:-$(get_env_var SIMPLE_L1_DNS_TTL)}"
+SIMPLE_L1_DNS_TTL_VALUE="${SIMPLE_L1_DNS_TTL_VALUE:-60}"
+SIMPLE_L1_DNS_STEERING_ENABLED_VALUE="${SIMPLE_L1_DNS_STEERING_ENABLED:-$(get_env_var SIMPLE_L1_DNS_STEERING_ENABLED)}"
+SIMPLE_L1_DNS_STEERING_ENABLED_VALUE="${SIMPLE_L1_DNS_STEERING_ENABLED_VALUE:-false}"
+SIMPLE_L1_CLOUDFLARE_PROXIED_VALUE="${SIMPLE_L1_CLOUDFLARE_PROXIED:-$(get_env_var SIMPLE_L1_CLOUDFLARE_PROXIED)}"
+SIMPLE_L1_CLOUDFLARE_PROXIED_VALUE="${SIMPLE_L1_CLOUDFLARE_PROXIED_VALUE:-false}"
+SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_VALUE="${SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE:-$(get_env_var SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE)}"
+SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_VALUE="${SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_VALUE:-off}"
 
 set_env_var "COOLIFY_IMAGE" "$COOLIFY_IMAGE"
 set_env_var "SOVEREIGN_REALTIME_IMAGE" "$SOVEREIGN_REALTIME_IMAGE"
+set_env_var "SIMPLE_L1_IMAGE" "$SIMPLE_L1_IMAGE"
 set_env_var "HELPER_IMAGE" "$(strip_image_tag "$HELPER_IMAGE")"
 set_env_var "SOVEREIGN_REPOSITORY" "$REPOSITORY"
 set_env_var "SOVEREIGN_BRANCH" "$BRANCH"
@@ -487,6 +527,25 @@ set_env_var "SL1_CONNECT_CLIENT_ID" "${SL1_CONNECT_CLIENT_ID:-$(get_env_var SL1_
 set_env_var "SL1_CONNECT_CLIENT_NAME" "$SL1_CONNECT_CLIENT_NAME_VALUE"
 set_env_var "SL1_CONNECT_CALLBACK_PATH" "${SL1_CONNECT_CALLBACK_PATH:-$(get_env_var SL1_CONNECT_CALLBACK_PATH)}"
 set_env_var "SL1_CONNECT_TIMEOUT" "${SL1_CONNECT_TIMEOUT:-$(get_env_var SL1_CONNECT_TIMEOUT)}"
+set_env_var "SIMPLE_L1_DOMAIN" "$SIMPLE_L1_DOMAIN_VALUE"
+set_env_var "SIMPLE_L1_ISSUER_URL" "$SIMPLE_L1_ISSUER_URL_VALUE"
+set_env_var "SIMPLE_L1_NODE_NAME" "$SIMPLE_L1_NODE_NAME_VALUE"
+set_env_var "SIMPLE_L1_NETWORK_NAME" "$SIMPLE_L1_NETWORK_NAME_VALUE"
+set_env_var "SIMPLE_L1_NODE_TYPE_LABEL" "$SIMPLE_L1_NODE_TYPE_LABEL_VALUE"
+set_env_var "SIMPLE_L1_SELF_WEBHOOK" "${SIMPLE_L1_SELF_WEBHOOK:-$(get_env_var SIMPLE_L1_SELF_WEBHOOK)}"
+set_env_var "SIMPLE_L1_PEERS" "${SIMPLE_L1_PEERS:-$(get_env_var SIMPLE_L1_PEERS)}"
+set_env_var "SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE" "$SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE_VALUE"
+set_env_var "SIMPLE_L1_DNS_TTL" "$SIMPLE_L1_DNS_TTL_VALUE"
+set_env_var "SIMPLE_L1_DNS_STEERING_ENABLED" "$SIMPLE_L1_DNS_STEERING_ENABLED_VALUE"
+set_env_var "SIMPLE_L1_CLOUDFLARE_PROXIED" "$SIMPLE_L1_CLOUDFLARE_PROXIED_VALUE"
+set_env_var "SIMPLE_L1_CLOUDFLARE_API_TOKEN" "${SIMPLE_L1_CLOUDFLARE_API_TOKEN:-$(get_env_var SIMPLE_L1_CLOUDFLARE_API_TOKEN)}"
+set_env_var "SIMPLE_L1_CLOUDFLARE_ZONE_ID" "${SIMPLE_L1_CLOUDFLARE_ZONE_ID:-$(get_env_var SIMPLE_L1_CLOUDFLARE_ZONE_ID)}"
+set_env_var "SIMPLE_L1_PUBLIC_IP" "${SIMPLE_L1_PUBLIC_IP:-$(get_env_var SIMPLE_L1_PUBLIC_IP)}"
+set_env_var "SIMPLE_L1_FAILOVER_NODES" "${SIMPLE_L1_FAILOVER_NODES:-$(get_env_var SIMPLE_L1_FAILOVER_NODES)}"
+set_env_var "SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND" "${SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND:-$(get_env_var SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND)}"
+set_env_var "SOVEREIGN_DNS_STEERING_SCHEDULE" "${SOVEREIGN_DNS_STEERING_SCHEDULE:-$(get_env_var SOVEREIGN_DNS_STEERING_SCHEDULE)}"
+set_env_var "SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE" "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_VALUE"
+set_env_var "SOVEREIGN_SIMPLE_L1_BOOTSTRAP" "${SOVEREIGN_SIMPLE_L1_BOOTSTRAP:-$(get_env_var SOVEREIGN_SIMPLE_L1_BOOTSTRAP)}"
 checkpoint 1 "$CONVERGE_TOTAL" "BOOTSTRAP_READY" "Runtime files and environment are prepared" "repository=${REPOSITORY} branch=${BRANCH}"
 
 run_host_hardening
@@ -508,19 +567,19 @@ COMPOSE_FILES+=(-f "${SOURCE_DIR}/docker-compose.sovereign.prod.yml")
 write_status "2" "Pulling images"
 progress 2 "$CONVERGE_TOTAL" "pull images"
 phase "pulling runtime images"
-run_logged "pulling runtime images" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
+run_logged "pulling runtime images" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" pull
 checkpoint 2 "$CONVERGE_TOTAL" "IMAGES_PULLED" "Runtime images are present locally" "coolify_image=${COOLIFY_IMAGE}"
 
 write_status "3" "Starting containers"
 progress 3 "$CONVERGE_TOTAL" "start containers"
 phase "starting containers"
-run_logged "starting containers" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
+run_logged "starting containers" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
 
 if ! docker exec coolify getent hosts host.docker.internal >/dev/null 2>&1; then
     log "Recreating Coolify container so host.docker.internal resolves through host-gateway"
-    run_logged "recreating Coolify host gateway" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
+    run_logged "recreating Coolify host gateway" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" \
         docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --force-recreate --no-deps --wait --wait-timeout 120 coolify
 fi
 mark_converge_state "CONTAINERS_STARTED"
@@ -531,6 +590,7 @@ run_migrations
 mark_converge_state "MIGRATIONS_DONE"
 progress 5 "$CONVERGE_TOTAL" "identity policy"
 sync_identity_policy
+bootstrap_simple_l1_failover
 mark_converge_state "POLICY_SYNCED"
 progress 6 "$CONVERGE_TOTAL" "domain routing"
 sync_host_domain

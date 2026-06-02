@@ -15,6 +15,7 @@ SOVEREIGN_SKIP_PULL="${SOVEREIGN_SKIP_PULL:-false}"
 SOVEREIGN_SKIP_HEALTHCHECK="${SOVEREIGN_SKIP_HEALTHCHECK:-false}"
 COOLIFY_IMAGE="${COOLIFY_IMAGE:-}"
 SOVEREIGN_REALTIME_IMAGE="${SOVEREIGN_REALTIME_IMAGE:-}"
+SIMPLE_L1_IMAGE="${SIMPLE_L1_IMAGE:-}"
 
 if [ -z "${NO_COLOR:-}" ]; then
     C_RESET="$(printf '\033[0m')"
@@ -146,12 +147,14 @@ copy_runtime_files() {
 resolve_images() {
     COOLIFY_IMAGE="${COOLIFY_IMAGE:-$(strip_env_quotes "$(get_env_var COOLIFY_IMAGE)")}"
     SOVEREIGN_REALTIME_IMAGE="${SOVEREIGN_REALTIME_IMAGE:-$(strip_env_quotes "$(get_env_var SOVEREIGN_REALTIME_IMAGE)")}"
+    SIMPLE_L1_IMAGE="${SIMPLE_L1_IMAGE:-$(strip_env_quotes "$(get_env_var SIMPLE_L1_IMAGE)")}"
     COOLIFY_IMAGE="${COOLIFY_IMAGE:-ghcr.io/vv1ldd/coolify:sovereign}"
     SOVEREIGN_REALTIME_IMAGE="${SOVEREIGN_REALTIME_IMAGE:-ghcr.io/coollabsio/coolify-realtime:1.0.13}"
+    SIMPLE_L1_IMAGE="${SIMPLE_L1_IMAGE:-ghcr.io/vv1ldd/simple-l1:latest}"
 }
 
 docker_compose() {
-    env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" \
+    env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" \
         docker compose --env-file "$ENV_FILE" "${compose_files[@]}" "$@"
 }
 
@@ -185,6 +188,23 @@ optimize_runtime() {
     phase "runtime cache"
     run_logged "cleared caches" docker exec coolify php artisan optimize:clear
     run_logged "cached config/routes/views" docker exec coolify php artisan optimize
+}
+
+simple_l1_bootstrap() {
+    local mode="${SOVEREIGN_SIMPLE_L1_BOOTSTRAP:-auto}"
+    case "$mode" in
+        skip|false|off)
+            note "Simple L1 failover bootstrap skipped."
+            return
+            ;;
+    esac
+
+    phase "Simple L1 failover bootstrap"
+    if run_logged "bootstrapped Simple L1 failover policy" docker exec coolify php artisan sovereign:simple-l1-bootstrap --json; then
+        note "Simple L1 failover policy is ready."
+    else
+        warn "Simple L1 failover bootstrap did not complete. Set SIMPLE_L1_CLOUDFLARE_API_TOKEN and SIMPLE_L1_PUBLIC_IP/SIMPLE_L1_FAILOVER_NODES, then rerun sovereign:simple-l1-bootstrap."
+    fi
 }
 
 healthcheck() {
@@ -255,10 +275,12 @@ main() {
     build_compose_files
 
     note "Coolify image: ${COOLIFY_IMAGE}"
+    note "Simple L1 image: ${SIMPLE_L1_IMAGE}"
     pull_images
     restart_runtime
     run_migrations
     optimize_runtime
+    simple_l1_bootstrap
     healthcheck
     dns_steering
 

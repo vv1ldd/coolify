@@ -6,6 +6,7 @@ Sovereign install path for VPS testing.
 ## What This Installs
 
 - Coolify application image: `ghcr.io/vv1ldd/coolify:sovereign`
+- Simple L1 node image: `ghcr.io/vv1ldd/simple-l1:latest`
 - Upstream realtime image: `ghcr.io/coollabsio/coolify-realtime:1.0.13`
 - Postgres 15 and Redis 7 from the standard Coolify compose files
 - Persistent state under `/data/coolify`
@@ -89,10 +90,112 @@ Optional SL1 Connect settings:
 
 ```bash
 export SL1_CONNECT_ISSUER=https://simplel1.online
+export SIMPLE_L1_ISSUER_URL=https://simplel1.online/sl1
 export SL1_CONNECT_CLIENT_ID=coolify.sovereign
 export SL1_CONNECT_CLIENT_NAME='Sovereign Coolify'
 curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
 ```
+
+## Simple L1 Failover
+
+Sovereign Coolify starts a dedicated `simple-l1` container by default through
+`docker-compose.sovereign.prod.yml`. Coolify depends on this service being
+healthy, so a Sovereign node boot brings up both the control panel and the local
+Simple L1 runtime. The embedded Laravel runtime remains a fallback/projection
+layer, not the primary container runtime.
+
+The `simple-l1` service:
+
+- uses `SIMPLE_L1_IMAGE`, defaulting to `ghcr.io/vv1ldd/simple-l1:latest`
+- persists state in the Docker volume `simple-l1-data`
+- health-checks `http://127.0.0.1:3000/healthcheck`
+- exposes Traefik routers for `SIMPLE_L1_DOMAIN`, defaulting to `simplel1.online`
+- exposes an HTTP-only `/healthcheck` route before HTTPS redirect so peer nodes
+  can probe `http://NODE_IP/healthcheck` with `Host: simplel1.online`
+
+Each node can serve the public Simple L1 domain and keep a Cloudflare DNS
+steering policy ready for the `simplel1.online` record.
+
+Configure every failover node with the same domain and Cloudflare zone settings,
+but with its own public IP:
+
+```bash
+export SIMPLE_L1_DOMAIN=simplel1.online
+export SIMPLE_L1_ISSUER_URL=https://simplel1.online/sl1
+export SIMPLE_L1_IMAGE=ghcr.io/vv1ldd/simple-l1:latest
+export SIMPLE_L1_NODE_NAME=br-primary
+export SIMPLE_L1_CLOUDFLARE_API_TOKEN='cloudflare-token-with-zone-read-dns-edit'
+export SIMPLE_L1_PUBLIC_IP='203.0.113.10'
+export SIMPLE_L1_FAILOVER_NODES='primary=203.0.113.10,backup=203.0.113.11'
+export SIMPLE_L1_DNS_STEERING_ENABLED=true
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
+```
+
+When the installer is running interactively and no token is provided through env
+or an existing `.env`, it asks whether to configure the Cloudflare token for
+Simple L1 DNS failover. The token is read with a silent prompt and written only
+to `/data/coolify/source/.env`; it is never baked into the image or repository.
+When a token is configured and `SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE` was not
+set explicitly, the installer enables scheduled
+`sovereign:simple-l1-failover --apply` so a healthy peer can move the Cloudflare
+record after the active node fails.
+The dedicated Simple L1 failover loop is `sovereign:simple-l1-failover`; it only
+promotes a new IP when the current Cloudflare A target is unhealthy. It does not
+automatically fail back while the current target is still healthy.
+
+Every run persists the observation/election trail:
+
+- `simple_l1_node_observations` stores per-node health evidence
+- `simple_l1_failover_decisions` stores the recommendation, reason, evidence
+  hash, and applied DNS result when a promotion happens
+
+This makes the failover answer auditable later: not just "where does DNS point",
+but "why did we point it there".
+
+The layer boundary is captured in
+`docs/adr/0008-observation-does-not-imply-authority.md`: observations may
+influence recommendations, recommendations may influence decisions, and decisions
+may authorize control actions. Observations alone never authorize DNS writes.
+
+For non-interactive installs, pass the token explicitly:
+
+```bash
+export SIMPLE_L1_CLOUDFLARE_API_TOKEN='cloudflare-token-with-zone-read-dns-edit'
+export SIMPLE_L1_PUBLIC_IP='203.0.113.10'
+export SIMPLE_L1_FAILOVER_NODES='primary=203.0.113.10,backup=203.0.113.11'
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
+```
+
+The bootstrap command can also be run manually:
+
+```bash
+docker exec coolify php artisan sovereign:simple-l1-bootstrap --enable
+docker exec coolify php artisan dns:steering:evaluate --apply --json
+```
+
+For continuous autonomous failover, explicitly enable the scheduler:
+
+```bash
+export SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE=apply
+```
+
+Keep these flags off until the Cloudflare policy has been verified with:
+
+```bash
+docker exec coolify php artisan dns:steering:evaluate --json
+docker exec coolify php artisan sovereign:simple-l1-failover --json
+```
+
+The bootstrap stores each candidate as a per-IP probe, for example:
+
+```text
+primary -> http://203.0.113.10/healthcheck with Host: simplel1.online
+backup  -> http://203.0.113.11/healthcheck with Host: simplel1.online
+```
+
+This is important because checking `https://simplel1.online` only tests the
+currently active DNS target. Per-IP probes let a backup Coolify node detect that
+the active server is down and safely promote another healthy IP.
 
 Optional host hardening:
 
@@ -187,10 +290,11 @@ By default it:
 
 - copies runtime compose/env scripts into `/data/coolify/source`
 - backs up `/data/coolify/source/.env`
-- pulls the configured Sovereign image
+- pulls the configured Sovereign, realtime, and Simple L1 images
 - restarts the Coolify runtime
 - runs database migrations
 - rebuilds Laravel caches
+- bootstraps the Simple L1 DNS failover policy when Cloudflare/IP settings are available
 - checks `/api/health`
 - runs `dns:steering:evaluate --json` as a dry run
 
@@ -224,7 +328,8 @@ Update rail:
   refresh directly from a checked-out repository on the VPS
 - `scripts/sovereign-host-hardening.sh` - optional reversible host hardening
   worker for firewall, Fail2Ban, Docker logs, SMTP relay, and network surfaces
-- `docker-compose.sovereign.prod.yml` - overrides the app image to the fork image
+- `docker-compose.sovereign.prod.yml` - overrides the app image and adds the
+  default `simple-l1` runtime dependency
 - `.github/workflows/sovereign-build.yml` - publishes `ghcr.io/vv1ldd/coolify:sovereign`
 
 ## Notes

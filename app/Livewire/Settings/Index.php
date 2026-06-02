@@ -64,7 +64,7 @@ class Index extends Component
         }
         $this->settings = instanceSettings();
         if (! isCloud()) {
-            $this->server = Server::findOrFail(0);
+            $this->server = Server::find(0);
         }
         $this->fqdn = $this->settings->fqdn;
         $this->public_port_min = $this->settings->public_port_min;

@@ -1,3 +1,8 @@
+@php
+    $server = data_get($application, 'destination.server');
+    $isSwarm = $server?->isSwarm() ?? false;
+@endphp
+
 <div x-data="{
     initLoadingCompose: $wire.entangle('initLoadingCompose'),
     canUpdate: @js(auth()->user()->can('update', $application)),
@@ -12,6 +17,12 @@
                 <div>{{ $application->compose_parsing_version }}</div>
             @endif
             <x-forms.button canGate="update" :canResource="$application" type="submit">Save</x-forms.button>
+            @if ($buildPack !== 'dockercompose')
+                <x-forms.button canGate="update" :canResource="$application" type="button"
+                    wire:click="saveAndConfigureDns">
+                    Save & Configure DNS
+                </x-forms.button>
+            @endif
             @if ($buildPack === 'dockercompose')
                 <x-forms.button canGate="update" :canResource="$application" wire:target='initLoadingCompose'
                     x-on:click="$wire.dispatch('loadCompose', false)">
@@ -123,6 +134,26 @@
                     @endif
                 </div>
                 <x-edge-policy-summary :domains="$fqdn" :teamId="currentTeam()?->id" />
+                <div class="p-3 text-xs border rounded border-neutral-200 dark:border-neutral-800">
+                    <div class="font-semibold">Cloudflare</div>
+                    @if (data_get($this->cloudflareDnsStatus, 'available'))
+                        <div class="pt-1 text-neutral-500">
+                            Matching zone(s):
+                            {{ collect(data_get($this->cloudflareDnsStatus, 'matches', []))->pluck('zone')->unique()->join(', ') }}
+                        </div>
+                        <x-forms.checkbox id="cloudflareProxied" label="Cloudflare proxied"
+                            helper="When enabled, Cloudflare proxying is requested for A, AAAA and CNAME records. RU zones are forced DNS-only." />
+                        @if (collect(data_get($this->cloudflareDnsStatus, 'matches', []))->contains('proxy_forced_dns_only', true))
+                            <div class="pt-1 text-amber-600 dark:text-amber-400">
+                                One or more matched zones are DNS-only by policy.
+                            </div>
+                        @endif
+                    @else
+                        <div class="pt-1 text-neutral-500">
+                            No connected Cloudflare zone matches this domain yet. Add the zone in Cloudflare settings to enable DNS and proxying controls here.
+                        </div>
+                    @endif
+                </div>
                 <div class="flex items-end gap-2">
                     @if ($application->settings->is_container_label_readonly_enabled == false)
                         @if ($application->redirect === 'both')
@@ -167,12 +198,12 @@
             @if ($buildPack !== 'dockercompose')
                 <div class="flex items-center gap-2 pt-8">
                     <h3>Docker Registry</h3>
-                    @if ($application->build_pack !== 'dockerimage' && !$application->destination->server->isSwarm())
+                    @if ($application->build_pack !== 'dockerimage' && !$isSwarm)
                         <x-helper
                             helper="Push the built image to a docker registry. More info <a class='underline' href='https://coolify.io/docs/knowledge-base/docker/registry' target='_blank'>here</a>." />
                     @endif
                 </div>
-                @if ($application->destination->server->isSwarm())
+                @if ($isSwarm)
                     @if ($application->build_pack !== 'dockerimage')
                         <div>Docker Swarm requires the image to be available in a registry. More info <a
                                 class="underline" href="https://coolify.io/docs/knowledge-base/docker/registry"
@@ -181,7 +212,7 @@
                 @endif
                 <div class="flex flex-col gap-2 xl:flex-row">
                     @if ($application->build_pack === 'dockerimage')
-                        @if ($application->destination->server->isSwarm())
+                        @if ($isSwarm)
                             <x-forms.input required id="dockerRegistryImageName" label="Docker Image"
                                 x-bind:disabled="!canUpdate" />
                             <x-forms.input id="dockerRegistryImageTag" label="Docker Image Tag or Hash"
@@ -196,7 +227,7 @@
                         @endif
                     @else
                         @if (
-                            $application->destination->server->isSwarm() ||
+                            $isSwarm ||
                                 $application->additional_servers->count() > 0 ||
                                 $application->settings->is_build_server_enabled)
                             <x-forms.input id="dockerRegistryImageName" required label="Docker Image"
@@ -508,12 +539,12 @@
                                 x-bind:disabled="!canUpdate" />
                         @endif
                     @endif
-                    @if (!$application->destination->server->isSwarm())
+                    @if (!$isSwarm)
                         <x-forms.input placeholder="3000:3000" id="portsMappings" label="Port Mappings"
                             helper="A comma separated list of ports you would like to map to the host system. Useful when you do not want to use domains.<br><br><span class='inline-block font-bold dark:text-warning'>Format:</span> host:container<br><br><span class='inline-block font-bold dark:text-warning'>Example:</span> 3000:3000,3002:3002<br><br>Rolling update is not supported if you have a port mapped to the host."
                             x-bind:disabled="!canUpdate" />
                     @endif
-                    @if (!$application->destination->server->isSwarm())
+                    @if (!$isSwarm)
                         <x-forms.input id="customNetworkAliases" label="Network Aliases"
                             helper="A comma separated list of custom network aliases you would like to add for container in Docker network.<br><br><span class='inline-block font-bold dark:text-warning'>Example:</span><br>api.internal,api.local"
                             wire:model="customNetworkAliases" x-bind:disabled="!canUpdate" />

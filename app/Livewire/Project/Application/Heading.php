@@ -53,8 +53,15 @@ class Heading extends Component
 
     public function checkStatus()
     {
-        if ($this->application->destination->server->isFunctional()) {
-            GetContainersStatus::dispatch($this->application->destination->server);
+        $server = data_get($this->application, 'destination.server');
+        if (! $server) {
+            $this->dispatch('error', 'Server is not configured for this application.');
+
+            return;
+        }
+
+        if ($server->isFunctional()) {
+            GetContainersStatus::dispatch($server);
         } else {
             $this->dispatch('error', 'Server is not functional.');
         }
@@ -103,7 +110,14 @@ class Heading extends Component
 
             return;
         }
-        if ($this->application->destination->server->isSwarm() && str($this->application->docker_registry_image_name)->isEmpty()) {
+        $server = data_get($this->application, 'destination.server');
+        if (! $server) {
+            $this->dispatch('error', 'Failed to deploy.', 'No server is configured for this application.');
+
+            return;
+        }
+
+        if ($server->isSwarm() && str($this->application->docker_registry_image_name)->isEmpty()) {
             $this->dispatch('error', 'Failed to deploy.', 'To deploy to a Swarm cluster you must set a Docker image name first.');
 
             return;

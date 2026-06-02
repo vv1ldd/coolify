@@ -1,10 +1,19 @@
 <?php
 
-use App\Livewire\Dns\Index as DnsIndex;
+use App\Models\Application;
+use App\Models\ControlPlanePeer;
+use App\Models\DnsRecord;
+use App\Models\DnsSteeringPolicy;
 use App\Livewire\Dns\Show as DnsShow;
 use App\Models\DnsZone;
+use App\Models\EdgeControlAction;
 use App\Models\EdgePolicy;
+use App\Models\EdgeProjection;
 use App\Models\InstanceSettings;
+use App\Models\Project;
+use App\Models\ResourceArbitrationDecision;
+use App\Models\ResourceReconciliationAssessment;
+use App\Models\ResourceRoutingPolicy;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\EdgeProtection\EdgePolicyService;
@@ -25,20 +34,173 @@ beforeEach(function () {
     session(['currentTeam' => $this->team]);
 });
 
-test('dns zones dashboard renders for authenticated team users', function () {
-    DnsZone::create([
+test('dns provider dashboard renders for authenticated team users', function () {
+    $project = Project::factory()->create([
+        'team_id' => $this->team->id,
+        'name' => 'Meanly Storefront',
+    ]);
+    $environment = $project->environments()->first();
+    $application = Application::factory()->create([
+        'environment_id' => $environment->id,
+        'name' => 'Storefront',
+        'fqdn' => 'https://app.example.com',
+    ]);
+    $zone = DnsZone::create([
         'team_id' => $this->team->id,
         'provider' => 'cloudflare',
         'name' => 'example.com',
         'provider_zone_id' => 'zone-dashboard',
         'api_token' => 'cloudflare-test-token',
     ]);
+    DnsRecord::create([
+        'dns_zone_id' => $zone->id,
+        'application_id' => $application->id,
+        'type' => 'A',
+        'name' => 'app.example.com',
+        'content' => '203.0.113.10',
+        'ttl' => 1,
+        'proxied' => true,
+    ]);
+    $simpleL1Zone = DnsZone::create([
+        'team_id' => $this->team->id,
+        'provider' => 'cloudflare',
+        'name' => 'simplel1.online',
+        'provider_zone_id' => 'zone-simple-l1',
+        'api_token' => 'cloudflare-test-token',
+    ]);
+    DnsRecord::create([
+        'dns_zone_id' => $simpleL1Zone->id,
+        'type' => 'A',
+        'name' => 'simplel1.online',
+        'content' => '198.51.100.10',
+        'ttl' => 60,
+        'proxied' => false,
+    ]);
+    DnsSteeringPolicy::create([
+        'team_id' => $this->team->id,
+        'dns_zone_id' => $simpleL1Zone->id,
+        'domain' => 'simplel1.online',
+        'resource_type' => 'simple_l1',
+        'strategy' => DnsSteeringPolicy::STRATEGY_ACTIVE_PASSIVE,
+        'enabled' => true,
+        'candidate_nodes' => [
+            ['name' => 'primary', 'ip' => '198.51.100.10'],
+            ['name' => 'backup', 'ip' => '198.51.100.11'],
+        ],
+    ]);
+    ControlPlanePeer::create([
+        'team_id' => $this->team->id,
+        'name' => 'edge-1',
+        'endpoint_url' => 'https://edge-1.example.com',
+        'public_ip' => '198.51.100.20',
+        'role' => ControlPlanePeer::ROLE_EDGE_AGENT,
+        'status' => ControlPlanePeer::STATUS_ONLINE,
+        'last_seen_at' => now(),
+        'capabilities' => [ControlPlanePeer::CAPABILITY_EDGE_RUNTIME],
+    ]);
+    $projection = EdgeProjection::create([
+        'team_id' => $this->team->id,
+        'domain' => 'app.example.com',
+        'intent_type' => 'domain_edge_policy',
+        'intent_uuid' => 'app.example.com',
+        'intent_version' => 1,
+        'intent_hash' => str_repeat('a', 64),
+        'projection_type' => EdgeProjection::TYPE_EDGE_RUNTIME,
+        'adapter' => EdgeProjection::ADAPTER_TRAEFIK,
+        'projection_version' => 1,
+        'projection_hash' => str_repeat('b', 64),
+        'payload' => ['host' => 'app.example.com'],
+        'required_capabilities' => [ControlPlanePeer::CAPABILITY_EDGE_RUNTIME],
+        'status' => EdgeProjection::STATUS_APPLIED,
+        'generated_at' => now(),
+        'applied_at' => now(),
+        'applied_projection_hash' => str_repeat('b', 64),
+    ]);
+    EdgeControlAction::create([
+        'team_id' => $this->team->id,
+        'edge_projection_id' => $projection->id,
+        'domain' => 'app.example.com',
+        'action_type' => EdgeControlAction::TYPE_EDGE_RUNTIME_APPLY,
+        'adapter' => EdgeProjection::ADAPTER_TRAEFIK,
+        'status' => EdgeControlAction::STATUS_SUCCEEDED,
+        'request' => ['projection_uuid' => $projection->uuid],
+        'outcome' => ['ok' => true],
+        'projection_hash' => $projection->projection_hash,
+        'applied_projection_hash' => $projection->projection_hash,
+        'executed_at' => now(),
+    ]);
+    $resourcePolicy = ResourceRoutingPolicy::create([
+        'team_id' => $this->team->id,
+        'resource_type' => ResourceRoutingPolicy::RESOURCE_MARKETPLACE,
+        'resource_uuid' => 'marketplace-main',
+        'domain' => 'marketplace.example.com',
+        'routing_layer' => ResourceRoutingPolicy::LAYER_L7,
+        'strategy' => ResourceRoutingPolicy::STRATEGY_ACTIVE_PASSIVE,
+        'enabled' => true,
+        'candidate_backends' => [
+            ['backend' => 'node-a'],
+            ['backend' => 'node-b'],
+        ],
+    ]);
+    $assessment = ResourceReconciliationAssessment::create([
+        'team_id' => $this->team->id,
+        'resource_routing_policy_id' => $resourcePolicy->id,
+        'resource_type' => ResourceRoutingPolicy::RESOURCE_MARKETPLACE,
+        'resource_uuid' => 'marketplace-main',
+        'scope' => 'resource_routing',
+        'assessment_hash' => str_repeat('c', 64),
+        'observation_refs' => [],
+        'conflicts' => [],
+        'candidates' => ['healthy_backends' => ['node-b']],
+        'assessment' => ['target_backend' => 'node-b'],
+        'severity' => 50,
+        'assessed_at' => now(),
+    ]);
+    ResourceArbitrationDecision::create([
+        'team_id' => $this->team->id,
+        'resource_routing_policy_id' => $resourcePolicy->id,
+        'resource_reconciliation_assessment_id' => $assessment->id,
+        'scope' => 'resource_routing',
+        'authority_scope' => 'marketplace',
+        'authority_actor' => 'edge-operator-1',
+        'authority_basis' => 'delegated_marketplace_authority_v3',
+        'decision' => ResourceArbitrationDecision::DECISION_SWITCH_BACKEND,
+        'decision_hash' => str_repeat('d', 64),
+        'reason' => 'healthy_target_available',
+        'assessment' => ['target_backend' => 'node-b'],
+        'rationale' => ['assessment_hash' => $assessment->assessment_hash],
+        'decided_at' => now(),
+    ]);
 
     $this->get(route('dns.index'))
         ->assertOk()
-        ->assertSee('DNS Zones')
-        ->assertSee('example.com')
-        ->assertSee('Create DNS Zone');
+        ->assertSee('DNS & Edge Control Plane', false)
+        ->assertSee('edge_runtime')
+        ->assertSee('Project & Service Domains', false)
+        ->assertSee('app.example.com')
+        ->assertSee('Storefront')
+        ->assertSee('Zone: example.com')
+        ->assertSee('Projection: traefik v1')
+        ->assertSee(substr($projection->projection_hash, 0, 12))
+        ->assertSee('Last action: traefik')
+        ->assertSee('Resource Continuity')
+        ->assertSee('marketplace')
+        ->assertSee('assessment='.substr($assessment->assessment_hash, 0, 12))
+        ->assertSee('decision='.substr(str_repeat('d', 64), 0, 12))
+        ->assertSee('delegated_marketplace_authority_v3')
+        ->assertSee('healthy_target_available')
+        ->assertSee('Simple L1 Domain')
+        ->assertSee('simplel1.online')
+        ->assertSee('198.51.100.10')
+        ->assertSee('active passive')
+        ->assertSee('Token')
+        ->assertDontSee('Cloudflare API token')
+        ->assertDontSee('Save Token')
+        ->assertDontSee('Validate Saved Token')
+        ->assertDontSee('Load zones from token')
+        ->assertDontSee('Zone name')
+        ->assertDontSee('zone-dashboard')
+        ->assertDontSee('menu-item-label tracking-tight">Domains', false);
 });
 
 test('dns zone detail renders ru dns only and edge protection guidance', function () {
@@ -77,55 +239,6 @@ test('dns zone detail renders matching edge policy as read only', function () {
         ->assertSee('Edge Policy')
         ->assertSee('Zone default policy')
         ->assertSee('Domain protection is resolved from EdgePolicy');
-});
-
-test('dns zone can be created without exposing the token in rendered output', function () {
-    Livewire::test(DnsIndex::class)
-        ->set('name', 'created.example')
-        ->set('provider_zone_id', 'zone-created')
-        ->set('api_token', 'cloudflare-secret-token')
-        ->call('createZone')
-        ->assertRedirect();
-
-    $this->assertDatabaseHas('dns_zones', [
-        'team_id' => $this->team->id,
-        'provider' => 'cloudflare',
-        'name' => 'created.example',
-        'provider_zone_id' => 'zone-created',
-    ]);
-
-    $this->get(route('dns.index'))
-        ->assertOk()
-        ->assertDontSee('cloudflare-secret-token');
-});
-
-test('dns zone form can load cloudflare zones from token', function () {
-    Http::fake([
-        'https://api.cloudflare.com/client/v4/zones' => Http::response([
-            'success' => true,
-            'result' => [
-                [
-                    'id' => 'zone-meanly',
-                    'name' => 'meanly.ru',
-                    'status' => 'active',
-                ],
-                [
-                    'id' => 'zone-digitienda',
-                    'name' => 'digitienda.ar',
-                    'status' => 'active',
-                ],
-            ],
-        ]),
-    ]);
-
-    Livewire::test(DnsIndex::class)
-        ->set('api_token', 'cloudflare-secret-token')
-        ->call('loadProviderZones')
-        ->assertSet('providerZones.0.name', 'digitienda.ar')
-        ->assertSet('providerZones.1.name', 'meanly.ru')
-        ->set('selectedProviderZoneId', 'zone-meanly')
-        ->assertSet('name', 'meanly.ru')
-        ->assertSet('provider_zone_id', 'zone-meanly');
 });
 
 test('dns record upsert forces ru records to cloudflare dns only', function () {

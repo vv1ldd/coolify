@@ -46,11 +46,21 @@ it('renders provider control panel on the server page', function () {
 });
 
 it('can save provider control binding on a server', function () {
+    $hetznerToken = CloudProviderToken::factory()->create([
+        'team_id' => $this->team->id,
+        'provider' => 'hetzner',
+        'name' => 'Hetzner Token',
+        'token' => 'test-hetzner-token',
+    ]);
     $token = CloudProviderToken::factory()->create([
         'team_id' => $this->team->id,
         'provider' => 'selectel_vds',
         'name' => 'Selectel Ops Token',
         'token' => 'test-selectel-token',
+    ]);
+    $this->server->update([
+        'cloud_provider_token_id' => $hetznerToken->id,
+        'hetzner_server_id' => 123456,
     ]);
 
     Livewire::test(Show::class, ['server_uuid' => $this->server->uuid])
@@ -61,8 +71,10 @@ it('can save provider control binding on a server', function () {
 
     $this->server->refresh();
 
-    expect($this->server->cloud_provider_token_id)->toBe($token->id)
+    expect($this->server->cloud_provider_token_id)->toBe($hetznerToken->id)
+        ->and($this->server->hetzner_server_id)->toBe(123456)
         ->and(data_get($this->server->server_metadata, 'provider_server_id'))->toBe('10087')
+        ->and(data_get($this->server->server_metadata, 'provider_control.token_id'))->toBe($token->id)
         ->and(data_get($this->server->server_metadata, 'provider_control.provider'))->toBe('selectel_vds');
 });
 
@@ -74,8 +86,13 @@ it('inspects provider status through fake provider http without leaking the toke
         'token' => 'selectel-secret-token',
     ]);
     $this->server->update([
-        'cloud_provider_token_id' => $token->id,
-        'server_metadata' => ['provider_server_id' => '10087'],
+        'server_metadata' => [
+            'provider_control' => [
+                'token_id' => $token->id,
+                'provider' => 'selectel_vds',
+                'provider_server_id' => '10087',
+            ],
+        ],
     ]);
 
     Http::fake([
@@ -109,8 +126,13 @@ it('blocks destructive provider action planning without approval and sends no pr
         'token' => 'hostinger-secret-token',
     ]);
     $this->server->update([
-        'cloud_provider_token_id' => $token->id,
-        'server_metadata' => ['provider_server_id' => '1268054'],
+        'server_metadata' => [
+            'provider_control' => [
+                'token_id' => $token->id,
+                'provider' => 'hostinger_vps',
+                'provider_server_id' => '1268054',
+            ],
+        ],
     ]);
 
     Http::fake();

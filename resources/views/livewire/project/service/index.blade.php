@@ -57,6 +57,10 @@
                                 <h2>{{ Str::headline($serviceApplication->name) }}</h2>
                             @endif
                             <x-forms.button canGate="update" :canResource="$serviceApplication" type="submit">Save</x-forms.button>
+                            <x-forms.button canGate="update" :canResource="$serviceApplication" type="button"
+                                wire:click="saveApplicationAndConfigureDns">
+                                Save & Configure DNS
+                            </x-forms.button>
                             @can('update', $serviceApplication)
                                 <x-modal-confirmation wire:click="convertToDatabase" title="Convert to Database"
                                     buttonTitle="Convert to Database" submitAction="convertToDatabase" :actions="['The selected resource will be converted to a service database.']"
@@ -103,6 +107,28 @@
                                     helper="You can change the image you would like to deploy.<br><br><span class='dark:text-warning'>WARNING. You could corrupt your data. Only do it if you know what you are doing.</span>"
                                     label="Image" id="image"></x-forms.input>
                             </div>
+                            @if (!$serviceApplication->serviceType()?->contains(str($serviceApplication->image)->before(':')))
+                                <div class="p-3 text-xs border rounded border-neutral-200 dark:border-neutral-800">
+                                    <div class="font-semibold">Cloudflare</div>
+                                    @if (data_get($this->cloudflareDnsStatus, 'available'))
+                                        <div class="pt-1 text-neutral-500">
+                                            Matching zone(s):
+                                            {{ collect(data_get($this->cloudflareDnsStatus, 'matches', []))->pluck('zone')->unique()->join(', ') }}
+                                        </div>
+                                        <x-forms.checkbox id="cloudflareProxied" label="Cloudflare proxied"
+                                            helper="When enabled, Cloudflare proxying is requested for A, AAAA and CNAME records. RU zones are forced DNS-only." />
+                                        @if (collect(data_get($this->cloudflareDnsStatus, 'matches', []))->contains('proxy_forced_dns_only', true))
+                                            <div class="pt-1 text-amber-600 dark:text-amber-400">
+                                                One or more matched zones are DNS-only by policy.
+                                            </div>
+                                        @endif
+                                    @else
+                                        <div class="pt-1 text-neutral-500">
+                                            No connected Cloudflare zone matches this domain yet. Add the zone in Cloudflare settings to enable DNS and proxying controls here.
+                                        </div>
+                                    @endif
+                                </div>
+                            @endif
                         </div>
                     </form>
 

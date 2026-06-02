@@ -150,6 +150,60 @@ test('dns steering plan updates A record to secondary when primary is down', fun
         ->and(data_get($plan, 'actions.0.after.content'))->toBe('198.51.100.31');
 });
 
+test('dns steering can select backup node from http health checks', function () {
+    $zone = DnsZone::create([
+        'team_id' => $this->team->id,
+        'provider' => 'cloudflare',
+        'name' => 'simplel1.online',
+        'provider_zone_id' => 'zone-simple-l1-health',
+        'api_token' => 'cloudflare-test-token',
+    ]);
+
+    DnsRecord::create([
+        'dns_zone_id' => $zone->id,
+        'type' => 'A',
+        'name' => 'simplel1.online',
+        'content' => '203.0.113.10',
+        'ttl' => 60,
+        'proxied' => false,
+        'metadata' => [
+            'dns_steering_policy_uuid' => 'pending-policy',
+        ],
+    ]);
+
+    Http::fake([
+        'http://203.0.113.10/healthcheck' => Http::response([], 500),
+        'http://203.0.113.11/healthcheck' => Http::response(['status' => 'ok'], 200),
+    ]);
+
+    $policy = DnsSteeringPolicy::create([
+        'team_id' => $this->team->id,
+        'dns_zone_id' => $zone->id,
+        'domain' => 'simplel1.online',
+        'strategy' => DnsSteeringPolicy::STRATEGY_ACTIVE_PASSIVE,
+        'enabled' => true,
+        'candidate_nodes' => [
+            ['name' => 'primary', 'ip' => '203.0.113.10', 'priority' => 1, 'health_url' => 'http://203.0.113.10/healthcheck', 'health_host' => 'simplel1.online'],
+            ['name' => 'backup', 'ip' => '203.0.113.11', 'priority' => 2, 'health_url' => 'http://203.0.113.11/healthcheck', 'health_host' => 'simplel1.online'],
+        ],
+        'metadata' => [
+            'ttl' => 60,
+            'health_timeout' => 1,
+        ],
+    ]);
+
+    $plan = app(DnsSteeringPolicyService::class)->planForPolicy($policy);
+
+    expect(data_get($plan, 'candidate_nodes.0.healthy'))->toBeFalse()
+        ->and(data_get($plan, 'candidate_nodes.0.health_source'))->toBe('http_health')
+        ->and(data_get($plan, 'candidate_nodes.1.healthy'))->toBeTrue()
+        ->and(data_get($plan, 'desired_records.0.content'))->toBe('203.0.113.11')
+        ->and(data_get($plan, 'actions.0.action'))->toBe('update');
+
+    Http::assertSent(fn ($request) => $request->url() === 'http://203.0.113.10/healthcheck'
+        && $request->hasHeader('Host', 'simplel1.online'));
+});
+
 test('dns steering plan returns no change when primary is healthy and record matches', function () {
     $zone = DnsZone::create([
         'team_id' => $this->team->id,

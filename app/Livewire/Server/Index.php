@@ -2,7 +2,11 @@
 
 namespace App\Livewire\Server;
 
+use App\Models\DnsRecord;
 use App\Models\Server;
+use App\Models\SimpleL1ControlAction;
+use App\Models\SimpleL1FailoverDecision;
+use App\Models\SimpleL1NodeObservation;
 use App\Models\Sl1NodeIdentity;
 use App\Models\Sl1PeerNode;
 use App\Models\Sl1PeerObservedEvent;
@@ -76,6 +80,77 @@ class Index extends Component
             ],
             'peers' => $peers->map(fn (Sl1PeerNode $peer) => $this->peerSummary($peer))->values()->all(),
             'discovery_candidates' => $discoveryCandidates,
+            'failover' => $this->loadSimpleL1FailoverTimeline(),
+        ];
+    }
+
+    private function loadSimpleL1FailoverTimeline(): array
+    {
+        if (
+            ! Schema::hasTable('simple_l1_node_observations')
+            || ! Schema::hasTable('simple_l1_failover_decisions')
+            || ! Schema::hasTable('simple_l1_evidence_packages')
+            || ! Schema::hasColumn('simple_l1_failover_decisions', 'simple_l1_evidence_package_id')
+        ) {
+            return [
+                'available' => false,
+                'reason' => 'Simple L1 failover observability tables are not migrated yet.',
+            ];
+        }
+
+        $teamId = currentTeam()?->id;
+        if (! $teamId) {
+            return [
+                'available' => false,
+                'reason' => 'No current team is selected.',
+            ];
+        }
+
+        $latestDecision = SimpleL1FailoverDecision::query()
+            ->with('evidencePackage')
+            ->where('team_id', $teamId)
+            ->latest('decided_at')
+            ->first();
+        $domain = $latestDecision?->domain ?: (string) env('SIMPLE_L1_DOMAIN', 'simplel1.online');
+        $currentRecord = DnsRecord::query()
+            ->where('type', 'A')
+            ->where('name', $domain)
+            ->whereHas('zone', fn ($query) => $query->where('team_id', $teamId))
+            ->first();
+        $observations = SimpleL1NodeObservation::query()
+            ->where('team_id', $teamId)
+            ->where('domain', $domain)
+            ->latest('observed_at')
+            ->limit(20)
+            ->get();
+        $decisions = SimpleL1FailoverDecision::query()
+            ->with('evidencePackage')
+            ->where('team_id', $teamId)
+            ->where('domain', $domain)
+            ->latest('decided_at')
+            ->limit(5)
+            ->get();
+        $controlActions = Schema::hasTable('simple_l1_control_actions')
+            ? SimpleL1ControlAction::query()
+                ->where('team_id', $teamId)
+                ->where('domain', $domain)
+                ->latest('executed_at')
+                ->limit(5)
+                ->get()
+            : collect();
+
+        return [
+            'available' => true,
+            'domain' => $domain,
+            'current_target' => $currentRecord?->content,
+            'latest_decision' => $latestDecision ? $this->decisionSummary($latestDecision) : null,
+            'node_statuses' => $observations
+                ->unique('target_ip')
+                ->take(6)
+                ->map(fn (SimpleL1NodeObservation $observation): array => $this->observationSummary($observation))
+                ->values()
+                ->all(),
+            'timeline' => $this->failoverTimeline($observations, $decisions, $controlActions),
         ];
     }
 
@@ -165,5 +240,84 @@ class Index extends Component
         $host = parse_url($issuer, PHP_URL_HOST);
 
         return $host ?: $issuer;
+    }
+
+    private function observationSummary(SimpleL1NodeObservation $observation): array
+    {
+        return [
+            'target_node' => $observation->target_node,
+            'target_ip' => $observation->target_ip,
+            'status' => $observation->status,
+            'health_source' => $observation->health_source,
+            'health_url' => $observation->health_url,
+            'observed_at' => $observation->observed_at?->diffForHumans(),
+            'sort_at' => $observation->observed_at?->getTimestamp() ?? 0,
+        ];
+    }
+
+    private function decisionSummary(SimpleL1FailoverDecision $decision): array
+    {
+        return [
+            'recommendation' => $decision->recommendation,
+            'reason' => $decision->reason,
+            'previous_target' => $decision->previous_target,
+            'new_target' => $decision->new_target,
+            'evidence_hash' => $decision->evidence_hash,
+            'evidence_short' => substr($decision->evidence_hash, 0, 12),
+            'evidence_package_uuid' => $decision->evidencePackage?->uuid,
+            'applied_at' => $decision->applied_at?->diffForHumans(),
+            'decided_at' => $decision->decided_at?->diffForHumans(),
+            'sort_at' => $decision->decided_at?->getTimestamp() ?? 0,
+        ];
+    }
+
+    private function failoverTimeline(Collection|\Illuminate\Support\Collection $observations, Collection|\Illuminate\Support\Collection $decisions, Collection|\Illuminate\Support\Collection $controlActions): array
+    {
+        $observationEvents = $observations->take(8)->map(function (SimpleL1NodeObservation $observation): array {
+            return [
+                'type' => 'observation',
+                'title' => trim(($observation->target_node ?: 'node').' '.$observation->status),
+                'detail' => ($observation->target_ip ?: 'unknown ip').' via '.($observation->health_source ?: 'unknown source'),
+                'status' => $observation->status,
+                'at' => $observation->observed_at?->diffForHumans(),
+                'sort_at' => $observation->observed_at?->getTimestamp() ?? 0,
+            ];
+        });
+
+        $decisionEvents = $decisions->map(function (SimpleL1FailoverDecision $decision): array {
+            $movement = $decision->new_target
+                ? "{$decision->previous_target} -> {$decision->new_target}"
+                : ($decision->previous_target ?: 'no target change');
+
+            return [
+                'type' => 'decision',
+                'title' => 'Decision: '.$decision->recommendation,
+                'detail' => $movement.' / '.$decision->reason,
+                'status' => $decision->applied_at ? 'applied' : $decision->recommendation,
+                'at' => $decision->decided_at?->diffForHumans(),
+                'evidence_short' => substr($decision->evidence_hash, 0, 12),
+                'evidence_package_uuid' => $decision->evidencePackage?->uuid,
+                'sort_at' => $decision->decided_at?->getTimestamp() ?? 0,
+            ];
+        });
+
+        $controlActionEvents = $controlActions->map(function (SimpleL1ControlAction $action): array {
+            return [
+                'type' => 'control_action',
+                'title' => 'Control Action: '.$action->action_type,
+                'detail' => $action->adapter.' / '.$action->status,
+                'status' => $action->status,
+                'at' => $action->executed_at?->diffForHumans(),
+                'sort_at' => $action->executed_at?->getTimestamp() ?? 0,
+            ];
+        });
+
+        return $observationEvents
+            ->merge($decisionEvents)
+            ->merge($controlActionEvents)
+            ->sortByDesc('sort_at')
+            ->take(10)
+            ->values()
+            ->all();
     }
 }

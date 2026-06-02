@@ -6,7 +6,9 @@ use App\Models\DnsRecord;
 use App\Models\DnsSteeringPolicy;
 use App\Models\DnsZone;
 use App\Models\Server;
+use App\Services\ControlPlane\ControlPlaneSyncService;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 
 class DnsSteeringPolicyService
@@ -77,8 +79,12 @@ class DnsSteeringPolicyService
             'errors' => [],
         ];
 
+        $observationsByTeam = [];
+
         foreach ($policies as $policy) {
-            $plan = $this->planForPolicy($policy);
+            $observationsByTeam[$policy->team_id] ??= app(ControlPlaneSyncService::class)
+                ->latestDnsSteeringObservationSource($policy->team_id);
+            $plan = $this->planForPolicy($policy, $observationsByTeam[$policy->team_id]);
             $result['planned'][] = $plan;
 
             if (! $apply) {
@@ -229,12 +235,17 @@ class DnsSteeringPolicyService
                 $serverHealthy = $server ? $this->serverHealthy($server) : true;
                 $metadataOverride = $this->metadataHealthOverride($policy, $node, $server);
                 $observationOverride = $this->controlPlaneHealthOverride($controlPlaneObservations, $node, $server);
+                $httpOverride = $this->httpHealthOverride($policy, $node);
                 $healthy = is_bool($metadataOverride)
                     ? $metadataOverride
                     : (
                         is_bool($observationOverride)
                             ? $observationOverride
-                            : (bool) $configuredHealthy && $serverHealthy
+                            : (
+                                is_bool($httpOverride)
+                                    ? $httpOverride
+                                    : (bool) $configuredHealthy && $serverHealthy
+                            )
                     );
 
                 return [
@@ -243,7 +254,7 @@ class DnsSteeringPolicyService
                     'ip' => data_get($node, 'ip') ?: data_get($node, 'ipv4') ?: $server?->ip,
                     'ipv6' => data_get($node, 'ipv6'),
                     'healthy' => $healthy,
-                    'health_source' => $this->candidateHealthSource($metadataOverride, $observationOverride, $server),
+                    'health_source' => $this->candidateHealthSource($metadataOverride, $observationOverride, $server, $httpOverride),
                     'weight' => max((int) data_get($node, 'weight', 1), 1),
                     'priority' => max((int) data_get($node, 'priority', $index + 1), 1),
                     'source' => $server ? 'server' : 'manual',
@@ -301,7 +312,33 @@ class DnsSteeringPolicyService
         return null;
     }
 
-    private function candidateHealthSource(?bool $metadataOverride, ?bool $observationOverride, ?Server $server): string
+    private function httpHealthOverride(DnsSteeringPolicy $policy, array $node): ?bool
+    {
+        $healthUrl = data_get($node, 'health_url');
+        if (! filled($healthUrl)) {
+            return null;
+        }
+
+        try {
+            $request = Http::timeout(max((int) data_get($policy->metadata, 'health_timeout', 3), 1))
+                ->acceptJson()
+                ->withoutRedirecting();
+
+            if (filled(data_get($node, 'health_host'))) {
+                $request = $request->withHeaders([
+                    'Host' => (string) data_get($node, 'health_host'),
+                ]);
+            }
+
+            return $request
+                ->get((string) $healthUrl)
+                ->successful();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function candidateHealthSource(?bool $metadataOverride, ?bool $observationOverride, ?Server $server, ?bool $httpOverride = null): string
     {
         if (is_bool($metadataOverride)) {
             return 'policy_metadata';
@@ -309,6 +346,10 @@ class DnsSteeringPolicyService
 
         if (is_bool($observationOverride)) {
             return 'control_plane_observation';
+        }
+
+        if (is_bool($httpOverride)) {
+            return 'http_health';
         }
 
         return $server ? 'server_settings' : 'candidate';

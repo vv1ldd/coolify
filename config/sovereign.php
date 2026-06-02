@@ -49,6 +49,7 @@ return [
         'embedded' => [
             'enabled' => env('SL1_EMBEDDED_RUNTIME_ENABLED', true),
             'issuer_path' => env('SL1_EMBEDDED_ISSUER_PATH', '/sl1'),
+            'issuer_url' => env('SIMPLE_L1_ISSUER_URL'),
         ],
     ],
 

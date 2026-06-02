@@ -102,7 +102,48 @@ class Kernel extends ConsoleKernel
                 ->everyFifteenMinutes()
                 ->onOneServer()
                 ->withoutOverlapping();
+            $this->scheduleSovereignFailover();
             // ────────────────────────────────────────────────────────────
+        }
+    }
+
+    private function scheduleSovereignFailover(): void
+    {
+        if (filter_var(env('SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND', false), FILTER_VALIDATE_BOOLEAN)) {
+            $this->scheduleInstance
+                ->command('control-plane:heartbeat --send')
+                ->everyMinute()
+                ->withoutOverlapping();
+        }
+
+        $dnsMode = strtolower((string) env('SOVEREIGN_DNS_STEERING_SCHEDULE', 'off'));
+        $simpleL1Mode = strtolower((string) env('SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE', 'off'));
+        if (in_array($simpleL1Mode, ['dry-run', 'dry_run'], true)) {
+            $this->scheduleInstance
+                ->command('sovereign:simple-l1-failover --json')
+                ->everyMinute()
+                ->withoutOverlapping();
+        }
+
+        if ($simpleL1Mode === 'apply') {
+            $this->scheduleInstance
+                ->command('sovereign:simple-l1-failover --apply --json')
+                ->everyMinute()
+                ->withoutOverlapping();
+        }
+
+        if (in_array($dnsMode, ['dry-run', 'dry_run'], true)) {
+            $this->scheduleInstance
+                ->command('dns:steering:evaluate --json')
+                ->everyMinute()
+                ->withoutOverlapping();
+        }
+
+        if ($dnsMode === 'apply') {
+            $this->scheduleInstance
+                ->command('dns:steering:evaluate --apply --json')
+                ->everyMinute()
+                ->withoutOverlapping();
         }
     }
 

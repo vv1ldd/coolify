@@ -1,3 +1,8 @@
+@php
+    $server = data_get($application, 'destination.server');
+    $isSwarm = $server?->isSwarm() ?? false;
+@endphp
+
 <nav wire:poll.10000ms="checkStatus" class="pb-6">
     <x-resources.breadcrumbs :resource="$application" :parameters="$parameters" :title="$lastDeploymentInfo" :lastDeploymentLink="$lastDeploymentLink" />
     <div class="navbar-main">
@@ -22,7 +27,7 @@
                     @endif
                 </div>
             </a>
-            @if (!$application->destination->server->isSwarm())
+            @if (!$isSwarm)
                 @can('canAccessTerminal')
                     <a class="shrink-0 {{ request()->routeIs('project.application.command') ? 'dark:text-white' : '' }}"
                         href="{{ route('project.application.command', $parameters) }}">
@@ -44,13 +49,13 @@
                             Actions
                         </x-slot>
                         @if (!str($application->status)->startsWith('exited'))
-                            @if (!$application->destination->server->isSwarm())
+                            @if (!$isSwarm)
                                 <div class="dropdown-item dropdown-item-touch" wire:click='deploy'>
                                     Redeploy
                                 </div>
                             @endif
                             @if ($application->build_pack !== 'dockercompose')
-                                @if ($application->destination->server->isSwarm())
+                                @if ($isSwarm)
                                     <div class="dropdown-item dropdown-item-touch" wire:click='deploy'>
                                         Update Service
                                     </div>
@@ -78,7 +83,7 @@
                             </div>
                         @endif
 
-                        @if (!$application->destination->server->isSwarm())
+                        @if (!$isSwarm)
                             <div class="mx-2 my-1 border-t border-neutral-200 dark:border-coolgray-300"></div>
 
                             @if ($application->status === 'running')
@@ -95,14 +100,14 @@
                 </div>
 
                 <div class="hidden flex-wrap items-center gap-2 md:flex">
-                    @if (!$application->destination->server->isSwarm())
+                    @if (!$isSwarm)
                         <div>
                             <x-applications.advanced :application="$application" />
                         </div>
                     @endif
                     <div class="flex flex-wrap gap-2">
                         @if (!str($application->status)->startsWith('exited'))
-                            @if (!$application->destination->server->isSwarm())
+                            @if (!$isSwarm)
                                 <x-forms.button title="With rolling update if possible" wire:click='deploy'>
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 dark:text-orange-400"
                                         viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"
@@ -117,7 +122,7 @@
                                 </x-forms.button>
                             @endif
                             @if ($application->build_pack !== 'dockercompose')
-                                @if ($application->destination->server->isSwarm())
+                                @if ($isSwarm)
                                     <x-forms.button title="Redeploy Swarm Service (rolling update)" wire:click='deploy'>
                                         <svg class="w-5 h-5 dark:text-warning" viewBox="0 0 24 24"
                                             xmlns="http://www.w3.org/2000/svg">
