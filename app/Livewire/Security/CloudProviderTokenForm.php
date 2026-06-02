@@ -3,6 +3,7 @@
 namespace App\Livewire\Security;
 
 use App\Models\CloudProviderToken;
+use App\Services\Provider\ProviderServerActionAdapterFactory;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Facades\Http;
 use Livewire\Component;
@@ -27,7 +28,7 @@ class CloudProviderTokenForm extends Component
     protected function rules(): array
     {
         return [
-            'provider' => 'required|string|in:hetzner,digitalocean',
+            'provider' => 'required|string|in:hetzner,digitalocean,selectel_vds,hostinger_vps',
             'token' => 'required|string',
             'name' => 'required|string|max:255',
         ];
@@ -50,13 +51,27 @@ class CloudProviderTokenForm extends Component
                 $response = Http::withHeaders([
                     'Authorization' => 'Bearer '.$token,
                 ])->timeout(10)->get('https://api.hetzner.cloud/v1/servers');
-                ray($response);
 
                 return $response->successful();
             }
 
-            // Add other providers here in the future
-            // if ($provider === 'digitalocean') { ... }
+            if ($provider === 'digitalocean') {
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer '.$token,
+                ])->timeout(10)->get('https://api.digitalocean.com/v2/account');
+
+                return $response->successful();
+            }
+
+            if (in_array($provider, ['selectel_vds', 'hostinger_vps'], true)) {
+                $adapter = app(ProviderServerActionAdapterFactory::class)->make($provider);
+                $adapter->listServers(new CloudProviderToken([
+                    'provider' => $provider,
+                    'token' => $token,
+                ]));
+
+                return true;
+            }
 
             return false;
         } catch (\Throwable $e) {

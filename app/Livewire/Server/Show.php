@@ -4,11 +4,15 @@ namespace App\Livewire\Server;
 
 use App\Actions\Server\StartSentinel;
 use App\Actions\Server\StopSentinel;
+use App\Enums\ProtectionActionType;
 use App\Events\ServerReachabilityChanged;
 use App\Models\CloudProviderToken;
 use App\Models\Server;
 use App\Rules\ValidServerIp;
 use App\Services\HetznerService;
+use App\Services\IncidentProtection\ProtectionAction;
+use App\Services\IncidentProtection\ProtectionActionExecutor;
+use App\Services\Provider\ProviderServerActionAdapterFactory;
 use App\Support\ValidationPatterns;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
@@ -92,6 +96,20 @@ class Show extends Component
 
     public bool $hetznerNoMatchFound = false;
 
+    public Collection $availableProviderControlTokens;
+
+    public ?int $selectedProviderControlTokenId = null;
+
+    public ?string $providerControlServerId = null;
+
+    public ?array $providerControlStatus = null;
+
+    public ?array $providerControlActionPlan = null;
+
+    public ?string $providerControlMessage = null;
+
+    public ?string $providerControlError = null;
+
     public function getListeners()
     {
         $teamId = $this->server->team_id ?? auth()->user()->currentTeam()->id;
@@ -171,6 +189,7 @@ class Show extends Component
 
             // Load Hetzner tokens for linking
             $this->loadHetznerTokens();
+            $this->loadProviderControlBinding();
 
             // Check Sovereign Node Protection status
             $this->checkSovereignShieldStatus();
@@ -266,6 +285,7 @@ class Show extends Component
     public function refresh()
     {
         $this->syncData();
+        $this->loadProviderControlBinding();
         $this->checkSovereignShieldStatus();
     }
 
@@ -539,6 +559,7 @@ BASH;
 
         // Reload Hetzner tokens in case the linking section should now be shown
         $this->loadHetznerTokens();
+        $this->loadProviderControlBinding();
 
         $this->dispatch('refreshServerShow');
         $this->dispatch('refreshServer');
@@ -596,6 +617,134 @@ BASH;
         $this->availableHetznerTokens = CloudProviderToken::ownedByCurrentTeam()
             ->where('provider', 'hetzner')
             ->get();
+    }
+
+    public function loadProviderControlBinding(): void
+    {
+        $providerKeys = $this->providerControlProviderKeys();
+
+        $this->availableProviderControlTokens = CloudProviderToken::ownedByCurrentTeam()
+            ->whereIn('provider', $providerKeys)
+            ->orderBy('name')
+            ->get();
+
+        $boundToken = $this->server->cloudProviderToken;
+        $this->selectedProviderControlTokenId = $boundToken && in_array($boundToken->provider, $providerKeys, true)
+            ? $boundToken->id
+            : null;
+        $this->providerControlServerId = $this->providerControlServerIdFromMetadata();
+        $this->providerControlStatus = data_get($this->server->server_metadata, 'provider_control.last_inspect');
+    }
+
+    public function saveProviderControlBinding(): void
+    {
+        try {
+            $this->authorize('update', $this->server);
+            $this->resetProviderControlFeedback();
+            $this->validateProviderControlBinding();
+
+            $token = $this->providerControlToken();
+            $providerServerId = trim((string) $this->providerControlServerId);
+            $metadata = $this->server->server_metadata ?? [];
+
+            data_set($metadata, 'provider_server_id', $providerServerId);
+            data_set($metadata, 'provider_control.provider', $token->provider);
+            data_set($metadata, 'provider_control.provider_server_id', $providerServerId);
+            data_set($metadata, 'provider_control.bound_at', now()->toIso8601String());
+
+            $this->server->update([
+                'cloud_provider_token_id' => $token->id,
+                'server_metadata' => $metadata,
+            ]);
+            $this->server->refresh();
+
+            $this->providerControlMessage = 'Provider binding saved. Use Inspect to read the provider state without touching the server.';
+            $this->dispatch('success', 'Provider control binding saved.');
+        } catch (\Throwable $e) {
+            $this->providerControlError = 'Provider binding could not be saved.';
+            handleError($e, $this);
+        }
+    }
+
+    public function inspectProviderServer(): void
+    {
+        try {
+            $this->authorize('update', $this->server);
+            $this->resetProviderControlFeedback(clearStatus: false);
+            $this->validateProviderControlBinding();
+
+            $token = $this->providerControlToken();
+            $providerServerId = trim((string) $this->providerControlServerId);
+            $adapter = app(ProviderServerActionAdapterFactory::class)->make($token->provider, $token);
+            $providerServer = $adapter->inspectServer($providerServerId, $token);
+
+            $this->providerControlStatus = array_merge($providerServer->toArray(), [
+                'inspected_at' => now()->toIso8601String(),
+            ]);
+
+            if ((int) $this->server->cloud_provider_token_id === (int) $token->id) {
+                $metadata = $this->server->server_metadata ?? [];
+                data_set($metadata, 'provider_server_id', $providerServerId);
+                data_set($metadata, 'provider_control.provider', $token->provider);
+                data_set($metadata, 'provider_control.provider_server_id', $providerServerId);
+                data_set($metadata, 'provider_control.last_inspect', $this->providerControlStatus);
+                $this->server->update(['server_metadata' => $metadata]);
+                $this->server->refresh();
+            }
+
+            $this->providerControlMessage = 'Provider status refreshed with a read-only API call.';
+            $this->dispatch('success', 'Provider status refreshed.');
+        } catch (\Throwable $e) {
+            $this->providerControlError = 'Provider inspect failed. Check the selected token, provider server ID, and provider availability.';
+            report($e);
+        }
+    }
+
+    public function planProviderControlAction(string $action): void
+    {
+        try {
+            $this->authorize('update', $this->server);
+            $this->resetProviderControlFeedback(clearStatus: false);
+            $this->validateProviderControlBinding();
+
+            $token = $this->providerControlToken();
+            $providerServerId = trim((string) $this->providerControlServerId);
+            $adapter = app(ProviderServerActionAdapterFactory::class)->make($token->provider, $token);
+            $plan = $adapter->planAction($action, $providerServerId, $this->server)->toArray();
+
+            if ($action === 'poweroff') {
+                $result = app(ProtectionActionExecutor::class)->execute(new ProtectionAction(
+                    type: ProtectionActionType::PROVIDER_POWEROFF_SERVER,
+                    label: 'Power off provider server',
+                    target: ['server_id' => $this->server->id],
+                    payload: [
+                        'provider' => $token->provider,
+                        'provider_server_id' => $providerServerId,
+                        'plan' => $plan,
+                    ],
+                    requiresApproval: true,
+                    dryRun: true,
+                    dangerous: true,
+                ), ['team_id' => $this->server->team_id]);
+
+                $plan['execution_guard'] = $result->toArray();
+                $this->providerControlMessage = $result->message;
+            } else {
+                $plan['execution_guard'] = [
+                    'status' => 'planned',
+                    'blocked' => (bool) data_get($plan, 'dangerous', true),
+                    'dry_run' => true,
+                    'message' => 'This UI only plans provider actions. Approved execution is intentionally not wired here.',
+                ];
+                $this->providerControlMessage = 'Provider action planned only. No provider mutation API call was made.';
+            }
+
+            $this->providerControlActionPlan = $plan;
+            $this->dispatch('info', 'Provider action planned. No provider mutation API call was made.');
+        } catch (\Throwable $e) {
+            $this->providerControlError = 'Provider action could not be planned.';
+            handleError($e, $this);
+        }
     }
 
     public function searchHetznerServer(): void
@@ -728,5 +877,58 @@ BASH;
     public function render()
     {
         return view('livewire.server.show');
+    }
+
+    private function providerControlProviderKeys(): array
+    {
+        return app(ProviderServerActionAdapterFactory::class)->supportedProviderKeys();
+    }
+
+    private function providerControlServerIdFromMetadata(): ?string
+    {
+        $metadata = $this->server->server_metadata ?? [];
+        $providerServerId = collect([
+            data_get($metadata, 'provider_server_id'),
+            data_get($metadata, 'provider_control.provider_server_id'),
+            data_get($metadata, 'selectel_vds_ctid'),
+            data_get($metadata, 'hostinger_vps_id'),
+        ])->first(fn (mixed $candidate): bool => filled($candidate));
+
+        return filled($providerServerId) ? (string) $providerServerId : null;
+    }
+
+    private function validateProviderControlBinding(): void
+    {
+        $this->validate([
+            'selectedProviderControlTokenId' => 'required|integer',
+            'providerControlServerId' => 'required|string|max:255',
+        ]);
+
+        if (! $this->providerControlToken()) {
+            throw new \Exception('Select a supported provider token.');
+        }
+    }
+
+    private function providerControlToken(): ?CloudProviderToken
+    {
+        if (! $this->selectedProviderControlTokenId) {
+            return null;
+        }
+
+        return CloudProviderToken::ownedByCurrentTeam()
+            ->whereIn('provider', $this->providerControlProviderKeys())
+            ->whereKey($this->selectedProviderControlTokenId)
+            ->first();
+    }
+
+    private function resetProviderControlFeedback(bool $clearStatus = true): void
+    {
+        if ($clearStatus) {
+            $this->providerControlStatus = null;
+        }
+
+        $this->providerControlActionPlan = null;
+        $this->providerControlMessage = null;
+        $this->providerControlError = null;
     }
 }

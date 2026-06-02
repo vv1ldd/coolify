@@ -3,8 +3,10 @@
 use App\Http\Controllers\Api\AgentContainersController;
 use App\Http\Controllers\Api\ApplicationsController;
 use App\Http\Controllers\Api\CloudProviderTokensController;
+use App\Http\Controllers\Api\ControlPlaneSyncController;
 use App\Http\Controllers\Api\DatabasesController;
 use App\Http\Controllers\Api\DeployController;
+use App\Http\Controllers\Api\DnsZonesController;
 use App\Http\Controllers\Api\GithubController;
 use App\Http\Controllers\Api\HetznerController;
 use App\Http\Controllers\Api\OtherController;
@@ -26,6 +28,8 @@ Route::group([
     'prefix' => 'v1',
 ], function () {
     Route::get('/health', [OtherController::class, 'healthcheck']);
+    Route::post('/control-plane/heartbeat', [ControlPlaneSyncController::class, 'snapshot']);
+    Route::post('/control-plane/sync/snapshot', [ControlPlaneSyncController::class, 'snapshot']);
 });
 
 Route::post('/feedback', [OtherController::class, 'feedback'])
@@ -70,6 +74,7 @@ Route::group([
     Route::post('/security/keys', [SecurityController::class, 'create_key'])->middleware(['api.ability:write']);
     Route::get('/security/observations', [SecurityObservationsController::class, 'index'])->middleware(['api.ability:read']);
     Route::post('/security/observations', [SecurityObservationsController::class, 'store'])->middleware(['api.ability:write']);
+    Route::get('/control-plane/peers', [ControlPlaneSyncController::class, 'index'])->middleware(['api.ability:read']);
 
     Route::get('/security/keys/{uuid}', [SecurityController::class, 'key_by_uuid'])->middleware(['api.ability:read']);
     Route::patch('/security/keys/{uuid}', [SecurityController::class, 'update_key'])->middleware(['api.ability:write']);
@@ -81,6 +86,17 @@ Route::group([
     Route::patch('/cloud-tokens/{uuid}', [CloudProviderTokensController::class, 'update'])->middleware(['api.ability:write']);
     Route::delete('/cloud-tokens/{uuid}', [CloudProviderTokensController::class, 'destroy'])->middleware(['api.ability:write']);
     Route::post('/cloud-tokens/{uuid}/validate', [CloudProviderTokensController::class, 'validateToken'])->middleware(['api.ability:write']);
+
+    Route::get('/dns-zones', [DnsZonesController::class, 'index'])->middleware(['api.ability:read']);
+    Route::post('/dns-zones', [DnsZonesController::class, 'store'])->middleware(['api.ability:write']);
+    Route::get('/dns-zones/{uuid}', [DnsZonesController::class, 'show'])->middleware(['api.ability:read']);
+    Route::patch('/dns-zones/{uuid}', [DnsZonesController::class, 'update'])->middleware(['api.ability:write']);
+    Route::delete('/dns-zones/{uuid}', [DnsZonesController::class, 'destroy'])->middleware(['api.ability:write']);
+    Route::get('/dns-zones/{uuid}/provider-zones', [DnsZonesController::class, 'providerZones'])->middleware(['api.ability:read']);
+    Route::get('/dns-zones/{uuid}/provider-records', [DnsZonesController::class, 'providerRecords'])->middleware(['api.ability:read']);
+    Route::get('/dns-zones/{uuid}/records', [DnsZonesController::class, 'records'])->middleware(['api.ability:read']);
+    Route::post('/dns-zones/{uuid}/records', [DnsZonesController::class, 'upsertRecord'])->middleware(['api.ability:write']);
+    Route::delete('/dns-zones/{uuid}/records/{record_uuid}', [DnsZonesController::class, 'destroyRecord'])->middleware(['api.ability:write']);
 
     Route::match(['get', 'post'], '/deploy', [DeployController::class, 'deploy'])->middleware(['api.ability:deploy']);
     Route::get('/deployments', [DeployController::class, 'deployments'])->middleware(['api.ability:read']);

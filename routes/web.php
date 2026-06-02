@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\EdgeProtectionChallengeController;
 use App\Http\Controllers\EmbeddedSl1RuntimeController;
 use App\Http\Controllers\Sl1IdentityController;
 use App\Http\Controllers\UploadController;
@@ -9,6 +10,9 @@ use App\Livewire\Boarding\Index as BoardingIndex;
 use App\Livewire\Dashboard;
 use App\Livewire\Destination\Index as DestinationIndex;
 use App\Livewire\Destination\Show as DestinationShow;
+use App\Livewire\Dns\Index as DnsIndex;
+use App\Livewire\Dns\Show as DnsShow;
+use App\Livewire\Domains\Index as DomainsIndex;
 use App\Livewire\ForcePasswordReset;
 use App\Livewire\InfraLedgerIndex;
 use App\Livewire\Notifications\Discord as NotificationDiscord;
@@ -123,6 +127,9 @@ Route::get('/auth/sl1/admin-claim/{token}', [Sl1IdentityController::class, 'admi
 Route::get('/auth/sl1/invitation/{uuid}', [Sl1IdentityController::class, 'invitation'])->name('auth.sl1.invitation');
 Route::get('/auth/sl1/callback', [Sl1IdentityController::class, 'callback'])->name('auth.sl1.callback');
 
+Route::get('/__edge/challenge', [EdgeProtectionChallengeController::class, 'show'])->name('edge.challenge.show');
+Route::get('/__edge/challenge/verify', [EdgeProtectionChallengeController::class, 'verifyChallenge'])->name('edge.challenge.verify');
+
 Route::prefix('sl1')->name('sl1.embedded.')->group(function () {
     Route::get('/status', [EmbeddedSl1RuntimeController::class, 'status'])->name('status');
     Route::get('/.well-known/issuer', [EmbeddedSl1RuntimeController::class, 'issuer'])->name('issuer');
@@ -174,6 +181,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/{storage_uuid}', StorageShow::class)->name('storage.show');
         Route::get('/{storage_uuid}/resources', StorageShow::class)->name('storage.resources');
     });
+
+    Route::prefix('dns')->group(function () {
+        Route::get('/', DnsIndex::class)->name('dns.index');
+        Route::get('/{zone_uuid}', DnsShow::class)->name('dns.show');
+    });
+
+    Route::get('/domains', DomainsIndex::class)->name('domains.index');
+
     Route::prefix('shared-variables')->group(function () {
         Route::get('/', SharedVariablesIndex::class)->name('shared-variables.index');
         Route::get('/team', TeamSharedVariablesIndex::class)->name('shared-variables.team.index');

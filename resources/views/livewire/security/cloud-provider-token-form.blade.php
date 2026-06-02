@@ -6,6 +6,8 @@
                 <x-forms.select required id="provider" label="Provider">
                     <option value="hetzner">Hetzner</option>
                     <option value="digitalocean">DigitalOcean</option>
+                    <option value="selectel_vds">Selectel VDS</option>
+                    <option value="hostinger_vps">Hostinger VPS</option>
                 </x-forms.select>
             @else
                 <input type="hidden" wire:model="provider" />
@@ -39,9 +41,11 @@
             {{-- Full page layout: horizontal, spacious --}}
             <div class="flex gap-2 items-end flex-wrap">
                 <div class="w-64">
-                    <x-forms.select required id="provider" label="Provider" disabled>
-                        <option value="hetzner" selected>Hetzner</option>
+                    <x-forms.select required id="provider" label="Provider">
+                        <option value="hetzner">Hetzner</option>
                         <option value="digitalocean">DigitalOcean</option>
+                        <option value="selectel_vds">Selectel VDS</option>
+                        <option value="hostinger_vps">Hostinger VPS</option>
                     </x-forms.select>
                 </div>
                 <div class="flex-1 min-w-64">
@@ -54,9 +58,8 @@
                     placeholder="Enter your API token" />
                 @if (auth()->user()->currentTeam()->cloudProviderTokens->where('provider', $provider)->isEmpty())
                     <div class="text-sm text-neutral-500 dark:text-neutral-400 mt-2">
-                        Create an API token in the <a href='https://console.hetzner.com/projects' target='_blank'
-                            class='underline dark:text-white'>Hetzner Console</a> → choose Project → Security → API
-                        Tokens.
+                        Create an API token in your provider console. For Hetzner choose Project → Security → API
+                        Tokens; for Selectel VDS and Hostinger VPS use the provider account API token page.
                         <br><br>
                         Don't have a Hetzner account? <a href='https://coolify.io/hetzner' target='_blank'
                             class='underline dark:text-white'>Sign up here</a>

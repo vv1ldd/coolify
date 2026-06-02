@@ -122,6 +122,7 @@
                         @endcan
                     @endif
                 </div>
+                <x-edge-policy-summary :domains="$fqdn" :teamId="currentTeam()?->id" />
                 <div class="flex items-end gap-2">
                     @if ($application->settings->is_container_label_readonly_enabled == false)
                         @if ($application->redirect === 'both')

@@ -301,6 +301,136 @@
                     </div>
                 </div>
             </form>
+            <div class="pt-6">
+                <div class="flex flex-col gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h3>Provider Control</h3>
+                        <span class="text-xs uppercase tracking-widest dark:text-neutral-500">out-of-band node access</span>
+                    </div>
+                    <p class="text-sm dark:text-neutral-400">
+                        Bind this Coolify node to a supported provider server for read-only status inspection and guarded action planning above SSH/Docker runtime.
+                    </p>
+                    <x-callout type="warning" title="Safety guardrails" class="my-2">
+                        Inspect is read-only. Reboot, poweroff, and start are planned from this UI as dry-run output only; destructive execution still requires the existing approval guard and audit path.
+                    </x-callout>
+
+                    @if ($availableProviderControlTokens->isEmpty())
+                        <div class="text-sm dark:text-neutral-400">
+                            No Selectel VDS or Hostinger VPS tokens are available for this team. Add one in Cloud Provider Tokens first.
+                        </div>
+                    @else
+                        <div class="flex flex-wrap items-end gap-4">
+                            <div class="w-72">
+                                <x-forms.select wire:model="selectedProviderControlTokenId" label="Provider Token"
+                                    canGate="update" :canResource="$server">
+                                    <option value="">Select a provider token...</option>
+                                    @foreach ($availableProviderControlTokens as $token)
+                                        <option value="{{ $token->id }}">
+                                            {{ $token->name }} ({{ str($token->provider)->replace('_', ' ')->title() }})
+                                        </option>
+                                    @endforeach
+                                </x-forms.select>
+                            </div>
+                            <div class="w-64">
+                                <x-forms.input wire:model="providerControlServerId" label="Provider Server ID"
+                                    placeholder="e.g., 10087 or 1268054"
+                                    helper="Provider-side server identifier. Stored in server metadata as provider_server_id."
+                                    canGate="update" :canResource="$server" />
+                            </div>
+                            <x-forms.button wire:click.prevent="saveProviderControlBinding"
+                                wire:loading.attr="disabled" wire:target="saveProviderControlBinding"
+                                canGate="update" :canResource="$server">
+                                <span wire:loading.remove wire:target="saveProviderControlBinding">Save Binding</span>
+                                <span wire:loading wire:target="saveProviderControlBinding">Saving...</span>
+                            </x-forms.button>
+                            <x-forms.button wire:click.prevent="inspectProviderServer" wire:loading.attr="disabled"
+                                wire:target="inspectProviderServer" canGate="update" :canResource="$server">
+                                <span wire:loading.remove wire:target="inspectProviderServer">Inspect Status</span>
+                                <span wire:loading wire:target="inspectProviderServer">Inspecting...</span>
+                            </x-forms.button>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2 pt-2">
+                            <x-forms.button wire:click.prevent="inspectProviderServer" wire:loading.attr="disabled"
+                                wire:target="inspectProviderServer" canGate="update" :canResource="$server">
+                                Refresh
+                            </x-forms.button>
+                            <x-forms.button wire:click.prevent="planProviderControlAction('start')"
+                                wire:loading.attr="disabled" wire:target="planProviderControlAction"
+                                canGate="update" :canResource="$server">
+                                Plan Start
+                            </x-forms.button>
+                            <x-forms.button wire:click.prevent="planProviderControlAction('reboot')"
+                                wire:loading.attr="disabled" wire:target="planProviderControlAction"
+                                canGate="update" :canResource="$server">
+                                Plan Reboot
+                            </x-forms.button>
+                            <x-forms.button wire:click.prevent="planProviderControlAction('poweroff')"
+                                wire:loading.attr="disabled" wire:target="planProviderControlAction"
+                                canGate="update" :canResource="$server">
+                                Plan Poweroff
+                            </x-forms.button>
+                        </div>
+                    @endif
+
+                    @if ($providerControlError)
+                        <div class="p-4 mt-2 border border-red-500 rounded-md bg-red-50 dark:bg-red-900/20">
+                            <p class="text-red-600 dark:text-red-400">{{ $providerControlError }}</p>
+                        </div>
+                    @endif
+
+                    @if ($providerControlMessage)
+                        <div class="p-4 mt-2 border border-coollabs rounded-md bg-coollabs/10">
+                            <p class="text-sm">{{ $providerControlMessage }}</p>
+                        </div>
+                    @endif
+
+                    @if ($providerControlStatus)
+                        @php
+                            $providerRegion = data_get($providerControlStatus, 'metadata.location')
+                                ?? data_get($providerControlStatus, 'metadata.region')
+                                ?? data_get($providerControlStatus, 'metadata.data_center_id');
+                        @endphp
+                        <div class="grid grid-cols-2 gap-x-6 gap-y-2 p-4 mt-2 text-sm rounded border dark:border-coolgray-200 lg:grid-cols-3">
+                            <div><span class="font-medium dark:text-neutral-400">Provider:</span>
+                                {{ str(data_get($providerControlStatus, 'provider'))->replace('_', ' ')->title() }}</div>
+                            <div><span class="font-medium dark:text-neutral-400">Provider ID:</span>
+                                {{ data_get($providerControlStatus, 'id', 'N/A') }}</div>
+                            <div><span class="font-medium dark:text-neutral-400">Power State:</span>
+                                {{ data_get($providerControlStatus, 'status', 'unknown') }}</div>
+                            <div><span class="font-medium dark:text-neutral-400">Name:</span>
+                                {{ data_get($providerControlStatus, 'name', 'N/A') }}</div>
+                            <div><span class="font-medium dark:text-neutral-400">Primary IP:</span>
+                                {{ data_get($providerControlStatus, 'primary_ip', 'N/A') }}</div>
+                            <div><span class="font-medium dark:text-neutral-400">Region:</span>
+                                {{ $providerRegion ?: 'N/A' }}</div>
+                            <div class="col-span-2 lg:col-span-3"><span class="font-medium dark:text-neutral-400">Public IPs:</span>
+                                {{ collect(data_get($providerControlStatus, 'public_ips', []))->join(', ') ?: 'N/A' }}</div>
+                        </div>
+                    @endif
+
+                    @if ($providerControlActionPlan)
+                        <div class="p-4 mt-2 rounded border dark:border-coolgray-200">
+                            <h4 class="mb-2">Planned Provider Action</h4>
+                            <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm lg:grid-cols-3">
+                                <div><span class="font-medium dark:text-neutral-400">Action:</span>
+                                    {{ data_get($providerControlActionPlan, 'action') }}</div>
+                                <div><span class="font-medium dark:text-neutral-400">Supported:</span>
+                                    {{ data_get($providerControlActionPlan, 'supported') ? 'yes' : 'no' }}</div>
+                                <div><span class="font-medium dark:text-neutral-400">Dry Run:</span>
+                                    {{ data_get($providerControlActionPlan, 'dry_run') ? 'yes' : 'no' }}</div>
+                                <div><span class="font-medium dark:text-neutral-400">Method:</span>
+                                    {{ data_get($providerControlActionPlan, 'method', 'N/A') }}</div>
+                                <div class="col-span-2"><span class="font-medium dark:text-neutral-400">Endpoint:</span>
+                                    {{ data_get($providerControlActionPlan, 'endpoint', 'N/A') }}</div>
+                                <div class="col-span-2 lg:col-span-3"><span class="font-medium dark:text-neutral-400">Guard:</span>
+                                    {{ data_get($providerControlActionPlan, 'execution_guard.message', data_get($providerControlActionPlan, 'reason', 'No provider mutation API call was made.')) }}</div>
+                            </div>
+                            <pre class="p-3 mt-3 overflow-auto text-xs rounded bg-coolgray-100">{{ json_encode($providerControlActionPlan, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
+                        </div>
+                    @endif
+                </div>
+            </div>
             @if ($server->isFunctional())
                 <div class="pt-6">
                     <div class="flex items-center gap-2 mb-3">

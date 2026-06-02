@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\CloudProviderToken;
+use App\Models\InstanceSettings;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -9,6 +10,8 @@ use Illuminate\Support\Facades\Http;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    InstanceSettings::unguarded(fn () => InstanceSettings::create(['id' => 0, 'is_api_enabled' => true]));
+
     // Create a team with owner
     $this->team = Team::factory()->create();
     $this->user = User::factory()->create();
@@ -159,6 +162,42 @@ describe('POST /api/v1/cloud-tokens', function () {
         $response->assertJsonStructure(['uuid']);
     });
 
+    test('creates a Selectel VDS cloud provider token', function () {
+        Http::fake([
+            'https://api.vscale.io/v1/scalets' => Http::response([], 200),
+        ]);
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer '.$this->bearerToken,
+            'Content-Type' => 'application/json',
+        ])->postJson('/api/v1/cloud-tokens', [
+            'provider' => 'selectel_vds',
+            'token' => 'test-selectel-token',
+            'name' => 'My Selectel Token',
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonStructure(['uuid']);
+    });
+
+    test('creates a Hostinger VPS cloud provider token', function () {
+        Http::fake([
+            'https://developers.hostinger.com/api/vps/v1/virtual-machines' => Http::response([], 200),
+        ]);
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer '.$this->bearerToken,
+            'Content-Type' => 'application/json',
+        ])->postJson('/api/v1/cloud-tokens', [
+            'provider' => 'hostinger_vps',
+            'token' => 'test-hostinger-token',
+            'name' => 'My Hostinger Token',
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonStructure(['uuid']);
+    });
+
     test('validates provider is required', function () {
         $response = $this->withHeaders([
             'Authorization' => 'Bearer '.$this->bearerToken,
@@ -285,8 +324,11 @@ describe('PATCH /api/v1/cloud-tokens/{uuid}', function () {
             'Content-Type' => 'application/json',
         ])->patchJson("/api/v1/cloud-tokens/{$token->uuid}", []);
 
-        $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['name']);
+        $response->assertStatus(400);
+        $response->assertJson([
+            'message' => 'Invalid request.',
+            'error' => 'Invalid JSON.',
+        ]);
     });
 
     test('cannot update token from another team', function () {

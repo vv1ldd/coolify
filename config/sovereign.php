@@ -146,4 +146,112 @@ return [
             explode(',', env('SOVEREIGN_TRAFFIC_FILTER_ALLOWED_SOURCE_RANGES', ''))
         ))),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Incident Protection Levels
+    |--------------------------------------------------------------------------
+    |
+    | Assessment and action planning only. EdgePolicy owns L7 mutations, DNS
+    | Steering owns DNS changes, and provider adapters own host actions. Provider
+    | actions remain dry-run unless a future approved production adapter opts in.
+    |
+    */
+    'incident_protection' => [
+        'enabled' => env('SOVEREIGN_INCIDENT_PROTECTION_ENABLED', true),
+        'runbook' => env('SOVEREIGN_INCIDENT_PROTECTION_RUNBOOK', 'sovereign-protection-v1'),
+        'dry_run_provider_actions' => env('SOVEREIGN_INCIDENT_PROVIDER_DRY_RUN', true),
+        'require_provider_action_approval' => true,
+        'levels' => [
+            'normal' => [
+                'min_score' => 0,
+                'actions' => [],
+            ],
+            'elevated' => [
+                'min_score' => 25,
+                'actions' => ['notify'],
+            ],
+            'high' => [
+                'min_score' => 50,
+                'actions' => ['tighten_rate_limit', 'notify'],
+                'rate_limit_average' => 80,
+                'rate_limit_burst' => 160,
+            ],
+            'critical' => [
+                'min_score' => 75,
+                'actions' => ['set_edge_policy_mode', 'enable_challenge', 'tighten_rate_limit', 'notify'],
+                'edge_policy_mode' => 'under_attack',
+                'rate_limit_average' => 40,
+                'rate_limit_burst' => 80,
+            ],
+            'emergency' => [
+                'min_score' => 90,
+                'actions' => [
+                    'set_edge_policy_mode',
+                    'enable_challenge',
+                    'tighten_rate_limit',
+                    'dns_failover_plan',
+                    'notify',
+                    'provider_isolate_server',
+                    'provider_poweroff_server',
+                ],
+                'edge_policy_mode' => 'under_attack',
+                'rate_limit_average' => 20,
+                'rate_limit_burst' => 40,
+            ],
+        ],
+        'provider_action_adapters' => [
+            'selectel_vds' => 'implemented',
+            'hostinger_vps' => 'implemented',
+            'hetzner' => 'planned_adapter_required',
+            'cloud_provider' => 'planned_adapter_required',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Provider Control
+    |--------------------------------------------------------------------------
+    |
+    | Base URLs and transport settings for host provider control adapters.
+    | Provider secrets are stored only in encrypted CloudProviderToken records.
+    |
+    */
+    'provider_control' => [
+        'timeout' => (int) env('SOVEREIGN_PROVIDER_CONTROL_TIMEOUT', 10),
+        'connect_timeout' => (int) env('SOVEREIGN_PROVIDER_CONTROL_CONNECT_TIMEOUT', 5),
+        'providers' => [
+            'selectel_vds' => [
+                'base_url' => env('SELECTEL_VDS_API_BASE_URL', 'https://api.vscale.io/v1'),
+            ],
+            'hostinger_vps' => [
+                'base_url' => env('HOSTINGER_VPS_API_BASE_URL', 'https://developers.hostinger.com'),
+                'isolation_firewall_id' => env('HOSTINGER_VPS_ISOLATION_FIREWALL_ID'),
+            ],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Edge Protection Challenge Layer
+    |--------------------------------------------------------------------------
+    |
+    | Stateful trust mediation that can be attached to application routes later.
+    | Traefik labels still handle hard stateless filtering; this layer issues a
+    | short-lived browser proof cookie for challenge/under-attack mode.
+    |
+    */
+    'edge_protection' => [
+        'enabled' => env('SOVEREIGN_EDGE_PROTECTION_ENABLED', true),
+        'mode' => env('SOVEREIGN_EDGE_PROTECTION_MODE', 'off'), // off, challenge, under_attack
+        'cookie_name' => env('SOVEREIGN_EDGE_PROTECTION_COOKIE', 'coolify_edge_proof'),
+        'proof_ttl_minutes' => (int) env('SOVEREIGN_EDGE_PROTECTION_PROOF_TTL_MINUTES', 10),
+        'challenge_ttl_seconds' => (int) env('SOVEREIGN_EDGE_PROTECTION_CHALLENGE_TTL_SECONDS', 120),
+        'challenge_path' => env('SOVEREIGN_EDGE_PROTECTION_CHALLENGE_PATH', '/__edge/challenge'),
+        'verify_path' => env('SOVEREIGN_EDGE_PROTECTION_VERIFY_PATH', '/__edge/challenge/verify'),
+        'block_status' => (int) env('SOVEREIGN_EDGE_PROTECTION_BLOCK_STATUS', 404),
+        'block_bad_user_agents' => env('SOVEREIGN_EDGE_PROTECTION_BLOCK_BAD_UA', true),
+        'block_probe_paths' => env('SOVEREIGN_EDGE_PROTECTION_BLOCK_PROBES', true),
+        'log_decisions' => env('SOVEREIGN_EDGE_PROTECTION_LOG_DECISIONS', true),
+    ],
 ];

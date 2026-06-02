@@ -244,6 +244,11 @@ class Team extends Model implements SendsDiscord, SendsEmail, SendsPushover, Sen
         return $this->hasMany(SharedEnvironmentVariable::class)->where('type', 'team');
     }
 
+    public function edgePolicies()
+    {
+        return $this->hasMany(EdgePolicy::class);
+    }
+
     public function members()
     {
         return $this->belongsToMany(User::class, 'team_user', 'team_id', 'user_id')->withPivot('role');
