@@ -8,6 +8,7 @@ on:
       - README-SOVEREIGN-VPS.md
       - scripts/install-sovereign.sh
       - scripts/upgrade-sovereign.sh
+      - scripts/update-sovereign-from-repo.sh
       - docker-compose.sovereign.prod.yml
   workflow_dispatch:
 

@@ -176,6 +176,36 @@ After pushing a new `sovereign` image:
 curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo bash
 ```
 
+If you are already on the VPS inside a checkout of this repository, use the
+repository update script:
+
+```bash
+sudo bash scripts/update-sovereign-from-repo.sh
+```
+
+By default it:
+
+- copies runtime compose/env scripts into `/data/coolify/source`
+- backs up `/data/coolify/source/.env`
+- pulls the configured Sovereign image
+- restarts the Coolify runtime
+- runs database migrations
+- rebuilds Laravel caches
+- checks `/api/health`
+- runs `dns:steering:evaluate --json` as a dry run
+
+For emergency DNS failover through configured DNS steering policies:
+
+```bash
+sudo SOVEREIGN_DNS_STEERING=apply bash scripts/update-sovereign-from-repo.sh
+```
+
+To skip DNS steering completely:
+
+```bash
+sudo SOVEREIGN_DNS_STEERING=skip bash scripts/update-sovereign-from-repo.sh
+```
+
 Update rail:
 
 1. Commit code to branch `sovereign`.
@@ -190,6 +220,8 @@ Update rail:
   upstream upgrade, and Sovereign refresh
 - `scripts/upgrade-sovereign.sh` - internal worker that pulls the fork image and
   restarts compose
+- `scripts/update-sovereign-from-repo.sh` - operator update rail for running a
+  refresh directly from a checked-out repository on the VPS
 - `scripts/sovereign-host-hardening.sh` - optional reversible host hardening
   worker for firewall, Fail2Ban, Docker logs, SMTP relay, and network surfaces
 - `docker-compose.sovereign.prod.yml` - overrides the app image to the fork image
