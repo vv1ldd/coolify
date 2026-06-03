@@ -131,10 +131,13 @@ export SIMPLE_L1_DNS_STEERING_ENABLED=true
 curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
 ```
 
-When the installer is running interactively and no token is provided through env
+When the installer has access to `/dev/tty` and no token is provided through env
 or an existing `.env`, it asks whether to configure the Cloudflare token for
-Simple L1 DNS failover. The token is read with a silent prompt and written only
-to `/data/coolify/source/.env`; it is never baked into the image or repository.
+Simple L1 DNS failover during both fresh installs and refresh/upgrade runs. This
+Cloudflare prompt still appears when `SOVEREIGN_ASSUME_YES=true`; that flag only
+skips the install-mode menu. The token is read with a silent prompt and written
+only to `/data/coolify/source/.env`; it is never baked into the image or
+repository.
 When a token is configured and `SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE` was not
 set explicitly, the installer enables scheduled
 `sovereign:simple-l1-failover --apply` so a healthy peer can move the Cloudflare

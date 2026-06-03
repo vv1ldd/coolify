@@ -399,6 +399,10 @@ can_prompt() {
     [ "${SOVEREIGN_ASSUME_YES:-false}" != "true" ] && [ -r /dev/tty ] && [ -w /dev/tty ]
 }
 
+can_prompt_cloudflare() {
+    [ -r /dev/tty ] && [ -w /dev/tty ]
+}
+
 print_detection() {
     local state="$1"
 
@@ -650,13 +654,14 @@ choose_simple_l1_cloudflare() {
         return 0
     fi
 
-    if ! can_prompt; then
+    if ! can_prompt_cloudflare; then
         note "No Cloudflare token configured. Simple L1 will start, but DNS failover bootstrap will wait for SIMPLE_L1_CLOUDFLARE_API_TOKEN."
         return 0
     fi
 
     section "Simple L1 Cloudflare failover"
-    note "Optional now. Use a scoped token with Zone:Read and DNS:Edit for ${SIMPLE_L1_DOMAIN}."
+    note "No Cloudflare token is configured for Simple L1 DNS failover."
+    note "Use a scoped token with Zone:Read and DNS:Edit for ${SIMPLE_L1_DOMAIN}."
     printf 'Configure Cloudflare token for Simple L1 DNS failover now? [y/N]: ' > /dev/tty
     read -r token_choice < /dev/tty
     case "$token_choice" in
