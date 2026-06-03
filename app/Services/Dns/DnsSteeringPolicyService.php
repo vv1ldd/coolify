@@ -330,12 +330,35 @@ class DnsSteeringPolicyService
                 ]);
             }
 
-            return $request
-                ->get((string) $healthUrl)
-                ->successful();
+            if (filled(data_get($node, 'health_user_agent')) || filled(data_get($policy->metadata, 'health_user_agent'))) {
+                $request = $request->withUserAgent((string) (data_get($node, 'health_user_agent') ?: data_get($policy->metadata, 'health_user_agent')));
+            }
+
+            $response = $request->get((string) $healthUrl);
+            $successStatuses = $this->healthSuccessStatuses($policy, $node);
+            if ($successStatuses !== []) {
+                return in_array($response->status(), $successStatuses, true);
+            }
+
+            return $response->successful();
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    private function healthSuccessStatuses(DnsSteeringPolicy $policy, array $node): array
+    {
+        $statuses = data_get($node, 'health_success_statuses', data_get($policy->metadata, 'health_success_statuses', []));
+        if (! is_array($statuses)) {
+            $statuses = explode(',', (string) $statuses);
+        }
+
+        return collect($statuses)
+            ->map(fn (mixed $status): int => (int) $status)
+            ->filter(fn (int $status): bool => $status >= 100 && $status <= 599)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function candidateHealthSource(?bool $metadataOverride, ?bool $observationOverride, ?Server $server, ?bool $httpOverride = null): string
