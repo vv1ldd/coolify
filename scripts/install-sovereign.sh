@@ -1062,6 +1062,10 @@ run_host_hardening() {
 
 sync_sovereign_runtime_scripts() {
     mkdir -p "${SOURCE_DIR}/scripts"
+    download_file docker-compose.yml "${SOURCE_DIR}/docker-compose.yml"
+    download_file docker-compose.prod.yml "${SOURCE_DIR}/docker-compose.prod.yml"
+    download_file docker-compose.sovereign.prod.yml "${SOURCE_DIR}/docker-compose.sovereign.prod.yml"
+    download_file .env.production "${SOURCE_DIR}/.env.production"
     download_file scripts/sovereign-identity-env.sh "${SOURCE_DIR}/scripts/sovereign-identity-env.sh"
     download_file scripts/sovereign-host-profile.sh "${SOURCE_DIR}/scripts/sovereign-host-profile.sh"
     download_file scripts/sovereign-mac-tunnel.sh "${SOURCE_DIR}/scripts/sovereign-mac-tunnel.sh"

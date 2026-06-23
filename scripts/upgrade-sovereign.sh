@@ -361,6 +361,25 @@ merge_env_production() {
     fi
 }
 
+strip_empty_runtime_secret_placeholders() {
+    local key
+    for key in APP_ID APP_KEY DB_PASSWORD REDIS_PASSWORD LEDGER_DB_PASSWORD PUSHER_APP_ID PUSHER_APP_KEY PUSHER_APP_SECRET; do
+        if grep -q "^${key}=$" "$ENV_FILE" 2>/dev/null; then
+            sed -i "/^${key}=$/d" "$ENV_FILE"
+        fi
+    done
+}
+
+reset_uninitialized_db_volumes_if_needed() {
+    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx coolify-db; then
+        if docker logs coolify-db 2>&1 | tail -30 | grep -q 'superuser password is not specified'; then
+            log "coolify-db failed with empty postgres password — resetting DB/Redis volumes"
+            docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" down 2>/dev/null || true
+            docker volume rm coolify-db coolify-redis 2>/dev/null || true
+        fi
+    fi
+}
+
 set_env_var() {
     local key="$1"
     local value
@@ -604,6 +623,9 @@ else
     merge_env_production
 fi
 
+strip_empty_runtime_secret_placeholders
+ensure_runtime_secrets
+
 COOLIFY_IMAGE="${COOLIFY_IMAGE:-$(get_env_var COOLIFY_IMAGE)}"
 COOLIFY_IMAGE="${COOLIFY_IMAGE:-ghcr.io/${REPOSITORY}:sovereign}"
 SOVEREIGN_REALTIME_IMAGE="${SOVEREIGN_REALTIME_IMAGE:-$(get_env_var SOVEREIGN_REALTIME_IMAGE)}"
@@ -661,7 +683,6 @@ set_env_var "HELPER_IMAGE" "$(strip_image_tag "$HELPER_IMAGE")"
 set_env_var "SOVEREIGN_REPOSITORY" "$REPOSITORY"
 set_env_var "SOVEREIGN_BRANCH" "$BRANCH"
 set_env_var "AUTOUPDATE" "${AUTOUPDATE:-false}"
-ensure_runtime_secrets
 SL1_CONNECT_CLIENT_NAME_VALUE="${SL1_CONNECT_CLIENT_NAME:-$(get_env_var SL1_CONNECT_CLIENT_NAME)}"
 SL1_CONNECT_CLIENT_NAME_VALUE="${SL1_CONNECT_CLIENT_NAME_VALUE:-Sovereign-Coolify}"
 set_env_var "SL1_CONNECT_ISSUER" "${SL1_CONNECT_ISSUER:-$(get_env_var SL1_CONNECT_ISSUER)}"
@@ -739,6 +760,8 @@ COMPOSE_DOCKER_ENV=()
 if [ "$HOST_PROFILE_VALUE" = "mac-dev" ]; then
     COMPOSE_DOCKER_ENV+=(DOCKER_DEFAULT_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-linux/amd64}")
 fi
+
+reset_uninitialized_db_volumes_if_needed
 
 write_status "2" "Pulling images"
 progress 2 "$CONVERGE_TOTAL" "pull images"
