@@ -196,39 +196,57 @@ mark_converge_state() {
 
 observe_panel_tls() {
     local app_url="$1"
-    local timeout="${SOVEREIGN_PANEL_TLS_TIMEOUT:-180}"
+    local timeout="${SOVEREIGN_PANEL_TLS_TIMEOUT:-}"
     local interval="${SOVEREIGN_PANEL_TLS_INTERVAL:-5}"
     local elapsed=0
     local tls_state="pending_acme"
+
+    if [ "${SOVEREIGN_PANEL_TLS_OBSERVE:-true}" = "false" ]; then
+        log "Skipping panel TLS postflight (SOVEREIGN_PANEL_TLS_OBSERVE=false)"
+        return 0
+    fi
 
     case "${app_url}" in
         https://*) ;;
         *) return 0 ;;
     esac
 
+    if [ -z "$timeout" ]; then
+        if [ "${SOVEREIGN_ASSUME_YES:-false}" = "true" ]; then
+            timeout=30
+        else
+            timeout=180
+        fi
+    fi
+
     write_status "postflight" "Observing panel TLS certificate"
+    log "Postflight: waiting for panel TLS at ${app_url} (timeout ${timeout}s, interval ${interval}s)"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Postflight observing panel TLS at ${app_url}" >> "$LOG_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] panel_tls_state=${tls_state} url=${app_url}" >> "$LOG_FILE"
 
-    while [ "${elapsed}" -le "${timeout}" ]; do
+    while [ "${elapsed}" -lt "${timeout}" ]; do
         if curl -sS -I --max-time 10 "${app_url}" >/dev/null 2>>"$LOG_FILE"; then
             tls_state="trusted"
+            log "Panel TLS is reachable at ${app_url}"
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] panel_tls_state=${tls_state} url=${app_url}" >> "$LOG_FILE"
             return 0
         fi
 
+        note "panel TLS not ready yet (${elapsed}s / ${timeout}s) — checking ${app_url}"
         sleep "${interval}"
         elapsed=$((elapsed + interval))
     done
 
     if curl -k -sS -I --max-time 10 "${app_url}" >/dev/null 2>>"$LOG_FILE"; then
         tls_state="fallback_self_signed"
+        log "Panel TLS postflight: HTTPS responds only with self-signed or untrusted cert at ${app_url}"
     else
         tls_state="unreachable"
+        log "Panel TLS postflight: ${app_url} unreachable — use http://<vps-ip>:8000 until DNS/proxy/ACME settle"
     fi
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] panel_tls_state=${tls_state} url=${app_url}" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] TLS is postflight-only; converge remains complete. Check DNS A, ports 80/443, and Traefik ACME logs if this does not settle." >> "$LOG_FILE"
+    log "TLS is postflight-only; converge continues. Check DNS → VPS, ports 80/443, and Traefik ACME if HTTPS stays down."
     return 0
 }
 
