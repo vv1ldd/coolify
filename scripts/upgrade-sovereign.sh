@@ -585,6 +585,17 @@ run_migrations() {
     checkpoint 4 "$CONVERGE_TOTAL" "MIGRATIONS_APPLIED" "Database schema is current"
 }
 
+bootstrap_sovereign_substrate() {
+    write_status "4" "Bootstrapping localhost server substrate"
+    log "Bootstrapping Team 0, localhost server, and Traefik proxy substrate"
+
+    if ! run_logged "bootstrapping sovereign substrate" docker exec coolify php artisan sovereign:bootstrap-substrate; then
+        log "Localhost substrate bootstrap did not complete. Run manually:"
+        log "docker exec coolify php artisan sovereign:bootstrap-substrate"
+        return 1
+    fi
+}
+
 run_host_hardening() {
     if [ "${SOVEREIGN_HARDENING:-false}" != "true" ]; then
         return
@@ -804,6 +815,7 @@ checkpoint 3 "$CONVERGE_TOTAL" "CONTAINERS_STARTED" "Runtime containers are heal
 
 progress 4 "$CONVERGE_TOTAL" "migrations"
 run_migrations
+bootstrap_sovereign_substrate
 mark_converge_state "MIGRATIONS_DONE"
 progress 5 "$CONVERGE_TOTAL" "identity policy"
 sync_identity_policy

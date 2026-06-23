@@ -76,8 +76,16 @@ class SovereignSyncHostDomainCommand extends Command
 
     private function shouldSkipLocalSshProxySync(Server $server): bool
     {
-        return $server->isLocalhost()
-            && in_array(strtolower((string) $server->ip), ['localhost', '127.0.0.1', '::1', 'host.docker.internal'], true);
+        if (! $server->isLocalhost()) {
+            return false;
+        }
+
+        $profile = strtolower(trim((string) env('SOVEREIGN_HOST_PROFILE', '')));
+        if ($profile !== 'mac-dev') {
+            return false;
+        }
+
+        return in_array(strtolower((string) $server->ip), ['localhost', '127.0.0.1', '::1', 'host.docker.internal'], true);
     }
 
     private function isLocalSshRefusal(Server $server, \Throwable $e): bool

@@ -11,7 +11,9 @@ beforeEach(function () {
     InstanceSettings::unguarded(fn () => InstanceSettings::create(['id' => 0]));
 });
 
-test('host domain sync skips localhost ssh proxy sync for local server', function () {
+test('host domain sync skips localhost ssh proxy sync for local server on mac-dev', function () {
+    putenv('SOVEREIGN_HOST_PROFILE=mac-dev');
+
     $team = Team::factory()->create();
 
     Server::unguarded(fn () => Server::create([
@@ -35,7 +37,9 @@ test('host domain sync skips localhost ssh proxy sync for local server', functio
     expect(InstanceSettings::first()->fqdn)->toBe('https://host.example.test');
 });
 
-test('host domain sync treats host docker internal as local substrate', function () {
+test('host domain sync treats host docker internal as local substrate on mac-dev', function () {
+    putenv('SOVEREIGN_HOST_PROFILE=mac-dev');
+
     $team = Team::factory()->create();
 
     Server::unguarded(fn () => Server::create([
