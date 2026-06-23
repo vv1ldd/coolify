@@ -1219,7 +1219,7 @@ fi
 
 run_sovereign_disk_gate
 
-mkdir -p "${SOURCE_DIR}" "${INSTALL_ROOT}"/{ssh,applications,databases,backups,services,proxy,sentinel}
+mkdir -p "${SOURCE_DIR}" "${SOURCE_DIR}/scripts" "${INSTALL_ROOT}"/{ssh,applications,databases,backups,services,proxy,sentinel}
 mkdir -p "${INSTALL_ROOT}/ssh/keys" "${INSTALL_ROOT}/ssh/mux" "${INSTALL_ROOT}/proxy/dynamic"
 touch "$LOG_FILE"
 
@@ -1278,6 +1278,7 @@ esac
 
 log "Downloading Sovereign Coolify configuration"
 progress 3 4 "runtime configuration"
+mkdir -p "${SOURCE_DIR}/scripts"
 download_file docker-compose.yml "${SOURCE_DIR}/docker-compose.yml"
 download_file docker-compose.prod.yml "${SOURCE_DIR}/docker-compose.prod.yml"
 download_file docker-compose.sovereign.prod.yml "${SOURCE_DIR}/docker-compose.sovereign.prod.yml"
