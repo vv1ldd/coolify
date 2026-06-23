@@ -204,13 +204,17 @@ embed_nocloud_into_initrd() {
 }
 
 kexec_reboot() {
+    local kernel_network
+    kernel_network="$(sovereign_kexec_kernel_network_append)"
+
     log "kexec into Ubuntu 24.04 autoinstall — primary disk will be wiped"
     log "installer runs headless; then reboot to LUKS root (unlock in provider console if prompted)"
+    log "kernel network: ${kernel_network}"
     sleep 3
 
     kexec -l "${STAGING}/vmlinuz" \
         --initrd="${STAGING}/initrd.gz" \
-        --append="autoinstall ds=nocloud --- quiet ip=dhcp"
+        --append="autoinstall ds=nocloud --- quiet ${kernel_network}"
 
     sync
     systemctl kexec 2>/dev/null || kexec -e

@@ -53,10 +53,9 @@ sovereign_capture_network_yaml() {
   network:
     version: 2
     ethernets:
-      ${iface}:
+      uplink:
         match:
-          macaddress: ${mac}
-        set-name: ${iface}
+          macaddress: "${mac}"
         dhcp4: false
         dhcp6: ${SOVEREIGN_NETWORK_DHCP6:-false}
         addresses:
@@ -119,4 +118,50 @@ sovereign_network_summary() {
         mode=static
     fi
     printf 'mode=%s iface=%s ip=%s gw=%s mac=%s\n' "${mode}" "${iface:-unknown}" "${ip:-none}" "${gw:-none}" "${mac:-none}"
+}
+
+sovereign_cidr_prefix_to_netmask() {
+    case "${1:-24}" in
+        8) printf '255.0.0.0' ;;
+        16) printf '255.255.0.0' ;;
+        24) printf '255.255.255.0' ;;
+        25) printf '255.255.255.128' ;;
+        26) printf '255.255.255.192' ;;
+        27) printf '255.255.255.224' ;;
+        28) printf '255.255.255.240' ;;
+        32) printf '255.255.255.255' ;;
+        *) printf '255.255.255.0' ;;
+    esac
+}
+
+# Early initrd network for kexec autoinstall. Selectel/static clouds have no DHCP;
+# user-data static netplan applies later, so kernel cmdline must not use ip=dhcp.
+sovereign_kexec_kernel_network_append() {
+    local iface addr4 gw4 client_ip prefix netmask dns0 dns1 hostname
+
+    if grep -qR 'dhcp4:\s*true' /etc/netplan/*.yaml 2>/dev/null; then
+        printf 'ip=dhcp'
+        return 0
+    fi
+
+    iface="$(ip -4 route show default 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit }}')"
+    addr4="$(ip -4 -o addr show dev "${iface}" scope global 2>/dev/null | awk '{print $4; exit}')"
+    gw4="$(ip -4 route show default dev "${iface}" 2>/dev/null | awk '{print $3; exit}')"
+
+    if [ -z "$addr4" ] || [ -z "$gw4" ]; then
+        printf 'ip=dhcp'
+        return 0
+    fi
+
+    client_ip="${addr4%%/*}"
+    prefix="${addr4#*/}"
+    netmask="$(sovereign_cidr_prefix_to_netmask "$prefix")"
+    dns0="$(grep -E '^nameserver ' /etc/resolv.conf 2>/dev/null | awk 'NR == 1 { print $2 }')"
+    dns1="$(grep -E '^nameserver ' /etc/resolv.conf 2>/dev/null | awk 'NR == 2 { print $2 }')"
+    dns0="${dns0:-8.8.8.8}"
+    dns1="${dns1:-1.1.1.1}"
+    hostname="${SOVEREIGN_HOSTNAME:-host}"
+
+    # client:server:gw:mask:hostname:device:autoconf:dns0:dns1 — empty device → first NIC (ens3 on OpenStack)
+    printf 'ip=%s::%s:%s:%s::off:%s:%s' "$client_ip" "$gw4" "$netmask" "$hostname" "$dns0" "$dns1"
 }
