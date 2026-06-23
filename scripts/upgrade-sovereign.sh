@@ -266,6 +266,20 @@ strip_env_quotes() {
     printf '%s' "$value"
 }
 
+digital_goods_source_enabled() {
+    local enabled
+    enabled="${DIGITAL_GOODS_SOURCE_ENABLED:-$(strip_env_quotes "$(get_env_var DIGITAL_GOODS_SOURCE_ENABLED)")}"
+    enabled="${enabled:-false}"
+    case "$enabled" in
+        true|1|yes|on)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 load_sovereign_identity_env_module() {
     local scripts_dir module_path
 
@@ -496,6 +510,11 @@ verify_simple_l1_identity_runtime() {
 }
 
 verify_digital_goods_source_runtime() {
+    if ! digital_goods_source_enabled; then
+        log "Digital Goods Source runtime skipped (DIGITAL_GOODS_SOURCE_ENABLED=false)."
+        return 0
+    fi
+
     local expected_kernel expected_provider
     expected_kernel="${DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION:-$(strip_env_quotes "$(get_env_var DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION)")}"
     expected_provider="${DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION:-$(strip_env_quotes "$(get_env_var DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION)")}"
@@ -651,9 +670,14 @@ set_env_var "SIMPLE_L1_SELF_WEBHOOK" "${SIMPLE_L1_SELF_WEBHOOK:-$(get_env_var SI
 set_env_var "SIMPLE_L1_PEERS" "${SIMPLE_L1_PEERS:-$(get_env_var SIMPLE_L1_PEERS)}"
 set_env_var "SIMPLE_L1_STORAGE_ROLE" "$SIMPLE_L1_STORAGE_ROLE_VALUE"
 set_env_var "SIMPLE_L1_IDENTITY_PROTOCOL_VERSION" "$SIMPLE_L1_IDENTITY_PROTOCOL_VERSION_VALUE"
-set_env_var "DIGITAL_GOODS_SOURCE_IMAGE" "$DIGITAL_GOODS_SOURCE_IMAGE_VALUE"
-set_env_var "DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION" "$DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION_VALUE"
-set_env_var "DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION" "$DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION_VALUE"
+DIGITAL_GOODS_SOURCE_ENABLED_VALUE="${DIGITAL_GOODS_SOURCE_ENABLED:-$(strip_env_quotes "$(get_env_var DIGITAL_GOODS_SOURCE_ENABLED)")}"
+DIGITAL_GOODS_SOURCE_ENABLED_VALUE="${DIGITAL_GOODS_SOURCE_ENABLED_VALUE:-false}"
+set_env_var "DIGITAL_GOODS_SOURCE_ENABLED" "$DIGITAL_GOODS_SOURCE_ENABLED_VALUE"
+if [ "$DIGITAL_GOODS_SOURCE_ENABLED_VALUE" = "true" ]; then
+    set_env_var "DIGITAL_GOODS_SOURCE_IMAGE" "$DIGITAL_GOODS_SOURCE_IMAGE_VALUE"
+    set_env_var "DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION" "$DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION_VALUE"
+    set_env_var "DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION" "$DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION_VALUE"
+fi
 set_env_var "SIMPLE_L1_IDENTITY_CAPSULES_ENABLED" "$SIMPLE_L1_IDENTITY_CAPSULES_ENABLED_VALUE"
 set_env_var "SIMPLE_L1_EVIDENCE_RESOLVERS" "$SIMPLE_L1_EVIDENCE_RESOLVERS_VALUE"
 set_env_var "SIMPLE_L1_STATE_RESOLVERS" "$SIMPLE_L1_STATE_RESOLVERS_VALUE"
@@ -708,19 +732,19 @@ fi
 write_status "2" "Pulling images"
 progress 2 "$CONVERGE_TOTAL" "pull images"
 phase "pulling runtime images"
-run_logged "pulling runtime images" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" DIGITAL_GOODS_SOURCE_IMAGE="$DIGITAL_GOODS_SOURCE_IMAGE_VALUE" "${COMPOSE_DOCKER_ENV[@]}" \
+run_logged "pulling runtime images" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" "${COMPOSE_DOCKER_ENV[@]}" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" pull
 checkpoint 2 "$CONVERGE_TOTAL" "IMAGES_PULLED" "Runtime images are present locally" "coolify_image=${COOLIFY_IMAGE}"
 
 write_status "3" "Starting containers"
 progress 3 "$CONVERGE_TOTAL" "start containers"
 phase "starting containers"
-run_logged "starting containers" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" DIGITAL_GOODS_SOURCE_IMAGE="$DIGITAL_GOODS_SOURCE_IMAGE_VALUE" "${COMPOSE_DOCKER_ENV[@]}" \
+run_logged "starting containers" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" "${COMPOSE_DOCKER_ENV[@]}" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
 
 if ! docker exec coolify getent hosts host.docker.internal >/dev/null 2>&1; then
     log "Recreating Coolify container so host.docker.internal resolves through host-gateway"
-    run_logged "recreating Coolify host gateway" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" DIGITAL_GOODS_SOURCE_IMAGE="$DIGITAL_GOODS_SOURCE_IMAGE_VALUE" "${COMPOSE_DOCKER_ENV[@]}" \
+    run_logged "recreating Coolify host gateway" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" "${COMPOSE_DOCKER_ENV[@]}" \
         docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --force-recreate --no-deps --wait --wait-timeout 120 coolify
 fi
 mark_converge_state "CONTAINERS_STARTED"

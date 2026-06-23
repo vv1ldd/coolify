@@ -1,4 +1,4 @@
-# Mac dev overlay: amd64 emulation + node healthcheck, no private digital-goods-source image.
+# Mac dev overlay: amd64 emulation + node healthcheck.
 services:
   coolify:
     image: "${COOLIFY_IMAGE:-ghcr.io/vv1ldd/coolify:sovereign}"
@@ -57,45 +57,9 @@ services:
       retries: 20
       timeout: 3s
 
-  digital-goods-source:
-    image: "${DIGITAL_GOODS_SOURCE_IMAGE:-ghcr.io/vv1ldd/digital-goods-source:latest}"
-    container_name: digital-goods-source
-    pull_policy: never
-    platform: linux/amd64
-    restart: always
-    networks:
-      - coolify
-    expose:
-      - "8080"
-    ports:
-      - "${DIGITAL_GOODS_SOURCE_BIND:-127.0.0.1}:${DIGITAL_GOODS_SOURCE_PORT:-8091}:8080"
-    environment:
-      APP_NAME: "Digital Goods Source"
-      APP_ENV: production
-      APP_DEBUG: "false"
-      APP_URL: "${DIGITAL_GOODS_SOURCE_PUBLIC_URL:-http://digital-goods-source:8080}"
-      DB_CONNECTION: sqlite
-      DB_DATABASE: "${DIGITAL_GOODS_SOURCE_DB_DATABASE:-/data/digital-goods-source.sqlite}"
-      DIGITAL_GOODS_SOURCE_SERVICE_NAME: digital-goods-source
-      DIGITAL_GOODS_SOURCE_RUNTIME_VERSION: "${DIGITAL_GOODS_SOURCE_RUNTIME_VERSION:-1.0.0}"
-      DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION: "${DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION:-v1}"
-      DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION: "${DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION:-v1}"
-      DIGITAL_GOODS_SOURCE_PLATFORM_TOKEN: "${DIGITAL_GOODS_SOURCE_PLATFORM_TOKEN:-}"
-      DIGITAL_GOODS_SOURCE_FINANCIAL_SECRET: "${DIGITAL_GOODS_SOURCE_FINANCIAL_SECRET:-}"
-      DIGITAL_GOODS_SOURCE_SIGNATURE_TOLERANCE: "${DIGITAL_GOODS_SOURCE_SIGNATURE_TOLERANCE:-300}"
-    volumes:
-      - digital-goods-source-data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/v1/status | grep -q 'digital-goods-source' || exit 1"]
-      interval: 10s
-      retries: 20
-      timeout: 3s
-
 volumes:
   simple-l1-data:
     name: simple-l1-data
-  digital-goods-source-data:
-    name: digital-goods-source-data
 
 networks:
   coolify:

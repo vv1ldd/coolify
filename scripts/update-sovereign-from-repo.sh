@@ -163,7 +163,7 @@ resolve_images() {
 }
 
 docker_compose() {
-    env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" DIGITAL_GOODS_SOURCE_IMAGE="$DIGITAL_GOODS_SOURCE_IMAGE" \
+    env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" \
         docker compose --env-file "$ENV_FILE" "${compose_files[@]}" "$@"
 }
 
@@ -231,8 +231,12 @@ healthcheck() {
     run_logged "container health endpoint" docker exec coolify curl --fail --max-time 10 http://127.0.0.1:8080/api/health
     run_logged "Simple L1 identity runtime" \
         docker exec -e EXPECTED_PROTOCOL_VERSION="${SIMPLE_L1_IDENTITY_PROTOCOL_VERSION:-capsule-v0}" simple-l1 node -e "fetch('http://127.0.0.1:3000/api/sl1e/connect/status').then(async (response) => { const payload = await response.json(); if (!response.ok) throw new Error('status endpoint returned ' + response.status); if (payload.protocol_version !== process.env.EXPECTED_PROTOCOL_VERSION) throw new Error('protocol_version mismatch: ' + payload.protocol_version + ' expected ' + process.env.EXPECTED_PROTOCOL_VERSION); if (payload.storage_role !== 'cache') throw new Error('storage_role is not cache: ' + payload.storage_role); if (payload.identity_capsules_enabled !== true) throw new Error('identity capsules are not enabled'); console.log(JSON.stringify({ ok: true, protocol_version: payload.protocol_version, storage_role: payload.storage_role, capsule_support: payload.identity_capsules_enabled })); }).catch((error) => { console.error(error.message); process.exit(1); });"
-    run_logged "Digital Goods Source provider runtime" \
-        docker exec -e EXPECTED_KERNEL_PROTOCOL_VERSION="${DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION:-v1}" -e EXPECTED_PROVIDER_CONTRACT_VERSION="${DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION:-v1}" digital-goods-source php -r "\$payload = json_decode(file_get_contents('http://127.0.0.1:8080/api/v1/status'), true); if (!is_array(\$payload)) { fwrite(STDERR, 'invalid status payload'.PHP_EOL); exit(1); } if ((\$payload['kernel_protocol_version'] ?? null) !== getenv('EXPECTED_KERNEL_PROTOCOL_VERSION')) { fwrite(STDERR, 'kernel_protocol_version mismatch'.PHP_EOL); exit(1); } if ((\$payload['provider_contract_version'] ?? null) !== getenv('EXPECTED_PROVIDER_CONTRACT_VERSION')) { fwrite(STDERR, 'provider_contract_version mismatch'.PHP_EOL); exit(1); } echo json_encode(['ok' => true, 'kernel_protocol_version' => \$payload['kernel_protocol_version'], 'provider_contract_version' => \$payload['provider_contract_version']]).PHP_EOL;"
+    if [ "$(strip_env_quotes "$(get_env_var DIGITAL_GOODS_SOURCE_ENABLED)")" = "true" ]; then
+        run_logged "Digital Goods Source provider runtime" \
+            docker exec -e EXPECTED_KERNEL_PROTOCOL_VERSION="${DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION:-v1}" -e EXPECTED_PROVIDER_CONTRACT_VERSION="${DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION:-v1}" digital-goods-source php -r "\$payload = json_decode(file_get_contents('http://127.0.0.1:8080/api/v1/status'), true); if (!is_array(\$payload)) { fwrite(STDERR, 'invalid status payload'.PHP_EOL); exit(1); } if ((\$payload['kernel_protocol_version'] ?? null) !== getenv('EXPECTED_KERNEL_PROTOCOL_VERSION')) { fwrite(STDERR, 'kernel_protocol_version mismatch'.PHP_EOL); exit(1); } if ((\$payload['provider_contract_version'] ?? null) !== getenv('EXPECTED_PROVIDER_CONTRACT_VERSION')) { fwrite(STDERR, 'provider_contract_version mismatch'.PHP_EOL); exit(1); } echo json_encode(['ok' => true, 'kernel_protocol_version' => \$payload['kernel_protocol_version'], 'provider_contract_version' => \$payload['provider_contract_version']]).PHP_EOL;"
+    else
+        note "Digital Goods Source healthcheck skipped (DIGITAL_GOODS_SOURCE_ENABLED=false)."
+    fi
 
     if [ -n "$app_url" ] && [ "$app_url" != "http://localhost" ] && [ "$app_url" != "https://localhost" ]; then
         if curl -fsSI --max-time 15 "${app_url}/api/health" >> "$LOG_FILE" 2>&1; then
