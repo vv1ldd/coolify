@@ -1,7 +1,9 @@
+# Mac dev overlay: amd64 emulation + node healthcheck, no private digital-goods-source image.
 services:
   coolify:
     image: "${COOLIFY_IMAGE:-ghcr.io/vv1ldd/coolify:sovereign}"
     pull_policy: always
+    platform: linux/amd64
     extra_hosts:
       - host.docker.internal:host-gateway
     depends_on:
@@ -11,6 +13,7 @@ services:
   soketi:
     image: "${SOVEREIGN_REALTIME_IMAGE:-ghcr.io/coollabsio/coolify-realtime:1.0.13}"
     pull_policy: always
+    platform: linux/amd64
     extra_hosts:
       - host.docker.internal:host-gateway
 
@@ -18,11 +21,14 @@ services:
     image: "${SIMPLE_L1_IMAGE:-ghcr.io/vv1ldd/simple-l1:latest}"
     container_name: simple-l1
     pull_policy: always
+    platform: linux/amd64
     restart: always
     networks:
       - coolify
     expose:
       - "3000"
+    ports:
+      - "127.0.0.1:${SOVEREIGN_TUNNEL_SIMPLE_L1_PORT:-3000}:3000"
     environment:
       PORT: "3000"
       SL1_DATA_DIR: /data/simple-l1
@@ -45,22 +51,6 @@ services:
       CLOUDFLARE_PROXIED: "${SIMPLE_L1_CLOUDFLARE_PROXIED:-false}"
     volumes:
       - simple-l1-data:/data/simple-l1
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.middlewares.simple-l1-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.simple-l1-health.rule=Host(`${SIMPLE_L1_DOMAIN:-simplel1.online}`) && Path(`/healthcheck`)"
-      - "traefik.http.routers.simple-l1-health.entryPoints=http"
-      - "traefik.http.routers.simple-l1-health.priority=1000"
-      - "traefik.http.routers.simple-l1-health.service=simple-l1"
-      - "traefik.http.routers.simple-l1-http.rule=Host(`${SIMPLE_L1_DOMAIN:-simplel1.online}`)"
-      - "traefik.http.routers.simple-l1-http.entryPoints=http"
-      - "traefik.http.routers.simple-l1-http.middlewares=simple-l1-redirect"
-      - "traefik.http.routers.simple-l1-https.rule=Host(`${SIMPLE_L1_DOMAIN:-simplel1.online}`)"
-      - "traefik.http.routers.simple-l1-https.entryPoints=https"
-      - "traefik.http.routers.simple-l1-https.tls=true"
-      - "traefik.http.routers.simple-l1-https.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.simple-l1-https.service=simple-l1"
-      - "traefik.http.services.simple-l1.loadbalancer.server.port=3000"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthcheck').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 5s
@@ -70,7 +60,8 @@ services:
   digital-goods-source:
     image: "${DIGITAL_GOODS_SOURCE_IMAGE:-ghcr.io/vv1ldd/digital-goods-source:latest}"
     container_name: digital-goods-source
-    pull_policy: always
+    pull_policy: never
+    platform: linux/amd64
     restart: always
     networks:
       - coolify

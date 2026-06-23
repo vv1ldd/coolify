@@ -20,6 +20,10 @@ CONVERGE_TOTAL="${SOVEREIGN_CONVERGE_TOTAL:-7}"
 if [ "${SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE}" = "true" ] && [ -z "${SOVEREIGN_CONVERGE_TOTAL:-}" ]; then
     CONVERGE_TOTAL=8
 fi
+_UPGRADE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || pwd)"
+if [ -z "${SOVEREIGN_LOCAL_REPO_PATH:-}" ] && [ -f "${_UPGRADE_SCRIPT_DIR}/../docker-compose.yml" ]; then
+    SOVEREIGN_LOCAL_REPO_PATH="$(cd "${_UPGRADE_SCRIPT_DIR}/.." && pwd)"
+fi
 
 if [ -z "${NO_COLOR:-}" ]; then
     C_RESET="$(printf '\033[0m')"
@@ -262,6 +266,51 @@ strip_env_quotes() {
     printf '%s' "$value"
 }
 
+load_sovereign_identity_env_module() {
+    local scripts_dir module_path
+
+    scripts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    for module_path in \
+        "${scripts_dir}/scripts/sovereign-identity-env.sh" \
+        "${scripts_dir}/sovereign-identity-env.sh" \
+        "${SOURCE_DIR}/scripts/sovereign-identity-env.sh" \
+        "${SOVEREIGN_LOCAL_REPO_PATH:-}/scripts/sovereign-identity-env.sh"; do
+        if [ -n "$module_path" ] && [ -f "$module_path" ]; then
+            # shellcheck source=scripts/sovereign-identity-env.sh
+            . "$module_path"
+            return 0
+        fi
+    done
+
+    echo "Could not find sovereign-identity-env.sh next to upgrade-sovereign.sh." >&2
+    exit 1
+}
+
+load_sovereign_host_profile_module() {
+    local scripts_dir module_path
+
+    scripts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    for module_path in \
+        "${scripts_dir}/scripts/sovereign-host-profile.sh" \
+        "${scripts_dir}/sovereign-host-profile.sh" \
+        "${SOURCE_DIR}/scripts/sovereign-host-profile.sh" \
+        "${SOVEREIGN_LOCAL_REPO_PATH:-}/scripts/sovereign-host-profile.sh"; do
+        if [ -n "$module_path" ] && [ -f "$module_path" ]; then
+            # shellcheck source=scripts/sovereign-host-profile.sh
+            . "$module_path"
+            return 0
+        fi
+    done
+
+    echo "Could not find sovereign-host-profile.sh next to upgrade-sovereign.sh." >&2
+    exit 1
+}
+
+load_sovereign_helper_modules() {
+    load_sovereign_identity_env_module
+    load_sovereign_host_profile_module
+}
+
 strip_image_tag() {
     local image="$1"
     local last_segment
@@ -280,6 +329,13 @@ strip_image_tag() {
 download_file() {
     local source_path="$1"
     local target_path="$2"
+
+    if [ -n "${SOVEREIGN_LOCAL_REPO_PATH:-}" ] && [ -f "${SOVEREIGN_LOCAL_REPO_PATH}/${source_path}" ]; then
+        log "Using local repo file ${source_path}"
+        cp "${SOVEREIGN_LOCAL_REPO_PATH}/${source_path}" "$target_path"
+        return 0
+    fi
+
     log "Downloading ${source_path}"
     curl -fsSL "${RAW_BASE}/${source_path}" -o "$target_path"
 }
@@ -409,6 +465,12 @@ sync_identity_policy() {
 
 bootstrap_simple_l1_failover() {
     local mode="${SOVEREIGN_SIMPLE_L1_BOOTSTRAP:-auto}"
+    local profile
+    profile="$(strip_env_quotes "$(get_env_var SOVEREIGN_HOST_PROFILE)")"
+    if [ "$profile" = "mac-dev" ]; then
+        log "Simple L1 A-record bootstrap skipped for mac-dev profile (Cloudflare Tunnel handles DNS)."
+        return 0
+    fi
     case "$mode" in
         skip|false|off)
             log "Simple L1 failover bootstrap skipped."
@@ -422,6 +484,26 @@ bootstrap_simple_l1_failover() {
         log "Simple L1 failover bootstrap did not complete. Set SIMPLE_L1_CLOUDFLARE_API_TOKEN and SIMPLE_L1_PUBLIC_IP/SIMPLE_L1_FAILOVER_NODES, then run:"
         log "docker exec coolify php artisan sovereign:simple-l1-bootstrap --enable"
     fi
+}
+
+verify_simple_l1_identity_runtime() {
+    local expected_protocol
+    expected_protocol="${SIMPLE_L1_IDENTITY_PROTOCOL_VERSION:-$(strip_env_quotes "$(get_env_var SIMPLE_L1_IDENTITY_PROTOCOL_VERSION)")}"
+    expected_protocol="${expected_protocol:-capsule-v0}"
+
+    run_logged "verifying Simple L1 identity runtime" \
+        docker exec -e EXPECTED_PROTOCOL_VERSION="$expected_protocol" simple-l1 node -e "fetch('http://127.0.0.1:3000/api/sl1e/connect/status').then(async (response) => { const payload = await response.json(); if (!response.ok) throw new Error('status endpoint returned ' + response.status); if (payload.protocol_version !== process.env.EXPECTED_PROTOCOL_VERSION) throw new Error('protocol_version mismatch: ' + payload.protocol_version + ' expected ' + process.env.EXPECTED_PROTOCOL_VERSION); if (payload.storage_role !== 'cache') throw new Error('storage_role is not cache: ' + payload.storage_role); if (payload.identity_capsules_enabled !== true) throw new Error('identity capsules are not enabled'); console.log(JSON.stringify({ ok: true, protocol_version: payload.protocol_version, storage_role: payload.storage_role, capsule_support: payload.identity_capsules_enabled })); }).catch((error) => { console.error(error.message); process.exit(1); });"
+}
+
+verify_digital_goods_source_runtime() {
+    local expected_kernel expected_provider
+    expected_kernel="${DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION:-$(strip_env_quotes "$(get_env_var DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION)")}"
+    expected_provider="${DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION:-$(strip_env_quotes "$(get_env_var DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION)")}"
+    expected_kernel="${expected_kernel:-v1}"
+    expected_provider="${expected_provider:-v1}"
+
+    run_logged "verifying Digital Goods Source runtime" \
+        docker exec -e EXPECTED_KERNEL_PROTOCOL_VERSION="$expected_kernel" -e EXPECTED_PROVIDER_CONTRACT_VERSION="$expected_provider" digital-goods-source php -r "\$payload = json_decode(file_get_contents('http://127.0.0.1:8080/api/v1/status'), true); if (!is_array(\$payload)) { fwrite(STDERR, 'invalid status payload'.PHP_EOL); exit(1); } if ((\$payload['kernel_protocol_version'] ?? null) !== getenv('EXPECTED_KERNEL_PROTOCOL_VERSION')) { fwrite(STDERR, 'kernel_protocol_version mismatch'.PHP_EOL); exit(1); } if ((\$payload['provider_contract_version'] ?? null) !== getenv('EXPECTED_PROVIDER_CONTRACT_VERSION')) { fwrite(STDERR, 'provider_contract_version mismatch'.PHP_EOL); exit(1); } echo json_encode(['ok' => true, 'kernel_protocol_version' => \$payload['kernel_protocol_version'], 'provider_contract_version' => \$payload['provider_contract_version']]).PHP_EOL;"
 }
 
 run_migrations() {
@@ -458,7 +540,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-mkdir -p "$SOURCE_DIR"
+mkdir -p "$SOURCE_DIR" "${SOURCE_DIR}/scripts"
 touch "$LOG_FILE"
 
 progress_contract
@@ -470,11 +552,20 @@ write_status "1" "Downloading compose files"
 download_file docker-compose.yml "${SOURCE_DIR}/docker-compose.yml"
 download_file docker-compose.prod.yml "${SOURCE_DIR}/docker-compose.prod.yml"
 download_file docker-compose.sovereign.prod.yml "${SOURCE_DIR}/docker-compose.sovereign.prod.yml"
+download_file docker-compose.sovereign.mac.dev.yml "${SOURCE_DIR}/docker-compose.sovereign.mac.dev.yml"
+download_file scripts/sovereign-identity-env.sh "${SOURCE_DIR}/scripts/sovereign-identity-env.sh"
+download_file scripts/sovereign-host-profile.sh "${SOURCE_DIR}/scripts/sovereign-host-profile.sh"
+download_file scripts/sovereign-mac-tunnel.sh "${SOURCE_DIR}/scripts/sovereign-mac-tunnel.sh"
+download_file scripts/sovereign-mac-tunnel.sh "${SOURCE_DIR}/sovereign-mac-tunnel.sh"
 download_file .env.production "${SOURCE_DIR}/.env.production"
 download_file scripts/upgrade-sovereign.sh "${SOURCE_DIR}/upgrade-sovereign.sh"
 download_file scripts/sovereign-host-hardening.sh "${SOURCE_DIR}/sovereign-host-hardening.sh"
 chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh"
 chmod +x "${SOURCE_DIR}/sovereign-host-hardening.sh"
+chmod +x "${SOURCE_DIR}/scripts/sovereign-mac-tunnel.sh" "${SOURCE_DIR}/sovereign-mac-tunnel.sh"
+
+load_sovereign_helper_modules
+configure_mac_docker_env
 
 if [ ! -f "$ENV_FILE" ]; then
     cp "${SOURCE_DIR}/.env.production" "$ENV_FILE"
@@ -491,6 +582,9 @@ SIMPLE_L1_IMAGE="${SIMPLE_L1_IMAGE:-$(get_env_var SIMPLE_L1_IMAGE)}"
 SIMPLE_L1_IMAGE="${SIMPLE_L1_IMAGE:-ghcr.io/vv1ldd/simple-l1:latest}"
 HELPER_IMAGE="${HELPER_IMAGE:-$(get_env_var HELPER_IMAGE)}"
 HELPER_IMAGE="${HELPER_IMAGE:-ghcr.io/coollabsio/coolify-helper}"
+SOVEREIGN_APP_SCHEME="${SOVEREIGN_APP_SCHEME:-$(strip_env_quotes "$(get_env_var SOVEREIGN_APP_SCHEME)")}"
+SOVEREIGN_APP_SCHEME="${SOVEREIGN_APP_SCHEME:-https}"
+derive_sovereign_identity_env_from_runtime
 SIMPLE_L1_DOMAIN_VALUE="${SIMPLE_L1_DOMAIN:-$(get_env_var SIMPLE_L1_DOMAIN)}"
 SIMPLE_L1_DOMAIN_VALUE="${SIMPLE_L1_DOMAIN_VALUE:-simplel1.online}"
 SIMPLE_L1_ISSUER_URL_VALUE="${SIMPLE_L1_ISSUER_URL:-$(get_env_var SIMPLE_L1_ISSUER_URL)}"
@@ -501,6 +595,24 @@ SIMPLE_L1_NETWORK_NAME_VALUE="${SIMPLE_L1_NETWORK_NAME:-$(get_env_var SIMPLE_L1_
 SIMPLE_L1_NETWORK_NAME_VALUE="${SIMPLE_L1_NETWORK_NAME_VALUE:-Simple-L1}"
 SIMPLE_L1_NODE_TYPE_LABEL_VALUE="${SIMPLE_L1_NODE_TYPE_LABEL:-$(get_env_var SIMPLE_L1_NODE_TYPE_LABEL)}"
 SIMPLE_L1_NODE_TYPE_LABEL_VALUE="${SIMPLE_L1_NODE_TYPE_LABEL_VALUE:-Sovereign Coolify Node}"
+SIMPLE_L1_STORAGE_ROLE_VALUE="${SIMPLE_L1_STORAGE_ROLE:-$(get_env_var SIMPLE_L1_STORAGE_ROLE)}"
+SIMPLE_L1_STORAGE_ROLE_VALUE="${SIMPLE_L1_STORAGE_ROLE_VALUE:-cache}"
+SIMPLE_L1_IDENTITY_PROTOCOL_VERSION_VALUE="${SIMPLE_L1_IDENTITY_PROTOCOL_VERSION:-$(get_env_var SIMPLE_L1_IDENTITY_PROTOCOL_VERSION)}"
+SIMPLE_L1_IDENTITY_PROTOCOL_VERSION_VALUE="${SIMPLE_L1_IDENTITY_PROTOCOL_VERSION_VALUE:-capsule-v0}"
+DIGITAL_GOODS_SOURCE_IMAGE_VALUE="${DIGITAL_GOODS_SOURCE_IMAGE:-$(get_env_var DIGITAL_GOODS_SOURCE_IMAGE)}"
+DIGITAL_GOODS_SOURCE_IMAGE_VALUE="${DIGITAL_GOODS_SOURCE_IMAGE_VALUE:-ghcr.io/vv1ldd/digital-goods-source:latest}"
+DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION_VALUE="${DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION:-$(get_env_var DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION)}"
+DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION_VALUE="${DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION_VALUE:-v1}"
+DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION_VALUE="${DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION:-$(get_env_var DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION)}"
+DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION_VALUE="${DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION_VALUE:-v1}"
+SIMPLE_L1_IDENTITY_CAPSULES_ENABLED_VALUE="${SIMPLE_L1_IDENTITY_CAPSULES_ENABLED:-$(get_env_var SIMPLE_L1_IDENTITY_CAPSULES_ENABLED)}"
+SIMPLE_L1_IDENTITY_CAPSULES_ENABLED_VALUE="${SIMPLE_L1_IDENTITY_CAPSULES_ENABLED_VALUE:-true}"
+SIMPLE_L1_EVIDENCE_RESOLVERS_VALUE="${SIMPLE_L1_EVIDENCE_RESOLVERS:-$(get_env_var SIMPLE_L1_EVIDENCE_RESOLVERS)}"
+SIMPLE_L1_EVIDENCE_RESOLVERS_VALUE="${SIMPLE_L1_EVIDENCE_RESOLVERS_VALUE:-local-cache,client-capsule,peer,signed-export}"
+SIMPLE_L1_STATE_RESOLVERS_VALUE="${SIMPLE_L1_STATE_RESOLVERS:-$(get_env_var SIMPLE_L1_STATE_RESOLVERS)}"
+SIMPLE_L1_STATE_RESOLVERS_VALUE="${SIMPLE_L1_STATE_RESOLVERS_VALUE:-local-cache,peer,anchor,quorum,signed-export}"
+SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL_VALUE="${SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL:-$(get_env_var SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL)}"
+SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL_VALUE="${SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL_VALUE:-AL1}"
 SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE_VALUE="${SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE:-$(get_env_var SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE)}"
 SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE_VALUE="${SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE_VALUE:-false}"
 SIMPLE_L1_DNS_TTL_VALUE="${SIMPLE_L1_DNS_TTL:-$(get_env_var SIMPLE_L1_DNS_TTL)}"
@@ -529,11 +641,23 @@ set_env_var "SL1_CONNECT_CALLBACK_PATH" "${SL1_CONNECT_CALLBACK_PATH:-$(get_env_
 set_env_var "SL1_CONNECT_TIMEOUT" "${SL1_CONNECT_TIMEOUT:-$(get_env_var SL1_CONNECT_TIMEOUT)}"
 set_env_var "SIMPLE_L1_DOMAIN" "$SIMPLE_L1_DOMAIN_VALUE"
 set_env_var "SIMPLE_L1_ISSUER_URL" "$SIMPLE_L1_ISSUER_URL_VALUE"
+if [ -n "${SOVEREIGN_RP_ID:-}" ]; then
+    set_env_var "SOVEREIGN_RP_ID" "$SOVEREIGN_RP_ID"
+fi
 set_env_var "SIMPLE_L1_NODE_NAME" "$SIMPLE_L1_NODE_NAME_VALUE"
 set_env_var "SIMPLE_L1_NETWORK_NAME" "$SIMPLE_L1_NETWORK_NAME_VALUE"
 set_env_var "SIMPLE_L1_NODE_TYPE_LABEL" "$SIMPLE_L1_NODE_TYPE_LABEL_VALUE"
 set_env_var "SIMPLE_L1_SELF_WEBHOOK" "${SIMPLE_L1_SELF_WEBHOOK:-$(get_env_var SIMPLE_L1_SELF_WEBHOOK)}"
 set_env_var "SIMPLE_L1_PEERS" "${SIMPLE_L1_PEERS:-$(get_env_var SIMPLE_L1_PEERS)}"
+set_env_var "SIMPLE_L1_STORAGE_ROLE" "$SIMPLE_L1_STORAGE_ROLE_VALUE"
+set_env_var "SIMPLE_L1_IDENTITY_PROTOCOL_VERSION" "$SIMPLE_L1_IDENTITY_PROTOCOL_VERSION_VALUE"
+set_env_var "DIGITAL_GOODS_SOURCE_IMAGE" "$DIGITAL_GOODS_SOURCE_IMAGE_VALUE"
+set_env_var "DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION" "$DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION_VALUE"
+set_env_var "DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION" "$DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION_VALUE"
+set_env_var "SIMPLE_L1_IDENTITY_CAPSULES_ENABLED" "$SIMPLE_L1_IDENTITY_CAPSULES_ENABLED_VALUE"
+set_env_var "SIMPLE_L1_EVIDENCE_RESOLVERS" "$SIMPLE_L1_EVIDENCE_RESOLVERS_VALUE"
+set_env_var "SIMPLE_L1_STATE_RESOLVERS" "$SIMPLE_L1_STATE_RESOLVERS_VALUE"
+set_env_var "SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL" "$SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL_VALUE"
 set_env_var "SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE" "$SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE_VALUE"
 set_env_var "SIMPLE_L1_DNS_TTL" "$SIMPLE_L1_DNS_TTL_VALUE"
 set_env_var "SIMPLE_L1_DNS_STEERING_ENABLED" "$SIMPLE_L1_DNS_STEERING_ENABLED_VALUE"
@@ -546,7 +670,26 @@ set_env_var "SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND" "${SOVEREIGN_CONTROL_PLANE_
 set_env_var "SOVEREIGN_DNS_STEERING_SCHEDULE" "${SOVEREIGN_DNS_STEERING_SCHEDULE:-$(get_env_var SOVEREIGN_DNS_STEERING_SCHEDULE)}"
 set_env_var "SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE" "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_VALUE"
 set_env_var "SOVEREIGN_SIMPLE_L1_BOOTSTRAP" "${SOVEREIGN_SIMPLE_L1_BOOTSTRAP:-$(get_env_var SOVEREIGN_SIMPLE_L1_BOOTSTRAP)}"
-checkpoint 1 "$CONVERGE_TOTAL" "BOOTSTRAP_READY" "Runtime files and environment are prepared" "repository=${REPOSITORY} branch=${BRANCH}"
+HOST_PROFILE_VALUE="${SOVEREIGN_HOST_PROFILE:-$(strip_env_quotes "$(get_env_var SOVEREIGN_HOST_PROFILE)")}"
+if [ -z "$HOST_PROFILE_VALUE" ]; then
+    HOST_PROFILE_VALUE="$(detect_default_host_profile)"
+fi
+set_env_var "SOVEREIGN_HOST_PROFILE" "$HOST_PROFILE_VALUE"
+if [ "$HOST_PROFILE_VALUE" = "mac-dev" ]; then
+    set_env_var "SOVEREIGN_ALLOW_DIRECT_APP_PORT" "${SOVEREIGN_ALLOW_DIRECT_APP_PORT:-$(strip_env_quotes "$(get_env_var SOVEREIGN_ALLOW_DIRECT_APP_PORT)")}"
+    if [ -z "$(strip_env_quotes "$(get_env_var SOVEREIGN_ALLOW_DIRECT_APP_PORT)")" ]; then
+        set_env_var "SOVEREIGN_ALLOW_DIRECT_APP_PORT" "true"
+    fi
+    set_env_var "DOCKER_DEFAULT_PLATFORM" "${DOCKER_DEFAULT_PLATFORM:-$(strip_env_quotes "$(get_env_var DOCKER_DEFAULT_PLATFORM)")}"
+    if [ -z "$(strip_env_quotes "$(get_env_var DOCKER_DEFAULT_PLATFORM)")" ]; then
+        set_env_var "DOCKER_DEFAULT_PLATFORM" "linux/amd64"
+    fi
+    set_env_var "SOVEREIGN_TUNNEL_NAME" "${SOVEREIGN_TUNNEL_NAME:-$(strip_env_quotes "$(get_env_var SOVEREIGN_TUNNEL_NAME)")}"
+    if [ -z "$(strip_env_quotes "$(get_env_var SOVEREIGN_TUNNEL_NAME)")" ]; then
+        set_env_var "SOVEREIGN_TUNNEL_NAME" "sovereign-mac"
+    fi
+fi
+checkpoint 1 "$CONVERGE_TOTAL" "BOOTSTRAP_READY" "Runtime files and environment are prepared" "repository=${REPOSITORY} branch=${BRANCH} profile=${HOST_PROFILE_VALUE}"
 
 run_host_hardening
 
@@ -555,31 +698,29 @@ if ! docker network inspect coolify >/dev/null 2>&1; then
     docker network create --attachable coolify >/dev/null
 fi
 
-COMPOSE_FILES=(
-    -f "${SOURCE_DIR}/docker-compose.yml"
-    -f "${SOURCE_DIR}/docker-compose.prod.yml"
-)
-if [ -f "${SOURCE_DIR}/docker-compose.custom.yml" ]; then
-    COMPOSE_FILES+=(-f "${SOURCE_DIR}/docker-compose.custom.yml")
+COMPOSE_FILES=()
+build_sovereign_compose_files "$HOST_PROFILE_VALUE"
+COMPOSE_DOCKER_ENV=()
+if [ "$HOST_PROFILE_VALUE" = "mac-dev" ]; then
+    COMPOSE_DOCKER_ENV+=(DOCKER_DEFAULT_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-linux/amd64}")
 fi
-COMPOSE_FILES+=(-f "${SOURCE_DIR}/docker-compose.sovereign.prod.yml")
 
 write_status "2" "Pulling images"
 progress 2 "$CONVERGE_TOTAL" "pull images"
 phase "pulling runtime images"
-run_logged "pulling runtime images" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" \
+run_logged "pulling runtime images" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" DIGITAL_GOODS_SOURCE_IMAGE="$DIGITAL_GOODS_SOURCE_IMAGE_VALUE" "${COMPOSE_DOCKER_ENV[@]}" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" pull
 checkpoint 2 "$CONVERGE_TOTAL" "IMAGES_PULLED" "Runtime images are present locally" "coolify_image=${COOLIFY_IMAGE}"
 
 write_status "3" "Starting containers"
 progress 3 "$CONVERGE_TOTAL" "start containers"
 phase "starting containers"
-run_logged "starting containers" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" \
+run_logged "starting containers" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" DIGITAL_GOODS_SOURCE_IMAGE="$DIGITAL_GOODS_SOURCE_IMAGE_VALUE" "${COMPOSE_DOCKER_ENV[@]}" \
     docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --remove-orphans --wait --wait-timeout 120
 
 if ! docker exec coolify getent hosts host.docker.internal >/dev/null 2>&1; then
     log "Recreating Coolify container so host.docker.internal resolves through host-gateway"
-    run_logged "recreating Coolify host gateway" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" \
+    run_logged "recreating Coolify host gateway" env COOLIFY_IMAGE="$COOLIFY_IMAGE" SOVEREIGN_REALTIME_IMAGE="$SOVEREIGN_REALTIME_IMAGE" SIMPLE_L1_IMAGE="$SIMPLE_L1_IMAGE" DIGITAL_GOODS_SOURCE_IMAGE="$DIGITAL_GOODS_SOURCE_IMAGE_VALUE" "${COMPOSE_DOCKER_ENV[@]}" \
         docker compose --env-file "$ENV_FILE" "${COMPOSE_FILES[@]}" up -d --force-recreate --no-deps --wait --wait-timeout 120 coolify
 fi
 mark_converge_state "CONTAINERS_STARTED"
@@ -591,6 +732,8 @@ mark_converge_state "MIGRATIONS_DONE"
 progress 5 "$CONVERGE_TOTAL" "identity policy"
 sync_identity_policy
 bootstrap_simple_l1_failover
+verify_simple_l1_identity_runtime
+verify_digital_goods_source_runtime
 mark_converge_state "POLICY_SYNCED"
 progress 6 "$CONVERGE_TOTAL" "domain routing"
 sync_host_domain

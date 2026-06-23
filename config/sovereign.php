@@ -50,11 +50,38 @@ return [
             'enabled' => env('SL1_EMBEDDED_RUNTIME_ENABLED', true),
             'issuer_path' => env('SL1_EMBEDDED_ISSUER_PATH', '/sl1'),
             'issuer_url' => env('SIMPLE_L1_ISSUER_URL'),
+            'storage_role' => env('SIMPLE_L1_STORAGE_ROLE', 'cache'),
+            'identity_protocol_version' => env('SIMPLE_L1_IDENTITY_PROTOCOL_VERSION', 'capsule-v0'),
+            'identity_capsules_enabled' => env('SIMPLE_L1_IDENTITY_CAPSULES_ENABLED', true),
+            'evidence_resolvers' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', env('SIMPLE_L1_EVIDENCE_RESOLVERS', 'local-cache,client-capsule,peer,signed-export'))
+            ))),
+            'state_resolvers' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', env('SIMPLE_L1_STATE_RESOLVERS', 'local-cache,peer,anchor,quorum,signed-export'))
+            ))),
+            'default_assurance_level' => env('SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL', 'AL1'),
         ],
     ],
 
     'pending_intents' => [
         'ttl_minutes' => (int) env('SOVEREIGN_PENDING_INTENT_TTL_MINUTES', 30),
+    ],
+
+    'digital_goods_source' => [
+        'enabled' => env('DIGITAL_GOODS_SOURCE_ENABLED', env('WILDFLOW_KERNEL_ENABLED', true)),
+        'url' => env('DIGITAL_GOODS_SOURCE_URL', env('WILDFLOW_KERNEL_URL', 'http://digital-goods-source:8080')),
+        'status_urls' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', env('DIGITAL_GOODS_SOURCE_STATUS_URLS', env('WILDFLOW_KERNEL_STATUS_URLS', 'http://digital-goods-source:8080,http://127.0.0.1:8091')))
+        ))),
+        'image' => env('DIGITAL_GOODS_SOURCE_IMAGE', env('WILDFLOW_KERNEL_IMAGE', 'ghcr.io/vv1ldd/digital-goods-source:latest')),
+        'port' => (int) env('DIGITAL_GOODS_SOURCE_PORT', env('WILDFLOW_KERNEL_PORT', 8091)),
+        'runtime_version' => env('DIGITAL_GOODS_SOURCE_RUNTIME_VERSION', env('WILDFLOW_KERNEL_RUNTIME_VERSION', '1.0.0')),
+        'kernel_protocol_version' => env('DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION', env('WILDFLOW_KERNEL_PROTOCOL_VERSION', 'v1')),
+        'provider_contract_version' => env('DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION', env('WILDFLOW_PROVIDER_CONTRACT_VERSION', 'v1')),
+        'timeout' => (int) env('DIGITAL_GOODS_SOURCE_TIMEOUT', env('WILDFLOW_KERNEL_TIMEOUT', 10)),
     ],
 
     /*

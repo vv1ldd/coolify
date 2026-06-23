@@ -25,6 +25,13 @@ SOVEREIGN_HARDENING="${SOVEREIGN_HARDENING:-auto}"
 SOVEREIGN_HARDENING_PROFILE="${SOVEREIGN_HARDENING_PROFILE:-baseline}"
 SOVEREIGN_APP_SCHEME="${SOVEREIGN_APP_SCHEME:-https}"
 SOVEREIGN_HOST_DOMAIN="${SOVEREIGN_HOST_DOMAIN:-}"
+SOVEREIGN_IDENTITY_DOMAIN="${SOVEREIGN_IDENTITY_DOMAIN:-}"
+SOVEREIGN_RP_ID="${SOVEREIGN_RP_ID:-}"
+SOVEREIGN_REQUIRE_HOST_DOMAIN="${SOVEREIGN_REQUIRE_HOST_DOMAIN:-true}"
+SOVEREIGN_REQUIRE_CLOUDFLARE_TOKEN="${SOVEREIGN_REQUIRE_CLOUDFLARE_TOKEN:-true}"
+SOVEREIGN_HOST_PROFILE="${SOVEREIGN_HOST_PROFILE:-}"
+SOVEREIGN_TUNNEL_NAME="${SOVEREIGN_TUNNEL_NAME:-sovereign-mac}"
+SOVEREIGN_ALLOW_DIRECT_APP_PORT="${SOVEREIGN_ALLOW_DIRECT_APP_PORT:-}"
 SOVEREIGN_RUNTIME_CONVERGE_OWNER="${SOVEREIGN_RUNTIME_CONVERGE_OWNER:-false}"
 SOVEREIGN_VERBOSE="${SOVEREIGN_VERBOSE:-false}"
 SL1_CONNECT_ISSUER="${SL1_CONNECT_ISSUER:-https://simplel1.online}"
@@ -39,6 +46,12 @@ SIMPLE_L1_NETWORK_NAME="${SIMPLE_L1_NETWORK_NAME:-Simple-L1}"
 SIMPLE_L1_NODE_TYPE_LABEL="${SIMPLE_L1_NODE_TYPE_LABEL:-Sovereign Coolify Node}"
 SIMPLE_L1_SELF_WEBHOOK="${SIMPLE_L1_SELF_WEBHOOK:-}"
 SIMPLE_L1_PEERS="${SIMPLE_L1_PEERS:-}"
+SIMPLE_L1_STORAGE_ROLE="${SIMPLE_L1_STORAGE_ROLE:-cache}"
+SIMPLE_L1_IDENTITY_PROTOCOL_VERSION="${SIMPLE_L1_IDENTITY_PROTOCOL_VERSION:-capsule-v0}"
+SIMPLE_L1_IDENTITY_CAPSULES_ENABLED="${SIMPLE_L1_IDENTITY_CAPSULES_ENABLED:-true}"
+SIMPLE_L1_EVIDENCE_RESOLVERS="${SIMPLE_L1_EVIDENCE_RESOLVERS:-local-cache,client-capsule,peer,signed-export}"
+SIMPLE_L1_STATE_RESOLVERS="${SIMPLE_L1_STATE_RESOLVERS:-local-cache,peer,anchor,quorum,signed-export}"
+SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL="${SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL:-AL1}"
 SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE="${SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE:-false}"
 SIMPLE_L1_DNS_TTL="${SIMPLE_L1_DNS_TTL:-60}"
 SIMPLE_L1_DNS_STEERING_ENABLED="${SIMPLE_L1_DNS_STEERING_ENABLED:-false}"
@@ -47,17 +60,36 @@ SIMPLE_L1_CLOUDFLARE_API_TOKEN="${SIMPLE_L1_CLOUDFLARE_API_TOKEN:-}"
 SIMPLE_L1_CLOUDFLARE_ZONE_ID="${SIMPLE_L1_CLOUDFLARE_ZONE_ID:-}"
 SIMPLE_L1_PUBLIC_IP="${SIMPLE_L1_PUBLIC_IP:-}"
 SIMPLE_L1_FAILOVER_NODES="${SIMPLE_L1_FAILOVER_NODES:-}"
+DIGITAL_GOODS_SOURCE_ENABLED="${DIGITAL_GOODS_SOURCE_ENABLED:-true}"
+DIGITAL_GOODS_SOURCE_URL="${DIGITAL_GOODS_SOURCE_URL:-http://digital-goods-source:8080}"
+DIGITAL_GOODS_SOURCE_STATUS_URLS="${DIGITAL_GOODS_SOURCE_STATUS_URLS:-http://digital-goods-source:8080,http://127.0.0.1:8091}"
+DIGITAL_GOODS_SOURCE_IMAGE="${DIGITAL_GOODS_SOURCE_IMAGE:-ghcr.io/vv1ldd/digital-goods-source:latest}"
+DIGITAL_GOODS_SOURCE_PORT="${DIGITAL_GOODS_SOURCE_PORT:-8091}"
+DIGITAL_GOODS_SOURCE_RUNTIME_VERSION="${DIGITAL_GOODS_SOURCE_RUNTIME_VERSION:-1.0.0}"
+DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION="${DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION:-v1}"
+DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION="${DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION:-v1}"
+DIGITAL_GOODS_SOURCE_PLATFORM_TOKEN="${DIGITAL_GOODS_SOURCE_PLATFORM_TOKEN:-}"
+DIGITAL_GOODS_SOURCE_FINANCIAL_SECRET="${DIGITAL_GOODS_SOURCE_FINANCIAL_SECRET:-}"
+DIGITAL_GOODS_SOURCE_SIGNATURE_TOLERANCE="${DIGITAL_GOODS_SOURCE_SIGNATURE_TOLERANCE:-300}"
+DIGITAL_GOODS_SOURCE_DB_DATABASE="${DIGITAL_GOODS_SOURCE_DB_DATABASE:-/data/digital-goods-source.sqlite}"
 SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND="${SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND:-false}"
 SOVEREIGN_DNS_STEERING_SCHEDULE="${SOVEREIGN_DNS_STEERING_SCHEDULE:-off}"
 SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_CONFIGURED="${SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE+x}"
 SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE="${SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE:-off}"
 SOVEREIGN_SIMPLE_L1_BOOTSTRAP="${SOVEREIGN_SIMPLE_L1_BOOTSTRAP:-auto}"
+SOVEREIGN_DISK_ENCRYPT="${SOVEREIGN_DISK_ENCRYPT:-false}"
+SOVEREIGN_DISK_SCRIPT_DIR="${SOVEREIGN_DISK_SCRIPT_DIR:-/opt/sovereign/disk}"
 SELECTED_INSTALL_MODE=""
 SELECTED_ADMIN_CLAIM="false"
 SELECTED_HARDENING="false"
 SELECTED_APP_URL=""
 SELECTED_HOST_DOMAIN="$SOVEREIGN_HOST_DOMAIN"
+SELECTED_HOST_PROFILE=""
 SELECTED_SIMPLE_L1_CLOUDFLARE="false"
+_INSTALL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || pwd)"
+if [ -z "${SOVEREIGN_LOCAL_REPO_PATH:-}" ] && [ -f "${_INSTALL_SCRIPT_DIR}/../docker-compose.yml" ]; then
+    SOVEREIGN_LOCAL_REPO_PATH="$(cd "${_INSTALL_SCRIPT_DIR}/.." && pwd)"
+fi
 
 if [ -z "${NO_COLOR:-}" ]; then
     C_RESET="$(printf '\033[0m')"
@@ -248,8 +280,57 @@ run_logged() {
 download_file() {
     local source_path="$1"
     local target_path="$2"
+
+    if [ -n "${SOVEREIGN_LOCAL_REPO_PATH:-}" ] && [ -f "${SOVEREIGN_LOCAL_REPO_PATH}/${source_path}" ]; then
+        log "Using local repo file ${source_path}"
+        cp "${SOVEREIGN_LOCAL_REPO_PATH}/${source_path}" "$target_path"
+        return 0
+    fi
+
     log "Downloading ${source_path}"
     curl -fsSL "${RAW_BASE}/${source_path}" -o "$target_path"
+}
+
+ensure_sovereign_disk_scripts() {
+    local script_name script_dir="${SOVEREIGN_DISK_SCRIPT_DIR}"
+    local scripts=(
+        sovereign-disk-lib.sh
+        sovereign-disk-gate.sh
+        sovereign-disk-network.sh
+        sovereign-disk-kexec-autoinstall.sh
+        sovereign-disk-prepare.sh
+        sovereign-firstboot.sh
+    )
+
+    mkdir -p "$script_dir"
+
+    for script_name in "${scripts[@]}"; do
+        if [ -f "${_INSTALL_SCRIPT_DIR}/sovereign-disk/${script_name}" ]; then
+            cp "${_INSTALL_SCRIPT_DIR}/sovereign-disk/${script_name}" "${script_dir}/${script_name}"
+        elif [ -n "${SOVEREIGN_LOCAL_REPO_PATH:-}" ] && [ -f "${SOVEREIGN_LOCAL_REPO_PATH}/scripts/sovereign-disk/${script_name}" ]; then
+            cp "${SOVEREIGN_LOCAL_REPO_PATH}/scripts/sovereign-disk/${script_name}" "${script_dir}/${script_name}"
+        else
+            download_file "scripts/sovereign-disk/${script_name}" "${script_dir}/${script_name}"
+        fi
+        chmod +x "${script_dir}/${script_name}" 2>/dev/null || true
+    done
+
+    export SOVEREIGN_DISK_SCRIPT_DIR="$script_dir"
+}
+
+run_sovereign_disk_gate() {
+    case "${SOVEREIGN_DISK_ENCRYPT:-false}" in
+        true|auto|1|yes|reboot)
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+
+    ensure_sovereign_disk_scripts
+    # shellcheck source=/dev/null
+    source "${SOVEREIGN_DISK_SCRIPT_DIR}/sovereign-disk-gate.sh"
+    sovereign_disk_gate
 }
 
 get_env_var() {
@@ -333,6 +414,81 @@ host_from_url() {
     value="${value%%/*}"
     value="${value%%:*}"
     printf '%s' "$value"
+}
+
+load_sovereign_identity_env_helpers() {
+    local candidate
+
+    if [ -n "${SOVEREIGN_IDENTITY_ENV_SH:-}" ] && [ -f "$SOVEREIGN_IDENTITY_ENV_SH" ]; then
+        # shellcheck source=scripts/sovereign-identity-env.sh
+        . "$SOVEREIGN_IDENTITY_ENV_SH"
+        return 0
+    fi
+
+    for candidate in \
+        "$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/sovereign-identity-env.sh" \
+        "${SOURCE_DIR}/scripts/sovereign-identity-env.sh"; do
+        if [ -f "$candidate" ]; then
+            # shellcheck source=scripts/sovereign-identity-env.sh
+            . "$candidate"
+            return 0
+        fi
+    done
+
+    mkdir -p "${SOURCE_DIR}/scripts"
+    if download_file scripts/sovereign-identity-env.sh "${SOURCE_DIR}/scripts/sovereign-identity-env.sh"; then
+        # shellcheck source=scripts/sovereign-identity-env.sh
+        . "${SOURCE_DIR}/scripts/sovereign-identity-env.sh"
+        return 0
+    fi
+
+    die "Could not load sovereign-identity-env helpers."
+}
+
+load_sovereign_host_profile_helpers() {
+    local candidate
+
+    for candidate in \
+        "$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/sovereign-host-profile.sh" \
+        "${SOURCE_DIR}/scripts/sovereign-host-profile.sh"; do
+        if [ -f "$candidate" ]; then
+            # shellcheck source=scripts/sovereign-host-profile.sh
+            . "$candidate"
+            return 0
+        fi
+    done
+
+    mkdir -p "${SOURCE_DIR}/scripts"
+    if download_file scripts/sovereign-host-profile.sh "${SOURCE_DIR}/scripts/sovereign-host-profile.sh"; then
+        # shellcheck source=scripts/sovereign-host-profile.sh
+        . "${SOURCE_DIR}/scripts/sovereign-host-profile.sh"
+        return 0
+    fi
+
+    die "Could not load sovereign-host-profile helpers."
+}
+
+choose_host_profile() {
+    local choice normalized
+
+    if [ "$(uname -s)" = "Darwin" ] && [ "${SOVEREIGN_ALLOW_MAC_INSTALL:-false}" != "true" ]; then
+        die "Sovereign Coolify install targets Linux VPS only. On macOS use marketplace/scripts/dev-tunnel.sh for local dev, or set SOVEREIGN_ALLOW_MAC_INSTALL=true to override."
+    fi
+
+    if [ -n "${SOVEREIGN_HOST_PROFILE:-}" ]; then
+        normalized="$(normalize_host_profile "$SOVEREIGN_HOST_PROFILE")" || die "Invalid SOVEREIGN_HOST_PROFILE=${SOVEREIGN_HOST_PROFILE}. Use linux-vps."
+        if [ "$normalized" = "mac-dev" ] && [ "${SOVEREIGN_ALLOW_MAC_INSTALL:-false}" != "true" ]; then
+            die "mac-dev profile is deprecated. Use marketplace dev-tunnel for Mac, or set SOVEREIGN_ALLOW_MAC_INSTALL=true."
+        fi
+        SELECTED_HOST_PROFILE="$normalized"
+        apply_host_profile_shell_defaults
+        note "Host profile: ${SELECTED_HOST_PROFILE} (from environment)."
+        return 0
+    fi
+
+    SELECTED_HOST_PROFILE="linux-vps"
+    apply_host_profile_shell_defaults
+    note "Host profile: linux-vps (VPS production install)."
 }
 
 check_host_resources() {
@@ -568,7 +724,7 @@ resolve_install_mode() {
 }
 
 choose_host_domain() {
-    local existing_app_url public_ip domain_choice continue_choice
+    local existing_app_url public_ip domain_choice identity_choice continue_choice
 
     existing_app_url="$(strip_env_quotes "$(get_env_var APP_URL)")"
 
@@ -579,17 +735,34 @@ choose_host_domain() {
         if [ -n "$existing_app_url" ]; then
             note "Current APP_URL: ${existing_app_url}"
         fi
-        note "Use a real domain for TLS and SL1 callback correctness."
-        printf 'Panel domain (blank to keep current or use IP fallback): ' > /dev/tty
+        note "Use a real domain for TLS, SL1 Connect, and Coolify proxy."
+        note "Panel domain and Simple L1 identity domain can differ (for example ops.example.com + identity.example.com)."
+        printf 'Coolify panel domain (for example ops.meanly.one): ' > /dev/tty
         read -r domain_choice < /dev/tty
+        domain_choice="$(printf '%s' "$domain_choice" | tr '[:upper:]' '[:lower:]')"
+        domain_choice="${domain_choice#"${domain_choice%%[![:space:]]*}"}"
+        domain_choice="${domain_choice%"${domain_choice##*[![:space:]]}"}"
         if [ -n "$domain_choice" ]; then
             SELECTED_HOST_DOMAIN="$domain_choice"
             SELECTED_APP_URL="${SOVEREIGN_APP_SCHEME}://${domain_choice}"
         elif [ -n "$existing_app_url" ] && [ "$existing_app_url" != "http://localhost" ] && [ "$existing_app_url" != "https://localhost" ]; then
             SELECTED_APP_URL="$existing_app_url"
             SELECTED_HOST_DOMAIN="$(host_from_url "$existing_app_url")"
+        elif [ "$SELECTED_INSTALL_MODE" = "fresh" ] && [ "${SOVEREIGN_REQUIRE_HOST_DOMAIN:-true}" = "true" ]; then
+            die "Fresh Sovereign install requires a public panel domain. Set SOVEREIGN_HOST_DOMAIN or rerun interactively."
         else
             SELECTED_APP_URL="http://$(hostname -I 2>/dev/null | awk '{print $1}'):${APP_PORT}"
+        fi
+
+        if [ -z "${SOVEREIGN_IDENTITY_DOMAIN:-}" ] && [ -n "$SELECTED_HOST_DOMAIN" ]; then
+            printf 'Simple L1 identity domain [%s]: ' "$SELECTED_HOST_DOMAIN" > /dev/tty
+            read -r identity_choice < /dev/tty
+            identity_choice="$(printf '%s' "$identity_choice" | tr '[:upper:]' '[:lower:]')"
+            identity_choice="${identity_choice#"${identity_choice%%[![:space:]]*}"}"
+            identity_choice="${identity_choice%"${identity_choice##*[![:space:]]}"}"
+            if [ -n "$identity_choice" ]; then
+                SOVEREIGN_IDENTITY_DOMAIN="$identity_choice"
+            fi
         fi
     elif [ -n "$existing_app_url" ] && [ "$existing_app_url" != "http://localhost" ] && [ "$existing_app_url" != "https://localhost" ]; then
         SELECTED_APP_URL="$existing_app_url"
@@ -615,8 +788,15 @@ choose_host_domain() {
                     esac
                 fi
             fi
+            if [ -n "${SOVEREIGN_IDENTITY_DOMAIN:-}" ] \
+                && [ "$SOVEREIGN_IDENTITY_DOMAIN" != "$SELECTED_HOST_DOMAIN" ] \
+                && ! domain_points_to_host "$SOVEREIGN_IDENTITY_DOMAIN" "$public_ip"; then
+                warning "DNS for ${SOVEREIGN_IDENTITY_DOMAIN} does not appear to resolve to ${public_ip} yet."
+            fi
         fi
     fi
+
+    derive_sovereign_identity_from_host_domain
 }
 
 apply_host_domain_env() {
@@ -634,73 +814,98 @@ apply_host_domain_env() {
         if [ -n "$public_ip" ]; then
             set_env_var "SOVEREIGN_HOST_PUBLIC_IP" "$public_ip"
         fi
+        derive_sovereign_identity_from_host_domain
+        apply_sovereign_identity_env
     fi
 }
 
 choose_simple_l1_cloudflare() {
-    local token_choice zone_choice public_ip_choice current_token
+    local zone_choice public_ip_choice current_token identity_domain require_token
 
-    current_token="${SIMPLE_L1_CLOUDFLARE_API_TOKEN:-${CLOUDFLARE_API_TOKEN:-$(strip_env_quotes "$(get_env_var SIMPLE_L1_CLOUDFLARE_API_TOKEN)")}}"
-    current_token="${current_token:-$(strip_env_quotes "$(get_env_var CLOUDFLARE_API_TOKEN)")}"
+    identity_domain="${SOVEREIGN_IDENTITY_DOMAIN:-${SELECTED_HOST_DOMAIN:-$SIMPLE_L1_DOMAIN}}"
+    require_token="false"
+    if looks_like_public_hostname "$identity_domain" && [ "${SOVEREIGN_REQUIRE_CLOUDFLARE_TOKEN:-true}" = "true" ]; then
+        require_token="true"
+    fi
+
+    current_token="${SIMPLE_L1_CLOUDFLARE_API_TOKEN:-${CLOUDFLARE_API_TOKEN:-$(strip_env_quotes "$(get_env_var SIMPLE_L1_CLOUDFLARE_API_TOKEN 2>/dev/null || true)")}}"
+    current_token="${current_token:-$(strip_env_quotes "$(get_env_var CLOUDFLARE_API_TOKEN 2>/dev/null || true)")}"
     if [ -n "$current_token" ]; then
         SIMPLE_L1_CLOUDFLARE_API_TOKEN="$current_token"
         SELECTED_SIMPLE_L1_CLOUDFLARE="true"
-        if [ -z "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_CONFIGURED" ]; then
+        if host_profile_is_mac_dev; then
+            SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE="off"
+            SIMPLE_L1_DNS_STEERING_ENABLED="false"
+        elif [ -z "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_CONFIGURED" ]; then
             SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE="apply"
         fi
         export SIMPLE_L1_CLOUDFLARE_API_TOKEN
-        export SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE
-        note "Simple L1 Cloudflare token detected from environment or existing .env."
+        export SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE SIMPLE_L1_DNS_STEERING_ENABLED
+        note "Cloudflare token detected from environment or existing .env."
         return 0
     fi
 
     if ! can_prompt_cloudflare; then
+        if [ "$require_token" = "true" ]; then
+            die "Cloudflare token is required for ${identity_domain}. Set SIMPLE_L1_CLOUDFLARE_API_TOKEN or CLOUDFLARE_API_TOKEN."
+        fi
         note "No Cloudflare token configured. Simple L1 will start, but DNS failover bootstrap will wait for SIMPLE_L1_CLOUDFLARE_API_TOKEN."
         return 0
     fi
 
-    section "Simple L1 Cloudflare failover"
-    note "No Cloudflare token is configured for Simple L1 DNS failover."
-    note "Use a scoped token with Zone:Read and DNS:Edit for ${SIMPLE_L1_DOMAIN}."
-    printf 'Configure Cloudflare token for Simple L1 DNS failover now? [y/N]: ' > /dev/tty
-    read -r token_choice < /dev/tty
-    case "$token_choice" in
-        y|Y|yes|YES)
-            printf 'Cloudflare API token: ' > /dev/tty
-            read -rs SIMPLE_L1_CLOUDFLARE_API_TOKEN < /dev/tty
-            printf '\n' > /dev/tty
-            SIMPLE_L1_CLOUDFLARE_API_TOKEN="$(strip_env_quotes "$SIMPLE_L1_CLOUDFLARE_API_TOKEN")"
-            if [ -z "$SIMPLE_L1_CLOUDFLARE_API_TOKEN" ]; then
+    section "Cloudflare DNS for panel and Simple L1"
+    if host_profile_is_mac_dev; then
+        note "Mac dev uses Cloudflare Tunnel (CNAME), not A-record failover."
+        note "Token scopes: Zone:Read, DNS:Edit, Cloudflare Tunnel:Edit."
+    else
+        note "Linux VPS uses Cloudflare DNS failover to this host public IP."
+        note "Token scopes: Zone:Read, DNS:Edit."
+    fi
+    note "Domain: ${identity_domain}"
+
+    while [ -z "${SIMPLE_L1_CLOUDFLARE_API_TOKEN:-}" ]; do
+        printf 'Cloudflare API token: ' > /dev/tty
+        read -rs SIMPLE_L1_CLOUDFLARE_API_TOKEN < /dev/tty
+        printf '\n' > /dev/tty
+        SIMPLE_L1_CLOUDFLARE_API_TOKEN="$(strip_env_quotes "$SIMPLE_L1_CLOUDFLARE_API_TOKEN")"
+        if [ -z "$SIMPLE_L1_CLOUDFLARE_API_TOKEN" ]; then
+            if [ "$require_token" = "true" ]; then
+                warning "Cloudflare token is required for a public Sovereign host domain."
+            else
                 warning "Cloudflare token was empty. Skipping DNS failover bootstrap."
                 return 0
             fi
+        fi
+    done
 
-            printf 'Cloudflare zone ID (blank to auto-discover): ' > /dev/tty
-            read -r zone_choice < /dev/tty
-            SIMPLE_L1_CLOUDFLARE_ZONE_ID="$(strip_env_quotes "$zone_choice")"
+    if can_prompt; then
+        printf 'Cloudflare zone ID (blank to auto-discover): ' > /dev/tty
+        read -r zone_choice < /dev/tty
+        SIMPLE_L1_CLOUDFLARE_ZONE_ID="$(strip_env_quotes "$zone_choice")"
+    fi
 
-            if [ -z "$SIMPLE_L1_PUBLIC_IP" ]; then
-                public_ip_choice="$(detect_public_ip)"
-                if [ -n "$public_ip_choice" ]; then
-                    SIMPLE_L1_PUBLIC_IP="$public_ip_choice"
-                    note "Using detected public IP for this Simple L1 node: ${SIMPLE_L1_PUBLIC_IP}"
-                fi
-            fi
+    if [ -z "$SIMPLE_L1_PUBLIC_IP" ] && ! host_profile_is_mac_dev; then
+        public_ip_choice="$(detect_public_ip)"
+        if [ -n "$public_ip_choice" ]; then
+            SIMPLE_L1_PUBLIC_IP="$public_ip_choice"
+            note "Using detected public IP for this host: ${SIMPLE_L1_PUBLIC_IP}"
+        fi
+    fi
 
-            SIMPLE_L1_DNS_STEERING_ENABLED="${SIMPLE_L1_DNS_STEERING_ENABLED:-true}"
-            if [ "$SIMPLE_L1_DNS_STEERING_ENABLED" = "false" ]; then
-                SIMPLE_L1_DNS_STEERING_ENABLED="true"
-            fi
-            if [ -z "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_CONFIGURED" ]; then
-                SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE="apply"
-            fi
-            SELECTED_SIMPLE_L1_CLOUDFLARE="true"
-            export SIMPLE_L1_CLOUDFLARE_API_TOKEN SIMPLE_L1_CLOUDFLARE_ZONE_ID SIMPLE_L1_PUBLIC_IP SIMPLE_L1_DNS_STEERING_ENABLED SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE
-            ;;
-        *)
-            note "Skipping Cloudflare token. You can add SIMPLE_L1_CLOUDFLARE_API_TOKEN later and rerun sovereign:simple-l1-bootstrap."
-            ;;
-    esac
+    if host_profile_is_mac_dev; then
+        SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE="off"
+        SIMPLE_L1_DNS_STEERING_ENABLED="false"
+    else
+        SIMPLE_L1_DNS_STEERING_ENABLED="${SIMPLE_L1_DNS_STEERING_ENABLED:-true}"
+        if [ "$SIMPLE_L1_DNS_STEERING_ENABLED" = "false" ]; then
+            SIMPLE_L1_DNS_STEERING_ENABLED="true"
+        fi
+        if [ -z "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE_CONFIGURED" ]; then
+            SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE="apply"
+        fi
+    fi
+    SELECTED_SIMPLE_L1_CLOUDFLARE="true"
+    export SIMPLE_L1_CLOUDFLARE_API_TOKEN SIMPLE_L1_CLOUDFLARE_ZONE_ID SIMPLE_L1_PUBLIC_IP SIMPLE_L1_DNS_STEERING_ENABLED SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE
 }
 
 apply_simple_l1_env() {
@@ -712,6 +917,12 @@ apply_simple_l1_env() {
     set_env_var "SIMPLE_L1_NODE_TYPE_LABEL" "$SIMPLE_L1_NODE_TYPE_LABEL"
     set_env_var "SIMPLE_L1_SELF_WEBHOOK" "$SIMPLE_L1_SELF_WEBHOOK"
     set_env_var "SIMPLE_L1_PEERS" "$SIMPLE_L1_PEERS"
+    set_env_var "SIMPLE_L1_STORAGE_ROLE" "$SIMPLE_L1_STORAGE_ROLE"
+    set_env_var "SIMPLE_L1_IDENTITY_PROTOCOL_VERSION" "$SIMPLE_L1_IDENTITY_PROTOCOL_VERSION"
+    set_env_var "SIMPLE_L1_IDENTITY_CAPSULES_ENABLED" "$SIMPLE_L1_IDENTITY_CAPSULES_ENABLED"
+    set_env_var "SIMPLE_L1_EVIDENCE_RESOLVERS" "$SIMPLE_L1_EVIDENCE_RESOLVERS"
+    set_env_var "SIMPLE_L1_STATE_RESOLVERS" "$SIMPLE_L1_STATE_RESOLVERS"
+    set_env_var "SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL" "$SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL"
     set_env_var "SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE" "$SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE"
     set_env_var "SIMPLE_L1_DNS_TTL" "$SIMPLE_L1_DNS_TTL"
     set_env_var "SIMPLE_L1_DNS_STEERING_ENABLED" "$SIMPLE_L1_DNS_STEERING_ENABLED"
@@ -724,6 +935,21 @@ apply_simple_l1_env() {
     set_env_var "SOVEREIGN_DNS_STEERING_SCHEDULE" "$SOVEREIGN_DNS_STEERING_SCHEDULE"
     set_env_var "SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE" "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE"
     set_env_var "SOVEREIGN_SIMPLE_L1_BOOTSTRAP" "$SOVEREIGN_SIMPLE_L1_BOOTSTRAP"
+}
+
+apply_digital_goods_source_env() {
+    set_env_var "DIGITAL_GOODS_SOURCE_ENABLED" "$DIGITAL_GOODS_SOURCE_ENABLED"
+    set_env_var "DIGITAL_GOODS_SOURCE_URL" "$DIGITAL_GOODS_SOURCE_URL"
+    set_env_var "DIGITAL_GOODS_SOURCE_STATUS_URLS" "$DIGITAL_GOODS_SOURCE_STATUS_URLS"
+    set_env_var "DIGITAL_GOODS_SOURCE_IMAGE" "$DIGITAL_GOODS_SOURCE_IMAGE"
+    set_env_var "DIGITAL_GOODS_SOURCE_PORT" "$DIGITAL_GOODS_SOURCE_PORT"
+    set_env_var "DIGITAL_GOODS_SOURCE_RUNTIME_VERSION" "$DIGITAL_GOODS_SOURCE_RUNTIME_VERSION"
+    set_env_var "DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION" "$DIGITAL_GOODS_SOURCE_KERNEL_PROTOCOL_VERSION"
+    set_env_var "DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION" "$DIGITAL_GOODS_SOURCE_PROVIDER_CONTRACT_VERSION"
+    set_env_var "DIGITAL_GOODS_SOURCE_PLATFORM_TOKEN" "$DIGITAL_GOODS_SOURCE_PLATFORM_TOKEN"
+    set_env_var "DIGITAL_GOODS_SOURCE_FINANCIAL_SECRET" "$DIGITAL_GOODS_SOURCE_FINANCIAL_SECRET"
+    set_env_var "DIGITAL_GOODS_SOURCE_SIGNATURE_TOLERANCE" "$DIGITAL_GOODS_SOURCE_SIGNATURE_TOLERANCE"
+    set_env_var "DIGITAL_GOODS_SOURCE_DB_DATABASE" "$DIGITAL_GOODS_SOURCE_DB_DATABASE"
 }
 
 choose_smtp_mode() {
@@ -777,6 +1003,12 @@ choose_smtp_mode() {
 choose_hardening() {
     local hardening_choice
 
+    if host_profile_is_mac_dev && [ "$SOVEREIGN_HARDENING" = "auto" ]; then
+        SELECTED_HARDENING="false"
+        note "Mac dev profile skips Linux host hardening (UFW/Fail2Ban)."
+        return 0
+    fi
+
     case "$SOVEREIGN_HARDENING" in
         true|1|yes|YES)
             SELECTED_HARDENING="true"
@@ -828,17 +1060,34 @@ run_host_hardening() {
     bash "${SOURCE_DIR}/sovereign-host-hardening.sh"
 }
 
+sync_sovereign_runtime_scripts() {
+    mkdir -p "${SOURCE_DIR}/scripts"
+    download_file scripts/sovereign-identity-env.sh "${SOURCE_DIR}/scripts/sovereign-identity-env.sh"
+    download_file scripts/sovereign-host-profile.sh "${SOURCE_DIR}/scripts/sovereign-host-profile.sh"
+    download_file scripts/sovereign-mac-tunnel.sh "${SOURCE_DIR}/scripts/sovereign-mac-tunnel.sh"
+    download_file scripts/sovereign-mac-tunnel.sh "${SOURCE_DIR}/sovereign-mac-tunnel.sh"
+    download_file scripts/upgrade-sovereign.sh "${SOURCE_DIR}/upgrade-sovereign.sh"
+    download_file scripts/sovereign-host-hardening.sh "${SOURCE_DIR}/sovereign-host-hardening.sh"
+    download_file docker-compose.sovereign.mac.dev.yml "${SOURCE_DIR}/docker-compose.sovereign.mac.dev.yml"
+    chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh" \
+        "${SOURCE_DIR}/sovereign-host-hardening.sh" \
+        "${SOURCE_DIR}/scripts/sovereign-mac-tunnel.sh" \
+        "${SOURCE_DIR}/sovereign-mac-tunnel.sh" 2>/dev/null || true
+}
+
 run_existing_upgrade() {
     local generate_claim="${1:-false}"
 
     log "Existing Coolify installation detected. Running sovereign runtime converge path (${SELECTED_INSTALL_MODE})."
-    download_file scripts/upgrade-sovereign.sh "${SOURCE_DIR}/upgrade-sovereign.sh"
-    chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh"
+    sync_sovereign_runtime_scripts
 
     SOVEREIGN_RUNTIME_CONVERGE_OWNER="$SOVEREIGN_RUNTIME_CONVERGE_OWNER" \
     SOVEREIGN_RUN_ID="$SOVEREIGN_RUN_ID" \
     SOVEREIGN_EXPECTED_RESULT="$SOVEREIGN_EXPECTED_RESULT" \
     SOVEREIGN_ADMIN_CLAIM_AFTER_UPGRADE="$generate_claim" \
+    SOVEREIGN_LOCAL_REPO_PATH="${SOVEREIGN_LOCAL_REPO_PATH:-}" \
+    DOCKER_HOST="${DOCKER_HOST:-}" \
+    DOCKER_DEFAULT_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-}" \
     bash "${SOURCE_DIR}/upgrade-sovereign.sh"
 
     echo ""
@@ -852,7 +1101,14 @@ run_existing_upgrade() {
 
 install_docker() {
     progress 1 4 "docker engine"
+    if declare -F configure_mac_docker_env >/dev/null 2>&1; then
+        configure_mac_docker_env
+    fi
+
     if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+        if ! docker info >/dev/null 2>&1; then
+            die "Docker is installed but the daemon is not reachable. On Mac: open Docker Desktop, then rerun with DOCKER_HOST=unix:///Users/${SUDO_USER:-$(id -un)}/.docker/run/docker.sock"
+        fi
         log "Docker and Docker Compose are already installed"
         term_line "${C_GREEN}✓${C_RESET} docker engine ready"
         checkpoint 1 4 "DOCKER_READY" "Docker engine and Compose are available"
@@ -957,6 +1213,8 @@ if [ "$EUID" -ne 0 ]; then
     die "Please run this script as root or with sudo."
 fi
 
+run_sovereign_disk_gate
+
 mkdir -p "${SOURCE_DIR}" "${INSTALL_ROOT}"/{ssh,applications,databases,backups,services,proxy,sentinel}
 mkdir -p "${INSTALL_ROOT}/ssh/keys" "${INSTALL_ROOT}/ssh/mux" "${INSTALL_ROOT}/proxy/dynamic"
 touch "$LOG_FILE"
@@ -964,6 +1222,8 @@ touch "$LOG_FILE"
 banner
 
 progress_contract
+load_sovereign_host_profile_helpers
+load_sovereign_identity_env_helpers
 check_host_resources
 install_docker
 login_to_registry
@@ -971,17 +1231,22 @@ login_to_registry
 progress 2 4 "host detection"
 DETECTED_INSTALL_STATE="$(detected_install_state)"
 resolve_install_mode "$DETECTED_INSTALL_STATE"
+choose_host_profile
 choose_host_domain
 choose_simple_l1_cloudflare
 choose_hardening
 
 section "Selected action"
+note "Profile:    ${SELECTED_HOST_PROFILE}"
 note "Mode:        ${SELECTED_INSTALL_MODE}"
 note "Admin claim: ${SELECTED_ADMIN_CLAIM}"
 note "Hardening:   ${SELECTED_HARDENING}"
 note "SL1 DNS:     ${SELECTED_SIMPLE_L1_CLOUDFLARE}"
 if [ -n "$SELECTED_APP_URL" ]; then
     note "APP_URL:     ${SELECTED_APP_URL}"
+fi
+if [ -n "$SL1_CONNECT_ISSUER" ] && ! sl1_identity_still_on_default_online; then
+    note "SL1 issuer:  ${SL1_CONNECT_ISSUER}"
 fi
 echo ""
 checkpoint 2 4 "HOST_DETECTED" "Install mode selected" "state=${DETECTED_INSTALL_STATE} mode=${SELECTED_INSTALL_MODE} app_url=${SELECTED_APP_URL:-unset}"
@@ -990,7 +1255,9 @@ case "$SELECTED_INSTALL_MODE" in
     upgrade|refresh)
         progress 3 4 "runtime configuration"
         apply_host_domain_env
+        apply_host_profile_env
         apply_simple_l1_env
+        apply_digital_goods_source_env
         run_host_hardening
         checkpoint 3 4 "RUNTIME_CONFIGURED" "Runtime environment prepared" "mode=${SELECTED_INSTALL_MODE} hardening=${SELECTED_HARDENING}"
         progress 4 4 "runtime converge"
@@ -1010,12 +1277,21 @@ progress 3 4 "runtime configuration"
 download_file docker-compose.yml "${SOURCE_DIR}/docker-compose.yml"
 download_file docker-compose.prod.yml "${SOURCE_DIR}/docker-compose.prod.yml"
 download_file docker-compose.sovereign.prod.yml "${SOURCE_DIR}/docker-compose.sovereign.prod.yml"
+download_file docker-compose.sovereign.mac.dev.yml "${SOURCE_DIR}/docker-compose.sovereign.mac.dev.yml"
+download_file scripts/sovereign-identity-env.sh "${SOURCE_DIR}/scripts/sovereign-identity-env.sh"
+download_file scripts/sovereign-host-profile.sh "${SOURCE_DIR}/scripts/sovereign-host-profile.sh"
+download_file scripts/sovereign-mac-tunnel.sh "${SOURCE_DIR}/scripts/sovereign-mac-tunnel.sh"
 download_file .env.production "${SOURCE_DIR}/.env.production"
 download_file scripts/upgrade-sovereign.sh "${SOURCE_DIR}/upgrade-sovereign.sh"
 chmod +x "${SOURCE_DIR}/upgrade-sovereign.sh"
+chmod +x "${SOURCE_DIR}/scripts/sovereign-mac-tunnel.sh"
 
 merge_env_production
 apply_host_domain_env
+apply_host_profile_env
+if host_profile_is_mac_dev; then
+    ensure_mac_dev_compose_overlay || true
+fi
 
 set_env_var_if_empty "APP_ID" "$(openssl rand -hex 16)"
 set_env_var_if_empty "APP_KEY" "base64:$(openssl rand -base64 32)"
@@ -1047,6 +1323,12 @@ set_env_var "SIMPLE_L1_NETWORK_NAME" "$SIMPLE_L1_NETWORK_NAME"
 set_env_var "SIMPLE_L1_NODE_TYPE_LABEL" "$SIMPLE_L1_NODE_TYPE_LABEL"
 set_env_var "SIMPLE_L1_SELF_WEBHOOK" "$SIMPLE_L1_SELF_WEBHOOK"
 set_env_var "SIMPLE_L1_PEERS" "$SIMPLE_L1_PEERS"
+set_env_var "SIMPLE_L1_STORAGE_ROLE" "$SIMPLE_L1_STORAGE_ROLE"
+set_env_var "SIMPLE_L1_IDENTITY_PROTOCOL_VERSION" "$SIMPLE_L1_IDENTITY_PROTOCOL_VERSION"
+set_env_var "SIMPLE_L1_IDENTITY_CAPSULES_ENABLED" "$SIMPLE_L1_IDENTITY_CAPSULES_ENABLED"
+set_env_var "SIMPLE_L1_EVIDENCE_RESOLVERS" "$SIMPLE_L1_EVIDENCE_RESOLVERS"
+set_env_var "SIMPLE_L1_STATE_RESOLVERS" "$SIMPLE_L1_STATE_RESOLVERS"
+set_env_var "SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL" "$SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL"
 set_env_var "SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE" "$SIMPLE_L1_NAMESPACE_AUTO_ALLOCATE"
 set_env_var "SIMPLE_L1_DNS_TTL" "$SIMPLE_L1_DNS_TTL"
 set_env_var "SIMPLE_L1_DNS_STEERING_ENABLED" "$SIMPLE_L1_DNS_STEERING_ENABLED"
@@ -1055,11 +1337,13 @@ set_env_var "SIMPLE_L1_CLOUDFLARE_API_TOKEN" "$SIMPLE_L1_CLOUDFLARE_API_TOKEN"
 set_env_var "SIMPLE_L1_CLOUDFLARE_ZONE_ID" "$SIMPLE_L1_CLOUDFLARE_ZONE_ID"
 set_env_var "SIMPLE_L1_PUBLIC_IP" "$SIMPLE_L1_PUBLIC_IP"
 set_env_var "SIMPLE_L1_FAILOVER_NODES" "$SIMPLE_L1_FAILOVER_NODES"
+apply_digital_goods_source_env
 set_env_var "SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND" "$SOVEREIGN_CONTROL_PLANE_HEARTBEAT_SEND"
 set_env_var "SOVEREIGN_DNS_STEERING_SCHEDULE" "$SOVEREIGN_DNS_STEERING_SCHEDULE"
 set_env_var "SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE" "$SOVEREIGN_SIMPLE_L1_FAILOVER_SCHEDULE"
 set_env_var "SOVEREIGN_SIMPLE_L1_BOOTSTRAP" "$SOVEREIGN_SIMPLE_L1_BOOTSTRAP"
 set_env_var "SOVEREIGN_HARDENING_PROFILE" "$SOVEREIGN_HARDENING_PROFILE"
+set_env_var "SOVEREIGN_ALLOW_DIRECT_APP_PORT" "${SOVEREIGN_ALLOW_DIRECT_APP_PORT:-false}"
 if [ -n "${SOVEREIGN_WIREGUARD_CIDRS:-}" ]; then
     set_env_var "SOVEREIGN_WIREGUARD_CIDRS" "$SOVEREIGN_WIREGUARD_CIDRS"
 fi
@@ -1091,5 +1375,17 @@ checkpoint 4 4 "RUNTIME_CONVERGED" "Sovereign runtime converge finished" "mode=$
 
 echo ""
 echo "Sovereign Coolify installation complete."
-echo "Open: http://$(hostname -I | awk '{print $1}'):${APP_PORT}"
+if [ -n "$SELECTED_APP_URL" ]; then
+    echo "Open: ${SELECTED_APP_URL}"
+else
+    echo "Open: http://$(hostname -I 2>/dev/null | awk '{print $1}'):${APP_PORT}"
+fi
+if [ -n "$SL1_CONNECT_ISSUER" ] && ! sl1_identity_still_on_default_online; then
+    echo "SL1 Connect: ${SL1_CONNECT_ISSUER}"
+fi
+if host_profile_is_mac_dev; then
+    write_mac_tunnel_config "$SELECTED_HOST_DOMAIN" "$APP_PORT" "${SOVEREIGN_TUNNEL_SIMPLE_L1_PORT:-3000}" "${SOVEREIGN_TUNNEL_NAME:-sovereign-mac}" >/dev/null 2>&1 || true
+    echo ""
+    print_mac_tunnel_next_steps
+fi
 echo "Logs: ${LOG_FILE}"

@@ -34,6 +34,34 @@ Sovereign install path for VPS testing.
 
 Run as `root` or with `sudo`.
 
+### Git clone (recommended — includes disk encryption scripts)
+
+```bash
+export SOVEREIGN_RUNTIME_CONVERGE_OWNER=true
+export SOVEREIGN_ASSUME_YES=true
+export SOVEREIGN_HOST_DOMAIN=ops.meanly.one
+export SIMPLE_L1_DOMAIN=identity.meanly.one
+export SIMPLE_L1_ISSUER_URL=https://identity.meanly.one/sl1
+export SL1_CONNECT_ISSUER=https://identity.meanly.one
+export SL1_CONNECT_CLIENT_ID=meanly.ops
+export SIMPLE_L1_PUBLIC_IP='YOUR_VPS_IP'
+
+git clone --depth 1 -b sovereign https://github.com/vv1ldd/coolify.git /tmp/coolify-sovereign
+bash /tmp/coolify-sovereign/scripts/install-sovereign.sh
+```
+
+Or one curl that clones then installs:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/bootstrap-sovereign-from-git.sh \
+  -o /tmp/bootstrap-sovereign-from-git.sh
+bash /tmp/bootstrap-sovereign-from-git.sh
+```
+
+Optional LUKS before converge (`SOVEREIGN_DISK_ENCRYPT=auto`) — see `scripts/sovereign-disk/README.md`.
+
+### Raw curl (runtime only, no disk scripts on disk)
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo bash
 ```
@@ -49,24 +77,19 @@ cyberpunk terminal menu when a TTY is available:
 For non-interactive use, set `SOVEREIGN_INSTALL_MODE` to `auto`, `fresh`,
 `upgrade`, or `refresh`.
 
-Optional canonical host domain:
+Optional canonical host domain (panel + identity split):
 
 ```bash
-export SOVEREIGN_HOST_DOMAIN=coolify.example.com
+export SOVEREIGN_HOST_DOMAIN=ops.meanly.one
+export SOVEREIGN_IDENTITY_DOMAIN=identity.meanly.one
 export SOVEREIGN_APP_SCHEME=https
 curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
 ```
 
-When a canonical host domain is provided, the installer syncs:
+When canonical domains are provided, the installer syncs:
 
-- `APP_URL`
-- `SOVEREIGN_PANEL_URL`
-- `SOVEREIGN_HOST_DOMAIN`
-- `SOVEREIGN_HOST_URL`
-- Coolify instance settings URL (`instance_settings.fqdn`)
-
-This keeps the visible panel URL, host identity URL, SL1 callback base, and
-Coolify proxy configuration aligned.
+- `APP_URL` / panel → `SOVEREIGN_HOST_DOMAIN`
+- `SIMPLE_L1_DOMAIN` / `SL1_CONNECT_ISSUER` → `SOVEREIGN_IDENTITY_DOMAIN` (or panel domain when unset)
 
 Optional pre-created root user:
 
@@ -107,11 +130,71 @@ layer, not the primary container runtime.
 The `simple-l1` service:
 
 - uses `SIMPLE_L1_IMAGE`, defaulting to `ghcr.io/vv1ldd/simple-l1:latest`
-- persists state in the Docker volume `simple-l1-data`
+- mounts `simple-l1-data` as a local cache/replay accelerator, not identity authority
+- enables the Identity Capsule protocol by default:
+  `IdentityCapsule` proves provenance, `StateProof` proves freshness, and
+  WebAuthn proves passkey possession
 - health-checks `http://127.0.0.1:3000/healthcheck`
 - exposes Traefik routers for `SIMPLE_L1_DOMAIN`, defaulting to `simplel1.online`
 - exposes an HTTP-only `/healthcheck` route before HTTPS redirect so peer nodes
   can probe `http://NODE_IP/healthcheck` with `Host: simplel1.online`
+
+The default resolver contract is:
+
+```text
+SIMPLE_L1_STORAGE_ROLE=cache
+SIMPLE_L1_IDENTITY_CAPSULES_ENABLED=true
+SIMPLE_L1_EVIDENCE_RESOLVERS=local-cache,client-capsule,peer,signed-export
+SIMPLE_L1_STATE_RESOLVERS=local-cache,peer,anchor,quorum,signed-export
+SIMPLE_L1_DEFAULT_ASSURANCE_LEVEL=AL1
+```
+
+This means a new node can rebuild a local identity projection from evidence
+instead of treating `/data/simple-l1/ledger_db.json` as the only source of truth.
+If no fresh `StateProof` is available, the proof is intentionally downgraded to
+bounded/offline assurance instead of pretending to be fully current.
+
+### Updating Bundled Simple L1
+
+The bundled `simple-l1` runtime is updated through its container image. The
+`simple-l1` repository publishes:
+
+- `ghcr.io/vv1ldd/simple-l1:latest`
+- `ghcr.io/vv1ldd/simple-l1:<commit-sha>`
+
+Runtime image version and identity protocol version are intentionally separate:
+
+```text
+SIMPLE_L1_IMAGE=ghcr.io/vv1ldd/simple-l1:<commit-sha>
+SIMPLE_L1_IDENTITY_PROTOCOL_VERSION=capsule-v0
+```
+
+The image tag identifies the build. `SIMPLE_L1_IDENTITY_PROTOCOL_VERSION`
+identifies compatibility for `IdentityCapsule`, `ControllerBinding`, and
+`StateProof` schemas. A runtime refresh is safe only when the container reports
+the expected protocol version after restart.
+
+On a Sovereign Coolify node, refresh the whole bundle:
+
+```bash
+SOVEREIGN_RUNTIME_CONVERGE_OWNER=true \
+SOVEREIGN_INSTALL_MODE=refresh \
+SOVEREIGN_ASSUME_YES=true \
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
+```
+
+That command pulls `COOLIFY_IMAGE`, `SOVEREIGN_REALTIME_IMAGE`, and
+`SIMPLE_L1_IMAGE`, restarts the composed runtime, and verifies the Simple L1
+identity runtime through `/api/sl1e/connect/status`. To pin a specific Simple L1
+build, export the SHA-tagged image before running the refresh:
+
+```bash
+export SIMPLE_L1_IMAGE=ghcr.io/vv1ldd/simple-l1:<commit-sha>
+SOVEREIGN_RUNTIME_CONVERGE_OWNER=true \
+SOVEREIGN_INSTALL_MODE=refresh \
+SOVEREIGN_ASSUME_YES=true \
+curl -fsSL https://raw.githubusercontent.com/vv1ldd/coolify/sovereign/scripts/install-sovereign.sh | sudo -E bash
+```
 
 Each node can serve the public Simple L1 domain and keep a Cloudflare DNS
 steering policy ready for the `simplel1.online` record.
