@@ -42,5 +42,6 @@ bash /tmp/bootstrap-sovereign-from-git.sh
 | `SOVEREIGN_LUKS_PASSPHRASE_FILE` | Root-readable passphrase for kexec/rescue |
 | `SOVEREIGN_UBUNTU_MIRROR` | APT/debootstrap mirror (default Selectel) |
 | `SOVEREIGN_NETBOOT_BASE` | Netboot dir with `linux` + `initrd` (default: `releases.ubuntu.com/noble/netboot/amd64`) |
+| `SOVEREIGN_ISO_URL` | Live server ISO for netboot mini-initrd (default: Ubuntu 24.04.4 live-server amd64) |
 | `SOVEREIGN_TARGET_DISK` | Default `/dev/sda` |
 | `SOVEREIGN_AUTOCONVERGE_AFTER_ENCRYPT` | Run Coolify after encrypted first boot (default `true`) |

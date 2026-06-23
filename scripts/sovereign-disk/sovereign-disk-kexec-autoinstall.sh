@@ -13,6 +13,7 @@ source "${SCRIPT_DIR}/sovereign-disk-network.sh"
 STAGING="${SOVEREIGN_KEXEC_STAGING:-/var/tmp/sovereign-kexec}"
 MIRROR="${SOVEREIGN_UBUNTU_MIRROR:-http://mirror.selectel.ru/ubuntu}"
 NETBOOT_BASE="${SOVEREIGN_NETBOOT_BASE:-}"
+ISO_URL="${SOVEREIGN_ISO_URL:-https://releases.ubuntu.com/24.04.4/ubuntu-24.04.4-live-server-amd64.iso}"
 HOSTNAME="${SOVEREIGN_HOSTNAME:-priya}"
 ADMIN_USER="${SOVEREIGN_ADMIN_USER:-sovereign}"
 
@@ -210,11 +211,13 @@ kexec_reboot() {
     log "kexec into Ubuntu 24.04 autoinstall — primary disk will be wiped"
     log "installer runs headless; then reboot to LUKS root (unlock in provider console if prompted)"
     log "kernel network: ${kernel_network}"
+    log "live-server iso-url: ${ISO_URL} (multi-GB download during install)"
     sleep 3
 
+    # Noble netboot mini-initrd requires iso-url (see releases.ubuntu.com/noble/netboot/amd64/pxelinux.cfg/default).
     kexec -l "${STAGING}/vmlinuz" \
         --initrd="${STAGING}/initrd.gz" \
-        --append="autoinstall ds=nocloud --- quiet ${kernel_network}"
+        --append="autoinstall ds=nocloud root=/dev/ram0 ramdisk_size=1500000 ${kernel_network} iso-url=${ISO_URL} --- quiet"
 
     sync
     systemctl kexec 2>/dev/null || kexec -e
