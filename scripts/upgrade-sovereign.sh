@@ -588,12 +588,37 @@ run_migrations() {
 bootstrap_sovereign_substrate() {
     write_status "4" "Bootstrapping localhost server substrate"
     log "Bootstrapping Team 0, localhost server, and Traefik proxy substrate"
+    ensure_localhost_ssh_substrate
 
     if ! run_logged "bootstrapping sovereign substrate" docker exec coolify php artisan sovereign:bootstrap-substrate; then
         log "Localhost substrate bootstrap did not complete. Run manually:"
         log "docker exec coolify php artisan sovereign:bootstrap-substrate"
         return 1
     fi
+}
+
+ensure_localhost_ssh_substrate() {
+    local install_root="${COOLIFY_INSTALL_ROOT:-/data/coolify}"
+    local current_user="${SUDO_USER:-root}"
+    local key_path="${install_root}/ssh/keys/id.${current_user}@host.docker.internal"
+
+    mkdir -p "${install_root}/ssh/keys" "${install_root}/ssh/mux" "${install_root}/proxy/dynamic"
+    mkdir -p /root/.ssh
+    chmod 700 /root/.ssh
+    touch /root/.ssh/authorized_keys
+    chmod 600 /root/.ssh/authorized_keys
+
+    if [ ! -f "$key_path" ]; then
+        log "Generating localhost SSH key for Coolify"
+        ssh-keygen -t ed25519 -a 100 -f "$key_path" -q -N "" -C coolify
+        sed -i "/coolify/d" /root/.ssh/authorized_keys
+        cat "${key_path}.pub" >> /root/.ssh/authorized_keys
+        rm -f "${key_path}.pub"
+    fi
+
+    chown -R 9999:root "${install_root}/ssh"
+    chmod -R 700 "${install_root}/ssh"
+    chmod 600 "$key_path" 2>/dev/null || true
 }
 
 run_host_hardening() {

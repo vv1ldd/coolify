@@ -99,20 +99,14 @@ class SovereignBootstrapSubstrateCommand extends Command
             return true;
         }
 
-        $coolifyKeyName = '@host.docker.internal';
-        $sshKeysDirectory = Storage::disk('ssh-keys')->files();
-        $coolifyKeyPath = collect($sshKeysDirectory)->firstWhere(
-            fn ($item) => str($item)->contains($coolifyKeyName)
-        );
-
-        if (! $coolifyKeyPath) {
+        $coolifyKey = $this->resolveLocalhostPrivateKeyContent();
+        if (! $coolifyKey) {
             $this->warn('No SSH key found for host.docker.internal; localhost server cannot reach the host yet.');
             $this->line('Re-run install prepare_ssh_key or add the key under /data/coolify/ssh/keys/.');
 
             return false;
         }
 
-        $coolifyKey = Storage::disk('ssh-keys')->get($coolifyKeyPath);
         PrivateKey::unguarded(function () use ($coolifyKey) {
             PrivateKey::create([
                 'id' => 0,
@@ -126,6 +120,37 @@ class SovereignBootstrapSubstrateCommand extends Command
         $this->line('Registered localhost SSH key #0.');
 
         return true;
+    }
+
+    private function resolveLocalhostPrivateKeyContent(): ?string
+    {
+        $keysRoot = storage_path('app/ssh/keys');
+        if (is_dir($keysRoot)) {
+            foreach (glob($keysRoot.'/id.*@host.docker.internal') ?: [] as $path) {
+                if (! is_file($path)) {
+                    continue;
+                }
+
+                $content = file_get_contents($path);
+
+                return is_string($content) && $content !== '' ? $content : null;
+            }
+        }
+
+        try {
+            $sshKeysDirectory = Storage::disk('ssh-keys')->files();
+            $coolifyKeyPath = collect($sshKeysDirectory)->firstWhere(
+                fn ($item) => str($item)->contains('@host.docker.internal')
+            );
+
+            if ($coolifyKeyPath) {
+                return Storage::disk('ssh-keys')->get($coolifyKeyPath);
+            }
+        } catch (\Throwable $e) {
+            $this->warn('SSH keys storage is not writable: '.$e->getMessage());
+        }
+
+        return null;
     }
 
     private function ensureServerZero(bool $keyReady): ?Server
