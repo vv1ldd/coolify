@@ -401,6 +401,17 @@ configure_database_env() {
     set_env_var_if_empty "LEDGER_DB_PASSWORD" "$(get_env_var DB_PASSWORD)"
 }
 
+ensure_runtime_secrets() {
+    set_env_var_if_empty "APP_ID" "$(openssl rand -hex 16)"
+    set_env_var_if_empty "APP_KEY" "base64:$(openssl rand -base64 32)"
+    set_env_var_if_empty "DB_PASSWORD" "$(openssl rand -base64 32)"
+    set_env_var_if_empty "REDIS_PASSWORD" "$(openssl rand -base64 32)"
+    set_env_var_if_empty "PUSHER_APP_ID" "$(openssl rand -hex 32)"
+    set_env_var_if_empty "PUSHER_APP_KEY" "$(openssl rand -hex 32)"
+    set_env_var_if_empty "PUSHER_APP_SECRET" "$(openssl rand -hex 32)"
+    configure_database_env
+}
+
 public_base_url() {
     local app_url
     app_url="$(strip_env_quotes "$(get_env_var APP_URL)")"
@@ -650,7 +661,7 @@ set_env_var "HELPER_IMAGE" "$(strip_image_tag "$HELPER_IMAGE")"
 set_env_var "SOVEREIGN_REPOSITORY" "$REPOSITORY"
 set_env_var "SOVEREIGN_BRANCH" "$BRANCH"
 set_env_var "AUTOUPDATE" "${AUTOUPDATE:-false}"
-configure_database_env
+ensure_runtime_secrets
 SL1_CONNECT_CLIENT_NAME_VALUE="${SL1_CONNECT_CLIENT_NAME:-$(get_env_var SL1_CONNECT_CLIENT_NAME)}"
 SL1_CONNECT_CLIENT_NAME_VALUE="${SL1_CONNECT_CLIENT_NAME_VALUE:-Sovereign-Coolify}"
 set_env_var "SL1_CONNECT_ISSUER" "${SL1_CONNECT_ISSUER:-$(get_env_var SL1_CONNECT_ISSUER)}"
