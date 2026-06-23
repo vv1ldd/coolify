@@ -12,12 +12,48 @@ source "${SCRIPT_DIR}/sovereign-disk-network.sh"
 
 STAGING="${SOVEREIGN_KEXEC_STAGING:-/var/tmp/sovereign-kexec}"
 MIRROR="${SOVEREIGN_UBUNTU_MIRROR:-http://mirror.selectel.ru/ubuntu}"
-NETBOOT_BASE="${MIRROR}/dists/noble/main/installer-amd64/current/images/netboot/ubuntu-installer/amd64"
+NETBOOT_BASE="${SOVEREIGN_NETBOOT_BASE:-}"
 HOSTNAME="${SOVEREIGN_HOSTNAME:-priya}"
 ADMIN_USER="${SOVEREIGN_ADMIN_USER:-sovereign}"
 
 log() { printf '[disk-kexec] %s\n' "$*"; }
 die() { printf '[disk-kexec] ERROR: %s\n' "$*" >&2; exit 1; }
+
+resolve_netboot_base() {
+    if [ -n "$NETBOOT_BASE" ]; then
+        printf '%s' "$NETBOOT_BASE"
+        return 0
+    fi
+
+    local candidate
+    for candidate in \
+        "http://releases.ubuntu.com/noble/netboot/amd64" \
+        "${MIRROR}/dists/noble/main/installer-amd64/current/images/netboot/ubuntu-installer/amd64"; do
+        if curl -fsI "${candidate}/linux" >/dev/null 2>&1; then
+            NETBOOT_BASE="$candidate"
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+
+    die "no netboot files found; set SOVEREIGN_NETBOOT_BASE=http://releases.ubuntu.com/noble/netboot/amd64"
+}
+
+resolve_netboot_initrd_name() {
+    local base="$1"
+
+    if curl -fsI "${base}/initrd" >/dev/null 2>&1; then
+        printf 'initrd'
+        return 0
+    fi
+
+    if curl -fsI "${base}/initrd.gz" >/dev/null 2>&1; then
+        printf 'initrd.gz'
+        return 0
+    fi
+
+    die "no initrd at ${base}"
+}
 
 read_passphrase() {
     if [ -n "${SOVEREIGN_LUKS_PASSPHRASE:-}" ]; then
@@ -55,9 +91,13 @@ install_kexec_tools() {
 }
 
 download_netboot() {
+    local base initrd_name
+    base="$(resolve_netboot_base)"
+    initrd_name="$(resolve_netboot_initrd_name "$base")"
+    log "netboot base: ${base} (${initrd_name})"
     mkdir -p "${STAGING}/nocloud"
-    curl -fsSL "${NETBOOT_BASE}/linux" -o "${STAGING}/vmlinuz"
-    curl -fsSL "${NETBOOT_BASE}/initrd.gz" -o "${STAGING}/initrd.gz.orig"
+    curl -fsSL "${base}/linux" -o "${STAGING}/vmlinuz"
+    curl -fsSL "${base}/${initrd_name}" -o "${STAGING}/initrd.gz.orig"
 }
 
 firstboot_env_block() {
