@@ -21,6 +21,101 @@ function isDockerPredefinedNetwork(string $network): bool
     return in_array($network, ['default', 'host'], true);
 }
 
+function traefikCatchallDynamicConfig(?string $redirectUrl = null): array
+{
+    $dynamic_conf = [
+        'http' => [
+            'middlewares' => [
+                'coolify-edge-unavailable' => [
+                    'errors' => [
+                        'status' => [
+                            0 => '502-504',
+                            1 => '503',
+                        ],
+                        'service' => 'coolify-edge-status',
+                        'query' => '/{status}.html',
+                    ],
+                ],
+            ],
+            'routers' => [
+                'catchall' => [
+                    'entryPoints' => [
+                        0 => 'http',
+                        1 => 'https',
+                    ],
+                    'service' => 'noop',
+                    'rule' => 'PathPrefix(`/`)',
+                    'tls' => [
+                        'certResolver' => 'letsencrypt',
+                    ],
+                    'priority' => -1000,
+                    'middlewares' => [
+                        0 => 'coolify-edge-unavailable',
+                    ],
+                ],
+            ],
+            'services' => [
+                'noop' => [
+                    'loadBalancer' => [
+                        'servers' => [],
+                    ],
+                ],
+                'coolify-edge-status' => [
+                    'loadBalancer' => [
+                        'servers' => [
+                            0 => [
+                                'url' => 'http://coolify-edge-status:80',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    if (filled($redirectUrl)) {
+        $dynamic_conf['http']['routers']['catchall']['middlewares'] = [
+            0 => 'redirect-regexp',
+            1 => 'coolify-edge-unavailable',
+        ];
+
+        $dynamic_conf['http']['services']['noop']['loadBalancer']['servers'][0] = [
+            'url' => '',
+        ];
+        $dynamic_conf['http']['middlewares']['redirect-regexp'] = [
+            'redirectRegex' => [
+                'regex' => '(.*)',
+                'replacement' => $redirectUrl,
+                'permanent' => false,
+            ],
+        ];
+    }
+
+    return $dynamic_conf;
+}
+
+function deployEdgeStatusPages(Server $server): void
+{
+    $edgeStatusPath = $server->proxyPath().'/edge-status';
+    $sourceDirectory = base_path('docker/edge-status/www');
+
+    instant_remote_process([
+        "mkdir -p {$edgeStatusPath}",
+    ], $server);
+
+    foreach (['502.html', '503.html', '504.html'] as $fileName) {
+        $sourceFile = "{$sourceDirectory}/{$fileName}";
+        if (! is_file($sourceFile)) {
+            continue;
+        }
+
+        $encoded = base64_encode((string) file_get_contents($sourceFile));
+        instant_remote_process([
+            "echo '{$encoded}' | base64 -d | tee {$edgeStatusPath}/{$fileName} > /dev/null",
+        ], $server);
+    }
+}
+
 function collectProxyDockerNetworksByServer(Server $server)
 {
     if (! $server->isFunctional()) {
@@ -313,6 +408,19 @@ function generateDefaultProxyConfiguration(Server $server, array $custom_command
                         '--certificatesresolvers.letsencrypt.acme.storage=/traefik/acme.json',
                     ],
                     'labels' => $labels,
+                ],
+                'coolify-edge-status' => [
+                    'container_name' => 'coolify-edge-status',
+                    'image' => 'nginx:1.27-alpine',
+                    'restart' => RESTART_MODE,
+                    'networks' => $filtered_networks->toArray(),
+                    'volumes' => [
+                        "{$proxy_path}/edge-status:/usr/share/nginx/html:ro",
+                    ],
+                    'labels' => [
+                        'coolify.managed=true',
+                        'coolify.proxy=true',
+                    ],
                 ],
             ],
         ];

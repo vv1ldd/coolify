@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Service unavailable</title>
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content="#090a0f">
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #090a0f;
+            --text: #f4f6fb;
+            --muted: #9aa3b2;
+            --line: rgba(255, 255, 255, 0.1);
+            --green: #75ffb0;
+            --blue: #6ea8ff;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100dvh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background:
+                radial-gradient(circle at top, rgba(117, 255, 176, 0.08), transparent 34%),
+                linear-gradient(180deg, #0d1018 0%, var(--bg) 100%);
+            color: var(--text);
+            font: 16px/1.5 Inter, system-ui, -apple-system, sans-serif;
+        }
+
+        main {
+            width: min(520px, 100%);
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            padding: 28px 24px 22px;
+            background: rgba(255, 255, 255, 0.03);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+            text-align: center;
+        }
+
+        .mark {
+            display: inline-grid;
+            width: 56px;
+            height: 56px;
+            margin-bottom: 18px;
+            place-items: center;
+            border: 1px solid rgba(117, 255, 176, 0.28);
+            border-radius: 18px;
+            color: var(--green);
+            font: 900 18px/1 "JetBrains Mono", ui-monospace, monospace;
+        }
+
+        h1 {
+            margin: 0 0 10px;
+            font-size: clamp(28px, 6vw, 36px);
+            line-height: 1.05;
+            letter-spacing: -0.04em;
+        }
+
+        p {
+            margin: 0;
+            color: var(--muted);
+        }
+
+        .host {
+            display: inline-block;
+            margin: 16px 0 0;
+            padding: 8px 12px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            color: var(--green);
+            font: 700 12px/1 "JetBrains Mono", ui-monospace, monospace;
+            word-break: break-all;
+        }
+
+        .hint {
+            margin-top: 18px;
+            font-size: 14px;
+        }
+
+        a {
+            color: var(--blue);
+            text-decoration: none;
+        }
+
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="mark" aria-hidden="true">SL1</div>
+        <h1>Nothing is serving this address yet</h1>
+        <p>The request reached the edge proxy, but no application is configured to answer here.</p>
+        <div class="host" id="host"></div>
+        <p class="hint">If you own this domain, attach it to a running service in Coolify and wait for TLS to finish.</p>
+    </main>
+    <script>
+        document.getElementById('host').textContent = window.location.hostname || 'unknown host';
+    </script>
+</body>
+</html>

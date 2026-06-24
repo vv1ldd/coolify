@@ -375,6 +375,8 @@ class Server extends BaseModel
         if ($redirect_enabled === false) {
             instant_remote_process(["rm -f $default_redirect_file"], $this);
         } else {
+            deployEdgeStatusPages($this);
+
             if ($proxy_type === ProxyTypes::CADDY->value) {
                 if (filled($redirect_url)) {
                     $conf = ":80, :443 {
@@ -386,49 +388,7 @@ class Server extends BaseModel
 }';
                 }
             } elseif ($proxy_type === ProxyTypes::TRAEFIK->value) {
-                $dynamic_conf = [
-                    'http' => [
-                        'routers' => [
-                            'catchall' => [
-                                'entryPoints' => [
-                                    0 => 'http',
-                                    1 => 'https',
-                                ],
-                                'service' => 'noop',
-                                'rule' => 'PathPrefix(`/`)',
-                                'tls' => [
-                                    'certResolver' => 'letsencrypt',
-                                ],
-                                'priority' => -1000,
-                            ],
-                        ],
-                        'services' => [
-                            'noop' => [
-                                'loadBalancer' => [
-                                    'servers' => [],
-                                ],
-                            ],
-                        ],
-                    ],
-                ];
-                if (filled($redirect_url)) {
-                    $dynamic_conf['http']['routers']['catchall']['middlewares'] = [
-                        0 => 'redirect-regexp',
-                    ];
-
-                    $dynamic_conf['http']['services']['noop']['loadBalancer']['servers'][0] = [
-                        'url' => '',
-                    ];
-                    $dynamic_conf['http']['middlewares'] = [
-                        'redirect-regexp' => [
-                            'redirectRegex' => [
-                                'regex' => '(.*)',
-                                'replacement' => $redirect_url,
-                                'permanent' => false,
-                            ],
-                        ],
-                    ];
-                }
+                $dynamic_conf = traefikCatchallDynamicConfig($redirect_url);
                 $conf = Yaml::dump($dynamic_conf, 12, 2);
             }
             $conf = $banner.$conf;
