@@ -42,15 +42,13 @@ class Sl1IdentityService
 
         $request->session()->put(self::SESSION_KEY, $sessionPayload);
 
-        return $this->issuerUrl('/authorize').'?'.http_build_query([
-            'client_id' => $this->clientId(),
-            'client_name' => config('sovereign.sl1_connect.client_name', 'Sovereign Coolify'),
+        return $this->pushedAuthorizationUrl([
             'redirect_uri' => $redirectUri,
             'state' => $state,
             'nonce' => $nonce,
             'mode' => 'connect',
             'flow' => $claimToken ? 'admin_claim' : 'connect',
-        ], '', '&', PHP_QUERY_RFC3986);
+        ]);
     }
 
     public function invitationAuthorizationUrl(Request $request, TeamInvitation $invitation): string
@@ -75,9 +73,7 @@ class Sl1IdentityService
             'created_at' => now()->toIso8601String(),
         ]);
 
-        return $this->issuerUrl('/authorize').'?'.http_build_query([
-            'client_id' => $this->clientId(),
-            'client_name' => config('sovereign.sl1_connect.client_name', 'Sovereign Coolify'),
+        return $this->pushedAuthorizationUrl([
             'redirect_uri' => $redirectUri,
             'state' => $state,
             'nonce' => $nonce,
@@ -87,7 +83,7 @@ class Sl1IdentityService
             'intent_title' => 'Join team: '.$invitation->team->name,
             'intent_description' => 'Create or use an SL1 Identity to accept the signed team invitation.',
             'intent_cta' => 'Join with SL1 Identity',
-        ], '', '&', PHP_QUERY_RFC3986);
+        ]);
     }
 
     public function intentAuthorizationUrl(Request $request, PendingIntent $intent, bool $popup = false): string
@@ -136,9 +132,7 @@ class Sl1IdentityService
             ?: class_basename((string) $intent->target_type).' #'.$intent->target_id);
         $intentAction = str_replace('.', ' > ', $intent->event_type);
 
-        return $this->issuerUrl('/authorize').'?'.http_build_query([
-            'client_id' => $this->clientId(),
-            'client_name' => config('sovereign.sl1_connect.client_name', 'Sovereign Coolify'),
+        return $this->pushedAuthorizationUrl([
             'redirect_uri' => $redirectUri,
             'state' => $state,
             'nonce' => $nonce,
@@ -155,7 +149,7 @@ class Sl1IdentityService
             'intent_cta' => 'Confirm Intent in Wallet',
             'intent_nonce' => $intentHash,
             'intent_resource' => $intentResource,
-        ], '', '&', PHP_QUERY_RFC3986);
+        ]);
     }
 
     /**
@@ -582,9 +576,71 @@ class Sl1IdentityService
         return rtrim((string) config('sovereign.sl1_connect.issuer'), '/').$path;
     }
 
+    /**
+     * @param  array<string, scalar|null>  $authorizeBody
+     */
+    private function pushedAuthorizationUrl(array $authorizeBody): string
+    {
+        $secret = $this->clientSecret();
+        if ($secret !== '') {
+            try {
+                $response = Http::timeout($this->timeout())
+                    ->acceptJson()
+                    ->withToken($secret)
+                    ->post($this->issuerUrl('/api/sl1e/authorize/requests'), [
+                        'client_id' => $this->clientId(),
+                        ...$authorizeBody,
+                    ]);
+
+                if ($response->successful()) {
+                    $authorizeUrl = data_get($response->json(), 'authorize_url');
+                    if (is_string($authorizeUrl) && $authorizeUrl !== '') {
+                        return $authorizeUrl;
+                    }
+                }
+            } catch (ConnectionException) {
+                // Fall back to issuer-side registry authorize path.
+            }
+        }
+
+        return $this->registryAuthorizationUrl($authorizeBody);
+    }
+
+    /**
+     * @param  array<string, scalar|null>  $authorizeBody
+     */
+    private function registryAuthorizationUrl(array $authorizeBody): string
+    {
+        $query = array_filter([
+            'state' => $authorizeBody['state'] ?? null,
+            'nonce' => $authorizeBody['nonce'] ?? null,
+            'mode' => $authorizeBody['mode'] ?? null,
+            'flow' => $authorizeBody['flow'] ?? null,
+            'identity_hint' => $authorizeBody['identity_hint'] ?? null,
+            'intent_type' => $authorizeBody['intent_type'] ?? null,
+            'intent_title' => $authorizeBody['intent_title'] ?? null,
+            'intent_description' => $authorizeBody['intent_description'] ?? null,
+            'intent_cta' => $authorizeBody['intent_cta'] ?? null,
+            'intent_nonce' => $authorizeBody['intent_nonce'] ?? null,
+            'intent_resource' => $authorizeBody['intent_resource'] ?? null,
+        ], static fn ($value): bool => $value !== null && $value !== '');
+
+        return $this->issuerUrl('/authorize/'.$this->clientId()).'?'.http_build_query(
+            $query,
+            '',
+            '&',
+            PHP_QUERY_RFC3986,
+        );
+    }
+
     private function clientId(): string
     {
         return (string) config('sovereign.sl1_connect.client_id', 'coolify.sovereign');
+    }
+
+    private function clientSecret(): string
+    {
+        return (string) config('sovereign.sl1_connect.client_secret', '');
     }
 
     private function timeout(): int

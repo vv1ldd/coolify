@@ -141,11 +141,30 @@ test('sl1 redirect sends user to connect and stores state', function () {
 
     $location = $response->headers->get('Location');
 
-    expect($location)->toContain('https://simplel1.online/authorize')
-        ->and($location)->toContain('client_id=coolify.sovereign')
-        ->and($location)->toContain('flow=connect')
+    expect($location)->toContain('https://simplel1.online/')
+        ->and($location)->not->toContain('client_name=')
+        ->and($location)->not->toContain('redirect_uri=')
+        ->and(
+            str_contains($location, '/r/sl1rq_')
+            || str_contains($location, '/authorize/coolify.sovereign')
+        )->toBeTrue()
         ->and($session['state'])->not->toBeEmpty()
         ->and($session['nonce'])->not->toBeEmpty();
+});
+
+test('sl1 redirect uses pushed authorize url when client secret is configured', function () {
+    config()->set('sovereign.sl1_connect.client_secret', 'test-par-secret');
+
+    Http::fake([
+        'https://simplel1.online/api/sl1e/authorize/requests' => Http::response([
+            'authorize_url' => 'https://simplel1.online/r/sl1rq_testref',
+            'request_ref' => 'sl1rq_testref',
+        ], 201),
+    ]);
+
+    [$response] = beginSl1Login($this);
+
+    expect($response->headers->get('Location'))->toBe('https://simplel1.online/r/sl1rq_testref');
 });
 
 test('first verified sl1 identity creates root user and binding', function () {
@@ -196,7 +215,13 @@ test('embedded sl1 runtime status exposes durable store counts', function () {
         ->assertOk()
         ->assertJsonPath('protocol', 'simple-l1')
         ->assertJsonPath('mode', 'embedded')
+        ->assertJsonPath('protocol_version', 'capsule-v0')
         ->assertJsonPath('storage', 'coolify-postgres')
+        ->assertJsonPath('storage_role', 'cache')
+        ->assertJsonPath('identity_authority', 'identity_capsule+state_proof+webauthn_assertion')
+        ->assertJsonPath('identity_capsules_enabled', true)
+        ->assertJsonPath('default_assurance_level', 'AL1')
+        ->assertJsonPath('resolvers.evidence.1', 'client-capsule')
         ->assertJsonPath('entities', 1)
         ->assertJsonPath('events', 1);
 });
@@ -233,7 +258,13 @@ test('embedded sl1 issuer exposes durable node identity metadata', function () {
         ->assertOk()
         ->assertJsonPath('node_identity.issuer', 'https://host.example.test/sl1')
         ->assertJsonPath('node_identity.signature_algorithm', 'ed25519')
-        ->assertJsonPath('capabilities.3', 'node_identity_discovery');
+        ->assertJsonPath('protocol_version', 'capsule-v0')
+        ->assertJsonPath('storage_role', 'cache')
+        ->assertJsonPath('identity_authority', 'identity_capsule+state_proof+webauthn_assertion')
+        ->assertJsonPath('capabilities.3', 'node_identity_discovery')
+        ->assertJsonPath('capabilities.4', 'identity_capsule_provenance')
+        ->assertJsonPath('capabilities.5', 'state_proof_freshness')
+        ->assertJsonPath('capabilities.6', 'assurance_level_reporting');
 
     expect(Sl1NodeIdentity::count())->toBe(1);
 
@@ -252,6 +283,8 @@ test('sl1 peer registry verifies embedded runtime metadata without syncing autho
             'enabled' => true,
             'issuer' => 'https://peer.example.test/sl1',
             'storage' => 'coolify-postgres',
+            'storage_role' => 'cache',
+            'identity_authority' => 'identity_capsule+state_proof+webauthn_assertion',
             'entities' => 1,
             'controllers' => 1,
             'events' => 3,
@@ -261,6 +294,8 @@ test('sl1 peer registry verifies embedded runtime metadata without syncing autho
             'issuer' => 'https://peer.example.test/sl1',
             'runtime' => 'coolify.embedded-sl1.runtime.v0',
             'storage' => 'coolify-postgres',
+            'storage_role' => 'cache',
+            'identity_authority' => 'identity_capsule+state_proof+webauthn_assertion',
             'node_identity' => [
                 'node_id' => 'sl1node_peer_test',
                 'issuer' => 'https://peer.example.test/sl1',
@@ -273,6 +308,9 @@ test('sl1 peer registry verifies embedded runtime metadata without syncing autho
                 'proof_projection',
                 'coolify_backup_scope',
                 'node_identity_discovery',
+                'identity_capsule_provenance',
+                'state_proof_freshness',
+                'assurance_level_reporting',
             ],
         ]),
     ]);

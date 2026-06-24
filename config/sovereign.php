@@ -44,6 +44,7 @@ return [
         'issuer' => env('SL1_CONNECT_ISSUER', 'https://simplel1.online'),
         'client_id' => env('SL1_CONNECT_CLIENT_ID', 'coolify.sovereign'),
         'client_name' => env('SL1_CONNECT_CLIENT_NAME', 'Sovereign Coolify'),
+        'client_secret' => env('SL1_CONNECT_SECRET'),
         'callback_path' => env('SL1_CONNECT_CALLBACK_PATH', '/auth/sl1/callback'),
         'timeout' => (int) env('SL1_CONNECT_TIMEOUT', 10),
         'embedded' => [
