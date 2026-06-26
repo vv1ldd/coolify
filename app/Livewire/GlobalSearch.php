@@ -3,6 +3,10 @@
 namespace App\Livewire;
 
 use App\Models\Application;
+use App\Models\AgencyClient;
+use App\Models\AgencyDomainAsset;
+use App\Models\AgencyEngagement;
+use App\Models\AgencyToolSubscription;
 use App\Models\Environment;
 use App\Models\Project;
 use App\Models\Server;
@@ -596,6 +600,97 @@ class GlobalSearch extends Component
                     ];
                 });
 
+            $agencyClients = AgencyClient::ownedByCurrentTeam()
+                ->withCount('engagements')
+                ->get()
+                ->map(function (AgencyClient $client) {
+                    return [
+                        'id' => $client->id,
+                        'name' => $client->name,
+                        'type' => 'agency_client',
+                        'uuid' => $client->uuid,
+                        'description' => trim(implode(' ', array_filter([
+                            $client->contact_name,
+                            $client->contact_email,
+                            $client->country,
+                            $client->status,
+                            "{$client->engagements_count} engagement(s)",
+                        ]))),
+                        'link' => $client->link(),
+                        'project' => null,
+                        'environment' => null,
+                        'search_text' => strtolower($client->name.' '.$client->contact_name.' '.$client->contact_email.' '.$client->country.' '.$client->timezone.' '.$client->uuid.' agency client customer commitment'),
+                    ];
+                });
+
+            $agencyEngagements = AgencyEngagement::ownedByCurrentTeam()
+                ->with(['client', 'project'])
+                ->get()
+                ->map(function (AgencyEngagement $engagement) {
+                    return [
+                        'id' => $engagement->id,
+                        'name' => $engagement->name,
+                        'type' => 'agency_engagement',
+                        'uuid' => $engagement->uuid,
+                        'description' => trim(implode(' ', array_filter([
+                            data_get($engagement, 'client.name'),
+                            $engagement->status,
+                            $engagement->priority,
+                            data_get($engagement, 'project.name'),
+                        ]))),
+                        'link' => $engagement->link(),
+                        'project' => data_get($engagement, 'project.name'),
+                        'environment' => null,
+                        'search_text' => strtolower($engagement->name.' '.data_get($engagement, 'client.name').' '.$engagement->status.' '.$engagement->priority.' '.data_get($engagement, 'project.name').' '.$engagement->uuid.' agency engagement commitment responsibility'),
+                    ];
+                });
+
+            $agencyDomains = AgencyDomainAsset::ownedByCurrentTeam()
+                ->with(['engagement.client', 'dnsZone'])
+                ->get()
+                ->map(function (AgencyDomainAsset $domain) {
+                    return [
+                        'id' => $domain->id,
+                        'name' => $domain->domain,
+                        'type' => 'agency_domain',
+                        'uuid' => $domain->uuid,
+                        'description' => trim(implode(' ', array_filter([
+                            $domain->registrar,
+                            $domain->status,
+                            data_get($domain, 'engagement.name'),
+                            data_get($domain, 'engagement.client.name'),
+                            data_get($domain, 'dnsZone.name'),
+                        ]))),
+                        'link' => $domain->link(),
+                        'project' => data_get($domain, 'engagement.name'),
+                        'environment' => null,
+                        'search_text' => strtolower($domain->domain.' '.$domain->registrar.' '.$domain->status.' '.data_get($domain, 'engagement.name').' '.data_get($domain, 'engagement.client.name').' '.data_get($domain, 'dnsZone.name').' '.$domain->uuid.' agency domain owned surface responsibility'),
+                    ];
+                });
+
+            $agencySubscriptions = AgencyToolSubscription::ownedByCurrentTeam()
+                ->with('engagement.client')
+                ->get()
+                ->map(function (AgencyToolSubscription $subscription) {
+                    return [
+                        'id' => $subscription->id,
+                        'name' => $subscription->vendor.' / '.$subscription->tool_name,
+                        'type' => 'agency_subscription',
+                        'uuid' => $subscription->uuid,
+                        'description' => trim(implode(' ', array_filter([
+                            $subscription->status,
+                            $subscription->interval,
+                            $subscription->currency.' '.$subscription->amount,
+                            data_get($subscription, 'engagement.name'),
+                            data_get($subscription, 'engagement.client.name'),
+                        ]))),
+                        'link' => $subscription->link(),
+                        'project' => data_get($subscription, 'engagement.name'),
+                        'environment' => null,
+                        'search_text' => strtolower($subscription->vendor.' '.$subscription->tool_name.' '.$subscription->status.' '.$subscription->interval.' '.data_get($subscription, 'engagement.name').' '.data_get($subscription, 'engagement.client.name').' '.$subscription->uuid.' agency tool subscription cost recurring obligation'),
+                    ];
+                });
+
             // Add navigation routes
             $navigation = collect([
                 [
@@ -618,6 +713,13 @@ class GlobalSearch extends Component
                     'description' => 'View all projects',
                     'link' => route('project.index'),
                     'search_text' => 'projects all list view',
+                ],
+                [
+                    'name' => 'Agency Control Center',
+                    'type' => 'navigation',
+                    'description' => 'View clients, engagements, domains and tool subscriptions',
+                    'link' => route('agency.index'),
+                    'search_text' => 'agency operations commitment responsibility clients engagements domains subscriptions',
                 ],
                 [
                     'name' => 'Destinations',
@@ -737,7 +839,11 @@ class GlobalSearch extends Component
                 ->merge($databases)
                 ->merge($servers)
                 ->merge($projects)
-                ->merge($environments);
+                ->merge($environments)
+                ->merge($agencyClients)
+                ->merge($agencyEngagements)
+                ->merge($agencyDomains)
+                ->merge($agencySubscriptions);
 
             return $items->toArray();
         });
@@ -768,6 +874,11 @@ class GlobalSearch extends Component
             'services' => ['service', 'category' => 'Services'],
             'project' => ['project', 'type' => 'project'],
             'projects' => ['project', 'type' => 'project'],
+            'agency' => ['agency', 'type' => 'agency'],
+            'client' => ['agency_client', 'type' => 'agency_client'],
+            'clients' => ['agency_client', 'type' => 'agency_client'],
+            'engagement' => ['agency_engagement', 'type' => 'agency_engagement'],
+            'engagements' => ['agency_engagement', 'type' => 'agency_engagement'],
         ];
 
         $priorityCreatableItem = null;

@@ -653,6 +653,14 @@
                                                                     Project
                                                                 @elseif ($result['type'] === 'environment')
                                                                     Environment
+                                                                @elseif ($result['type'] === 'agency_client')
+                                                                    Agency Client
+                                                                @elseif ($result['type'] === 'agency_engagement')
+                                                                    Agency Engagement
+                                                                @elseif ($result['type'] === 'agency_domain')
+                                                                    Agency Domain
+                                                                @elseif ($result['type'] === 'agency_subscription')
+                                                                    Agency Subscription
                                                                 @endif
                                                             </span>
                                                         </div>
@@ -772,6 +780,10 @@
                                                         <span x-show="result.type === 'server'">Server</span>
                                                         <span x-show="result.type === 'project'">Project</span>
                                                         <span x-show="result.type === 'environment'">Environment</span>
+                                                        <span x-show="result.type === 'agency_client'">Agency Client</span>
+                                                        <span x-show="result.type === 'agency_engagement'">Agency Engagement</span>
+                                                        <span x-show="result.type === 'agency_domain'">Agency Domain</span>
+                                                        <span x-show="result.type === 'agency_subscription'">Agency Subscription</span>
                                                     </span>
                                                 </div>
                                                 <template x-if="result.project && result.environment">

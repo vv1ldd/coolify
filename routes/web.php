@@ -5,6 +5,12 @@ use App\Http\Controllers\EdgeProtectionChallengeController;
 use App\Http\Controllers\EmbeddedSl1RuntimeController;
 use App\Http\Controllers\Sl1IdentityController;
 use App\Http\Controllers\UploadController;
+use App\Http\Controllers\DigitalGoodsSourceRuntimeController;
+use App\Livewire\Agency\Clients as AgencyClients;
+use App\Livewire\Agency\Domains as AgencyDomains;
+use App\Livewire\Agency\Engagements as AgencyEngagements;
+use App\Livewire\Agency\Index as AgencyIndex;
+use App\Livewire\Agency\Subscriptions as AgencySubscriptions;
 use App\Livewire\Admin\Index as AdminIndex;
 use App\Livewire\Boarding\Index as BoardingIndex;
 use App\Livewire\Dashboard;
@@ -90,6 +96,7 @@ use App\Livewire\Team\AdminView as TeamAdminView;
 use App\Livewire\Team\Index as TeamIndex;
 use App\Livewire\Team\Member\Index as TeamMemberIndex;
 use App\Livewire\Terminal\Index as TerminalIndex;
+use App\Livewire\DigitalGoodsSource\Index as DigitalGoodsSourceIndex;
 use App\Models\ScheduledDatabaseBackupExecution;
 use App\Models\ServiceDatabase;
 use App\Providers\RouteServiceProvider;
@@ -136,6 +143,10 @@ Route::prefix('sl1')->name('sl1.embedded.')->group(function () {
     Route::get('/events', [EmbeddedSl1RuntimeController::class, 'events'])->name('events');
 });
 
+Route::prefix('digital-goods-source')->name('digital-goods-source.')->group(function () {
+    Route::get('/status', [DigitalGoodsSourceRuntimeController::class, 'status'])->name('status');
+});
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/auth/sl1/intent/callback', [Sl1IdentityController::class, 'intentCallback'])->name('auth.sl1.intent.callback');
     Route::get('/auth/sl1/intent/{intent}/redirect', [Sl1IdentityController::class, 'intentRedirect'])->name('auth.sl1.intent.redirect');
@@ -146,8 +157,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/', Dashboard::class)->name('dashboard');
     Route::get('/audit-ledger', InfraLedgerIndex::class)->name('infra.ledger.index');
+    Route::get('/digital-goods-source', DigitalGoodsSourceIndex::class)->name('digital-goods-source.index');
     Route::get('/admin', AdminIndex::class)->name('admin.index');
     Route::get('/onboarding', BoardingIndex::class)->name('onboarding');
+
+    Route::prefix('agency')->name('agency.')->group(function () {
+        Route::get('/', AgencyIndex::class)->name('index');
+        Route::get('/clients', AgencyClients::class)->name('clients');
+        Route::get('/engagements', AgencyEngagements::class)->name('engagements');
+        Route::get('/domains', AgencyDomains::class)->name('domains');
+        Route::get('/subscriptions', AgencySubscriptions::class)->name('subscriptions');
+    });
 
     Route::get('/subscription', SubscriptionShow::class)->name('subscription.show');
     Route::get('/subscription/new', SubscriptionIndex::class)->name('subscription.index');

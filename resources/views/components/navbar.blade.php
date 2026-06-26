@@ -172,6 +172,29 @@
                         </a>
                     </li>
 
+                    <!-- OPERATIONS -->
+                    <div class="text-[10px] font-black text-neutral-400 uppercase tracking-widest mt-6 mb-2 px-2">Operations</div>
+                    <li>
+                        <a title="Agency Control Center" {{ wireNavigate() }}
+                            class="{{ request()->is('agency*') ? 'menu-item menu-item-active' : 'menu-item' }}"
+                            href="{{ route('agency.index') }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="menu-item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v14l-4-2l-3 2l-3-2l-4 2V6a2 2 0 012-2z" />
+                            </svg>
+                            <span class="menu-item-label tracking-tight">Agency</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a title="Digital Goods Source" {{ wireNavigate() }}
+                            class="{{ request()->is('digital-goods-source*') ? 'menu-item menu-item-active' : 'menu-item' }}"
+                            href="{{ route('digital-goods-source.index') }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="menu-item-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                            </svg>
+                            <span class="menu-item-label tracking-tight">Digital Goods Source</span>
+                        </a>
+                    </li>
+
                     <!-- ORCHESTRATION -->
                     <div class="text-[10px] font-black text-neutral-400 uppercase tracking-widest mt-6 mb-2 px-2">Orchestration</div>
 

@@ -21,7 +21,13 @@ class EmbeddedSl1RuntimeController extends Controller
             'protocol' => 'simple-l1',
             'issuer' => $status['issuer'],
             'runtime' => $status['runtime'],
+            'runtime_version' => $status['runtime_version'] ?? $status['runtime'],
+            'protocol_version' => $status['protocol_version'] ?? 'capsule-v0',
             'storage' => $status['storage'],
+            'storage_role' => $status['storage_role'] ?? 'cache',
+            'identity_authority' => $status['identity_authority'] ?? 'identity_capsule+state_proof+webauthn_assertion',
+            'assurance_levels' => $status['assurance_levels'] ?? [],
+            'resolvers' => $status['resolvers'] ?? [],
             'authorization_endpoint' => $status['issuer'].'/authorize',
             'status_endpoint' => $status['issuer'].'/status',
             'proof_exchange_endpoint' => $status['issuer'].'/api/sl1e/authorization-code/exchange',
@@ -32,6 +38,9 @@ class EmbeddedSl1RuntimeController extends Controller
                 'proof_projection',
                 'coolify_backup_scope',
                 'node_identity_discovery',
+                'identity_capsule_provenance',
+                'state_proof_freshness',
+                'assurance_level_reporting',
             ],
         ]);
     }
