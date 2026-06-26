@@ -246,7 +246,7 @@ observe_panel_tls() {
     fi
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] panel_tls_state=${tls_state} url=${app_url}" >> "$LOG_FILE"
-    log "TLS is postflight-only; converge continues. Check DNS → VPS, ports 80/443, and Traefik ACME if HTTPS stays down."
+    log "TLS is postflight-only; converge remains complete. Check DNS → VPS, ports 80/443, and Traefik ACME if HTTPS stays down."
     return 0
 }
 
