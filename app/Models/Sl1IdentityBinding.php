@@ -13,6 +13,8 @@ class Sl1IdentityBinding extends Model
         'controller_address',
         'alias',
         'display_alias',
+        'contact_email',
+        'contact_email_hash',
         'proof_id',
         'last_proof',
         'last_verified_at',

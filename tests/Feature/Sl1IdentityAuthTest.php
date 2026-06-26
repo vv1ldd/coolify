@@ -196,6 +196,47 @@ test('first verified sl1 identity creates root user and binding', function () {
     expect(InstanceSettings::findOrFail(0)->is_registration_enabled)->toBeFalsy();
 });
 
+test('consented email claim is stored as binding contact attribute without becoming identity key', function () {
+    [, $session] = beginSl1Login($this);
+
+    $proof = fakeSl1Proof('sl1e_emailed', $session['nonce']);
+    $payload = [
+        'protocol' => 'simple-l1',
+        'success' => true,
+        'active' => true,
+        'proof_token' => 'sl1p_test',
+        'proof' => $proof,
+        'identity' => [
+            'entity_l1_address' => 'sl1e_emailed',
+            'key_l1_address' => 'sl1_controller_test',
+            'alias' => '@operator',
+            'display_alias' => '@operator',
+            'email' => 'operator@example.com',
+            'email_hash' => 'sha256:'.hash('sha256', 'operator@example.com'),
+        ],
+    ];
+
+    Http::fake([
+        'https://simplel1.online/api/sl1e/authorization-code/exchange' => Http::response($payload),
+        'https://simplel1.online/api/sl1e/proofs/introspect' => Http::response($payload),
+    ]);
+
+    $this->get('/auth/sl1/callback?state='.$session['state'].'&code=sl1c_test')
+        ->assertRedirect('/');
+
+    $this->assertAuthenticated();
+
+    $binding = Sl1IdentityBinding::where('entity_address', 'sl1e_emailed')->firstOrFail();
+    expect($binding->contact_email)->toBe('operator@example.com')
+        ->and($binding->contact_email_hash)->toBe('sha256:'.hash('sha256', 'operator@example.com'));
+
+    // Email is a non-authoritative contact claim: identity key stays the entity address,
+    // and the user's login email remains the synthetic projection, not the real email.
+    $user = $binding->user;
+    expect($user->email)->not->toBe('operator@example.com')
+        ->and($user->email)->toContain('@identity.sl1.local');
+});
+
 test('embedded sl1 runtime status exposes durable store counts', function () {
     Sl1Entity::create([
         'entity_address' => 'sl1e_status',

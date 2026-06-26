@@ -48,6 +48,8 @@ class Sl1IdentityService
             'nonce' => $nonce,
             'mode' => 'connect',
             'flow' => $claimToken ? 'admin_claim' : 'connect',
+            // ADR-0056: request the non-authoritative email contact claim.
+            'scope' => 'openid sl1e email',
         ]);
     }
 
@@ -79,6 +81,7 @@ class Sl1IdentityService
             'nonce' => $nonce,
             'mode' => 'connect',
             'flow' => 'team_invitation',
+            'scope' => 'openid sl1e email',
             'intent_type' => 'team.member.join',
             'intent_title' => 'Join team: '.$invitation->team->name,
             'intent_description' => 'Create or use an SL1 Identity to accept the signed team invitation.',
@@ -565,6 +568,10 @@ class Sl1IdentityService
             'controller_address' => data_get($proof, 'controller_l1_address') ?: data_get($identity, 'key_l1_address'),
             'alias' => data_get($proof, 'alias') ?: data_get($identity, 'alias'),
             'display_alias' => data_get($proof, 'display_alias') ?: data_get($identity, 'display_alias') ?: data_get($proof, 'displayName'),
+            // ADR-0056: non-authoritative contact claim, disclosed only when the
+            // user consented to the "email" scope. Never used as an identity key.
+            'contact_email' => data_get($identity, 'email') ?: data_get($proof, 'claims.email'),
+            'contact_email_hash' => data_get($identity, 'email_hash') ?: data_get($proof, 'claims.email_hash'),
             'proof_id' => data_get($proof, 'proof_id') ?: data_get($proof, 'proofId'),
             'last_proof' => $proof,
             'last_verified_at' => now(),
@@ -616,6 +623,7 @@ class Sl1IdentityService
             'nonce' => $authorizeBody['nonce'] ?? null,
             'mode' => $authorizeBody['mode'] ?? null,
             'flow' => $authorizeBody['flow'] ?? null,
+            'scope' => $authorizeBody['scope'] ?? null,
             'identity_hint' => $authorizeBody['identity_hint'] ?? null,
             'intent_type' => $authorizeBody['intent_type'] ?? null,
             'intent_title' => $authorizeBody['intent_title'] ?? null,
