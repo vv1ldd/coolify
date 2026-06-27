@@ -43,6 +43,7 @@ services:
       CLOUDFLARE_ZONE_ID: "${SIMPLE_L1_CLOUDFLARE_ZONE_ID:-}"
       CLOUDFLARE_ZONE_NAME: "${SIMPLE_L1_DOMAIN:-simplel1.online}"
       CLOUDFLARE_PROXIED: "${SIMPLE_L1_CLOUDFLARE_PROXIED:-false}"
+      SL1E_CLIENT_REGISTRY_JSON: ${SL1E_CLIENT_REGISTRY_JSON:-}
     volumes:
       - simple-l1-data:/data/simple-l1
     labels:
