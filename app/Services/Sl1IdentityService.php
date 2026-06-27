@@ -589,28 +589,30 @@ class Sl1IdentityService
     private function pushedAuthorizationUrl(array $authorizeBody): string
     {
         $secret = $this->clientSecret();
-        if ($secret !== '') {
-            try {
-                $response = Http::timeout($this->timeout())
-                    ->acceptJson()
-                    ->withToken($secret)
-                    ->post($this->issuerUrl('/api/sl1e/authorize/requests'), [
-                        'client_id' => $this->clientId(),
-                        ...$authorizeBody,
-                    ]);
-
-                if ($response->successful()) {
-                    $authorizeUrl = data_get($response->json(), 'authorize_url');
-                    if (is_string($authorizeUrl) && $authorizeUrl !== '') {
-                        return $authorizeUrl;
-                    }
-                }
-            } catch (ConnectionException) {
-                // Fall back to issuer-side registry authorize path.
-            }
+        if ($secret === '') {
+            throw new RuntimeException('SL1 PAR client secret is not configured.');
         }
 
-        return $this->registryAuthorizationUrl($authorizeBody);
+        try {
+            $response = Http::timeout($this->timeout())
+                ->acceptJson()
+                ->withToken($secret)
+                ->post($this->issuerUrl('/api/sl1e/authorize/requests'), [
+                    'client_id' => $this->clientId(),
+                    ...$authorizeBody,
+                ]);
+
+            if ($response->successful()) {
+                $authorizeUrl = data_get($response->json(), 'authorize_url');
+                if (is_string($authorizeUrl) && $authorizeUrl !== '') {
+                    return $authorizeUrl;
+                }
+            }
+        } catch (ConnectionException $exception) {
+            throw new RuntimeException('SL1 authorize request push failed.', previous: $exception);
+        }
+
+        throw new RuntimeException('SL1 authorize request push was rejected.');
     }
 
     /**

@@ -38,6 +38,15 @@ beforeEach(function () {
 
 function beginSl1Login($test): array
 {
+    config()->set('sovereign.sl1_connect.client_secret', 'test-par-secret');
+
+    Http::fake([
+        'https://simplel1.online/api/sl1e/authorize/requests' => Http::response([
+            'authorize_url' => 'https://simplel1.online/r/sl1rq_testref',
+            'request_ref' => 'sl1rq_testref',
+        ], 201),
+    ]);
+
     $response = $test->get('/auth/sl1/redirect');
     $response->assertRedirect();
 
@@ -144,10 +153,8 @@ test('sl1 redirect sends user to connect and stores state', function () {
     expect($location)->toContain('https://simplel1.online/')
         ->and($location)->not->toContain('client_name=')
         ->and($location)->not->toContain('redirect_uri=')
-        ->and(
-            str_contains($location, '/r/sl1rq_')
-            || str_contains($location, '/authorize/coolify.sovereign')
-        )->toBeTrue()
+        ->and($location)->toContain('/r/sl1rq_')
+        ->and($location)->not->toContain('/authorize/coolify.sovereign')
         ->and($session['state'])->not->toBeEmpty()
         ->and($session['nonce'])->not->toBeEmpty();
 });

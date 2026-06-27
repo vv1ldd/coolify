@@ -15,7 +15,15 @@ class Sl1IdentityController extends Controller
 {
     public function redirect(Request $request, Sl1IdentityService $sl1)
     {
-        return redirect()->away($sl1->authorizationUrl($request));
+        try {
+            return redirect()->away($sl1->authorizationUrl($request));
+        } catch (Throwable $e) {
+            Log::warning('SL1 identity login start failed: '.$e->getMessage());
+
+            return redirect()
+                ->route('login')
+                ->withErrors(['sl1' => $e->getMessage()]);
+        }
     }
 
     public function adminClaim(string $token, Request $request, Sl1IdentityService $sl1, SovereignAdminClaimService $claims)
