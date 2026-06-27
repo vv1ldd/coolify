@@ -97,6 +97,7 @@ use App\Livewire\Team\Index as TeamIndex;
 use App\Livewire\Team\Member\Index as TeamMemberIndex;
 use App\Livewire\Terminal\Index as TerminalIndex;
 use App\Livewire\DigitalGoodsSource\Index as DigitalGoodsSourceIndex;
+use App\Livewire\RealmOperations\Index as RealmOperationsIndex;
 use App\Models\ScheduledDatabaseBackupExecution;
 use App\Models\ServiceDatabase;
 use App\Providers\RouteServiceProvider;
@@ -157,6 +158,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/', Dashboard::class)->name('dashboard');
     Route::get('/audit-ledger', InfraLedgerIndex::class)->name('infra.ledger.index');
+    Route::get('/realm-operations', RealmOperationsIndex::class)->name('realm.operations.index');
     Route::get('/digital-goods-source', DigitalGoodsSourceIndex::class)->name('digital-goods-source.index');
     Route::get('/admin', AdminIndex::class)->name('admin.index');
     Route::get('/onboarding', BoardingIndex::class)->name('onboarding');

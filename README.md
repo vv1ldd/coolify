@@ -19,6 +19,16 @@ No vendor lock-in, which means that all the configurations for your applications
 
 For more information, take a look at our landing page at [coolify.io](https://coolify.io).
 
+## Sovereign Extensions
+
+This fork contains additional Sovereign / Realm functionality that is not part
+of upstream Coolify.
+
+See:
+
+- [README-SOVEREIGN-VPS.md](./README-SOVEREIGN-VPS.md)
+- [ADR 0012 — Realm Operations Console as Evidence Graph Projection](./docs/adr/0012-realm-operations-console-evidence-projection.md)
+
 ## Installation
 
 ```bash

@@ -87,6 +87,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Realm Operations Console (read-only evidence surface)
+    |--------------------------------------------------------------------------
+    |
+    | Coolify observes Realm evidence here. It must not mutate history, ledger
+    | state, or protocol meaning. Runtime status URLs are probed read-only.
+    |
+    */
+    'realm_operations' => [
+        'runtime_image' => env('SIMPLE_L1_IMAGE', 'ghcr.io/vv1ldd/simple-l1:latest'),
+        'runtime_status_urls' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', env('SIMPLE_L1_RUNTIME_STATUS_URLS', env('SIMPLE_L1_ISSUER_URL', '')))
+        ))),
+        'timeout' => (int) env('SIMPLE_L1_RUNTIME_STATUS_TIMEOUT', 10),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | B2B Consortium Clearing & Billing
     |--------------------------------------------------------------------------
     |

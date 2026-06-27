@@ -404,6 +404,21 @@ Update rail:
 4. Run the one command bootstrap on the VPS and select refresh or upgrade.
 5. Verify `/api/health` and one SL1 login round-trip.
 
+## Realm Operations Console
+
+The Realm Operations Console is an evidence projection layer for operators. It
+aggregates read-only Realm evidence at `/realm-operations` without becoming an
+admin surface or a second source of truth.
+
+```text
+Coolify can see Realm.
+Coolify cannot become Realm.
+```
+
+See:
+
+- [ADR 0012 — Realm Operations Console as Evidence Graph Projection](./docs/adr/0012-realm-operations-console-evidence-projection.md)
+
 ## Files Added For The Fork
 
 - `scripts/install-sovereign.sh` - unified cyberpunk bootstrap for fresh install,

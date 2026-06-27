@@ -1,0 +1,119 @@
+<div>
+    <x-slot:title>Realm Operations | Sovereign</x-slot>
+
+    @php
+        $statusClass = function (?string $status): string {
+            return match (strtoupper((string) $status)) {
+                'OK', 'PASS' => 'text-green-700 dark:text-green-400',
+                'FAIL', 'FAILED', 'ERROR', 'DIVERGED' => 'text-red-700 dark:text-red-400',
+                default => 'text-neutral-500',
+            };
+        };
+    @endphp
+
+    <div class="flex flex-col gap-6 pb-10">
+        <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 border-b-[3px] border-black pb-6">
+            <div>
+                <div class="text-[10px] font-black text-neutral-400 uppercase tracking-[0.3em] mb-1">SOVEREIGN RUNTIME</div>
+                <h1 class="text-3xl font-black text-black leading-none uppercase">Realm Operations</h1>
+                <p class="text-sm text-neutral-500 mt-2 font-mono">Observe -> Aggregate -> Display. Console shows evidence; Protocol defines meaning.</p>
+            </div>
+        </div>
+
+        <div class="grid gap-3 md:grid-cols-4">
+            @foreach (data_get($snapshot, 'sources', []) as $source)
+                <div class="p-3 border-[2px] border-neutral-300 bg-neutral-50">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500">{{ data_get($source, 'role') }}</div>
+                    <div class="pt-1 text-xs font-mono text-neutral-700">{{ data_get($source, 'responsibility') }}</div>
+                </div>
+            @endforeach
+        </div>
+
+        <div class="flex items-center gap-3 px-4 py-3 border-[3px] border-neutral-400 bg-neutral-50">
+            <div class="text-[10px] font-black uppercase tracking-widest text-neutral-600 font-mono">
+                {{ data_get($snapshot, 'boundary.note') }}
+            </div>
+        </div>
+
+        <div class="grid gap-4 md:grid-cols-2">
+            <div class="p-5 border-[3px] border-black">
+                <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Deployment</div>
+                <div class="space-y-2 font-mono text-sm">
+                    <div><span class="text-neutral-500">Artifact image:</span> {{ data_get($snapshot, 'artifact.image_ref') }}</div>
+                    <div><span class="text-neutral-500">Artifact digest:</span> {{ data_get($snapshot, 'artifact.image_digest') }}</div>
+                    <div class="text-[10px] uppercase tracking-widest text-neutral-400">Source: {{ data_get($snapshot, 'artifact.source') }}</div>
+                </div>
+            </div>
+
+            <div class="p-5 border-[3px] border-black">
+                <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Protocol Identity</div>
+                <div class="space-y-2 font-mono text-sm">
+                    <div><span class="text-neutral-500">Package fingerprint:</span> {{ data_get($snapshot, 'protocol.package_fingerprint') }}</div>
+                    <div><span class="text-neutral-500">Distribution digest:</span> {{ data_get($snapshot, 'protocol.distribution_digest') }}</div>
+                    <div><span class="text-neutral-500">Protocol version:</span> {{ data_get($snapshot, 'protocol.protocol_version') }}</div>
+                    <div class="text-[10px] uppercase tracking-widest text-neutral-400">Source: {{ data_get($snapshot, 'protocol.source') }}</div>
+                </div>
+            </div>
+
+            <div class="p-5 border-[3px] border-black">
+                <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Runtime Reality</div>
+                <div class="space-y-2 font-mono text-sm">
+                    <div><span class="text-neutral-500">History head:</span> {{ data_get($snapshot, 'runtime.history_head') }}</div>
+                    <div><span class="text-neutral-500">State root:</span> {{ data_get($snapshot, 'runtime.state_root') }}</div>
+                    <div><span class="text-neutral-500">Last transition:</span> {{ data_get($snapshot, 'runtime.last_transition') }}</div>
+                    <div><span class="text-neutral-500">Runtime reachable:</span> {{ data_get($snapshot, 'runtime.reachable') ? 'true' : 'false' }}</div>
+                    <div class="text-[10px] uppercase tracking-widest text-neutral-400">Source: {{ data_get($snapshot, 'runtime.source') }}</div>
+                </div>
+            </div>
+
+            <div class="p-5 border-[3px] border-black">
+                <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Verification Confidence</div>
+                <div class="space-y-2 font-mono text-sm">
+                    <div>
+                        <span class="text-neutral-500">Semantic health:</span>
+                        <span class="{{ $statusClass(data_get($snapshot, 'verification.semantic_health')) }}">
+                            {{ data_get($snapshot, 'verification.semantic_health') }}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-neutral-500">Shadow verifier:</span>
+                        <span class="{{ $statusClass(data_get($snapshot, 'verification.shadow_verify')) }}">
+                            {{ data_get($snapshot, 'verification.shadow_verify') }}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-neutral-500">Certification:</span>
+                        <span class="{{ $statusClass(data_get($snapshot, 'verification.conformance')) }}">
+                            {{ data_get($snapshot, 'verification.conformance') }}
+                        </span>
+                    </div>
+                    <div class="text-[10px] uppercase tracking-widest text-neutral-400">Source: {{ data_get($snapshot, 'verification.source') }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-5 border-[3px] border-neutral-400 bg-neutral-50">
+            <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Process Health (Not Semantic Health)</div>
+            <div class="space-y-2 font-mono text-sm">
+                <div>
+                    <span class="text-neutral-500">Status:</span>
+                    <span class="{{ $statusClass(data_get($snapshot, 'process_health.status')) }}">
+                        {{ data_get($snapshot, 'process_health.status') }}
+                    </span>
+                </div>
+                <div><span class="text-neutral-500">Note:</span> {{ data_get($snapshot, 'process_health.note') }}</div>
+                @if (data_get($snapshot, 'process_health.target_node'))
+                    <div><span class="text-neutral-500">Target node:</span> {{ data_get($snapshot, 'process_health.target_node') }}</div>
+                @endif
+            </div>
+        </div>
+
+        <div class="p-5 border-[3px] border-neutral-300">
+            <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Evidence References</div>
+            <pre class="p-3 overflow-auto text-xs font-mono bg-neutral-100 dark:bg-neutral-900">{{ json_encode(data_get($snapshot, 'evidence_refs', []), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
+            <div class="pt-2 text-[10px] font-mono uppercase tracking-widest text-neutral-400">
+                Generated at {{ data_get($snapshot, 'generated_at') }}
+            </div>
+        </div>
+    </div>
+</div>
