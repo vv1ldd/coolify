@@ -8,12 +8,11 @@ Proposed.
 
 This ADR is an **adoption** document, not a canon document.
 
-The composition rules for Realm layers are owned by the platform ADR:
+The composition rules for Realm layers are owned by the platform architecture
+ADR:
 
 ```text
-simple-l1
-  docs/architecture/layer-composition-boundary-adr-0095.md
-  (ADR-0095: Layer Composition Boundary)
+Platform ADR-0095: Layer Composition Boundary
 ```
 
 This document records how the Coolify fork's Realm Operations Console adopts and
@@ -22,8 +21,9 @@ axioms.
 
 ## Decision
 
-This repository adopts platform **ADR-0095** as the source of truth for layer
-composition. The composition axioms live there, not here:
+This repository adopts **Platform ADR-0095: Layer Composition Boundary** as the
+source of truth for layer composition. The composition axioms live there, not
+here:
 
 ```text
 Contract locality
@@ -70,21 +70,21 @@ execution contract.
 
 - **ADR-0012** — Expression boundary (Operations Console as projection).
 - **ADR-0013** — Interpretation boundary (verifier semantic contract).
-- **ADR-0014** (this document) — adopts platform **ADR-0095** as the composition
-  canon for both.
+- **ADR-0014** (this document) — adopts **Platform ADR-0095: Layer Composition
+  Boundary** as the composition canon for both.
 
 See [ADR 0012](0012-realm-operations-console-evidence-projection.md) and
 [ADR 0013](0013-verifier-semantic-boundary.md).
 
 ## Consequences
 
-The composition rules are maintained in exactly one place (platform ADR-0095),
-removing the risk of two canonical documents drifting apart. This fork keeps a
-thin adoption record that binds its local artifacts to the platform canon and is
-reviewed against it.
+The composition rules are maintained in exactly one place (Platform ADR-0095:
+Layer Composition Boundary), removing the risk of two canonical documents
+drifting apart. This fork keeps a thin adoption record that binds its local
+artifacts to the platform canon and is reviewed against it.
 
 ```text
-Canon lives in the platform (ADR-0095).
+Canon lives in Platform ADR-0095: Layer Composition Boundary.
 This fork adopts and applies it.
 Meaning flows downstream. Meaning is never rewritten upstream.
 ```
