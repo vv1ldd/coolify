@@ -22,15 +22,21 @@ class RealmOperationsService
 
     public const STATUS_FAIL = 'FAIL';
 
+    public function __construct(
+        private readonly MeshConvergenceEvidenceProjection $meshConvergence = new MeshConvergenceEvidenceProjection,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
     public function snapshot(?int $teamId = null): array
     {
         $evidence = $this->latestEvidenceMetadata($teamId);
-        $runtimeProbe = $this->probeRuntimeStatus();
+        $runtimeObservations = $this->probeRuntimeObservations();
+        $runtimeProbe = $this->primaryRuntimeProbe($runtimeObservations);
         $verificationProbe = $this->probeShadowVerification();
         $processHealth = $this->latestProcessHealth($teamId);
+        $meshConvergence = $this->meshConvergence->project($runtimeObservations);
 
         return [
             'generated_at' => now()->toIso8601String(),
@@ -48,6 +54,8 @@ class RealmOperationsService
             'artifact' => $this->artifactSection($evidence),
             'protocol' => $this->protocolSection($evidence),
             'runtime' => $this->runtimeSection($evidence, $runtimeProbe),
+            'runtime_observations' => $runtimeObservations,
+            'mesh_convergence' => $meshConvergence,
             'verification' => $this->verificationSection($evidence, $verificationProbe),
             'process_health' => $processHealth,
             'evidence_refs' => [
@@ -55,6 +63,7 @@ class RealmOperationsService
                 'latest_package_sealed_at' => $this->latestEvidenceSealedAt($teamId),
                 'runtime_checked_url' => $runtimeProbe['checked_url'] ?? null,
                 'verifier_checked_url' => $verificationProbe['checked_url'] ?? null,
+                'mesh_convergence_evidence_ref' => $meshConvergence['evidence_ref'] ?? null,
             ],
         ];
     }
@@ -185,41 +194,157 @@ class RealmOperationsService
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $runtimeObservations
      * @return array<string, mixed>
      */
-    private function probeRuntimeStatus(): array
+    private function primaryRuntimeProbe(array $runtimeObservations): array
     {
-        $errors = [];
+        $reachable = collect($runtimeObservations)
+            ->first(fn (array $observation): bool => (bool) ($observation['reachable'] ?? false));
 
-        foreach ($this->runtimeStatusUrls() as $baseUrl) {
-            try {
-                $response = Http::timeout((int) config('sovereign.realm_operations.timeout', 10))
-                    ->acceptJson()
-                    ->get($baseUrl.'/api/sl1e/runtime/status');
-
-                if ($response->ok()) {
-                    $payload = $response->json();
-
-                    return [
-                        'reachable' => true,
-                        'checked_url' => $baseUrl,
-                        'remote' => is_array($payload) ? $payload : [],
-                        'errors' => $errors,
-                    ];
-                }
-
-                $errors[$baseUrl] = 'HTTP '.$response->status();
-            } catch (\Throwable $error) {
-                $errors[$baseUrl] = $error->getMessage();
-            }
+        if (is_array($reachable)) {
+            return [
+                'reachable' => true,
+                'checked_url' => $reachable['checked_url'] ?? null,
+                'remote' => is_array($reachable['remote'] ?? null) ? $reachable['remote'] : [],
+                'errors' => is_array($reachable['errors'] ?? null) ? $reachable['errors'] : [],
+            ];
         }
 
         return [
             'reachable' => false,
             'checked_url' => null,
             'remote' => [],
-            'errors' => $errors,
+            'errors' => collect($runtimeObservations)
+                ->mapWithKeys(fn (array $observation): array => [
+                    (string) ($observation['checked_url'] ?? $observation['node_id'] ?? 'unknown') => (string) ($observation['error'] ?? 'unreachable'),
+                ])
+                ->all(),
         ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function probeRuntimeObservations(): array
+    {
+        return collect($this->runtimeNodeTargets())
+            ->map(fn (array $target): array => $this->probeRuntimeObservation($target))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array{node_id: string, url: string}  $target
+     * @return array<string, mixed>
+     */
+    private function probeRuntimeObservation(array $target): array
+    {
+        $nodeId = $target['node_id'];
+        $baseUrl = rtrim($target['url'], '/');
+        $observedAt = now()->toIso8601String();
+
+        try {
+            $response = Http::timeout((int) config('sovereign.realm_operations.timeout', 10))
+                ->acceptJson()
+                ->get($baseUrl.'/api/sl1e/runtime/status');
+
+            if (! $response->ok()) {
+                return $this->unreachableRuntimeObservation(
+                    nodeId: $nodeId,
+                    baseUrl: $baseUrl,
+                    observedAt: $observedAt,
+                    error: 'HTTP '.$response->status(),
+                );
+            }
+
+            $payload = is_array($response->json()) ? $response->json() : [];
+            $identityRealm = is_array($payload['identity_realm'] ?? null) ? $payload['identity_realm'] : [];
+
+            return [
+                'node_id' => $nodeId,
+                'authority' => 'Runtime',
+                'source' => 'Runtime Endpoint',
+                'history_head_kind' => $this->stringOrUnknown(
+                    $identityRealm['history_head_kind'] ?? $payload['history_head_kind'] ?? null
+                ),
+                'history_head' => $this->stringOrUnknown(
+                    $identityRealm['history_head'] ?? $payload['history_head'] ?? null
+                ),
+                'state_root' => $this->stringOrUnknown(
+                    $identityRealm['state_root'] ?? $payload['state_root'] ?? null
+                ),
+                'event_count' => is_numeric($identityRealm['event_count'] ?? $payload['event_count'] ?? null)
+                    ? (int) ($identityRealm['event_count'] ?? $payload['event_count'])
+                    : null,
+                'observed_at' => $observedAt,
+                'evidence_ref' => 'runtime-observation:'.$nodeId.':'.sha1($baseUrl),
+                'reachable' => true,
+                'checked_url' => $baseUrl,
+                'remote' => $payload,
+                'errors' => [],
+            ];
+        } catch (\Throwable $error) {
+            return $this->unreachableRuntimeObservation(
+                nodeId: $nodeId,
+                baseUrl: $baseUrl,
+                observedAt: $observedAt,
+                error: $error->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function unreachableRuntimeObservation(
+        string $nodeId,
+        string $baseUrl,
+        string $observedAt,
+        string $error,
+    ): array {
+        return [
+            'node_id' => $nodeId,
+            'authority' => 'Runtime',
+            'source' => 'Runtime Endpoint',
+            'history_head_kind' => self::STATUS_UNKNOWN,
+            'history_head' => self::STATUS_UNKNOWN,
+            'state_root' => self::STATUS_UNKNOWN,
+            'event_count' => null,
+            'observed_at' => $observedAt,
+            'evidence_ref' => 'runtime-observation:'.$nodeId.':'.sha1($baseUrl),
+            'reachable' => false,
+            'checked_url' => $baseUrl,
+            'remote' => [],
+            'errors' => [$baseUrl => $error],
+            'error' => $error,
+        ];
+    }
+
+    /**
+     * @return array<int, array{node_id: string, url: string}>
+     */
+    private function runtimeNodeTargets(): array
+    {
+        $configured = collect(config('sovereign.realm_operations.runtime_node_observations', []))
+            ->filter(fn ($entry) => is_array($entry) && filled($entry['node_id'] ?? null) && filled($entry['url'] ?? null))
+            ->map(fn (array $entry): array => [
+                'node_id' => (string) $entry['node_id'],
+                'url' => rtrim((string) $entry['url'], '/'),
+            ])
+            ->values();
+
+        if ($configured->isNotEmpty()) {
+            return $configured->all();
+        }
+
+        return collect($this->runtimeStatusUrls())
+            ->values()
+            ->map(fn (string $url, int $index): array => [
+                'node_id' => 'node-'.($index + 1),
+                'url' => $url,
+            ])
+            ->all();
     }
 
     /**

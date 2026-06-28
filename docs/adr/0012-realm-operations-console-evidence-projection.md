@@ -160,6 +160,33 @@ semantically complete projections; the UI must not reconstruct evidence.
 If a Blade template needs an `if`-statement about meaning, the projection is
 incomplete.
 
+**Law of Comparison Boundaries**
+
+A comparison may only produce claims supported by the comparison contract.
+
+**Law of Derived Evidence**
+
+Derived evidence may explain source evidence. Derived evidence may not exceed
+source evidence.
+
+**Law of Contract Visibility**
+
+Every derived conclusion must expose the contract that allowed the conclusion.
+
+**Law of Scope Preservation**
+
+A derived conclusion must not claim more than the scope of its evidence.
+
+Example:
+
+```text
+CONVERGED
+scope: runtime_observation_equivalence
+```
+
+does not imply global Realm health. It only claims that compared runtime fields
+matched under an explicit comparison contract.
+
 ### Evolution principle
 
 This is a product-development rule, not a data invariant.
@@ -264,6 +291,7 @@ Examples:
 | Evidence timeline          | Operations Console                 |
 | Lineage visualization      | Operations Console                 |
 | Multi-verifier comparison  | Operations Console                 |
+| Mesh convergence evidence| Operations Console                 |
 | Replay request workflow    | Protocol-aware workflow            |
 
 ### Review checklist

@@ -100,6 +100,25 @@ return [
             'trim',
             explode(',', env('SIMPLE_L1_RUNTIME_STATUS_URLS', env('SIMPLE_L1_ISSUER_URL', '')))
         ))),
+        'runtime_node_observations' => array_values(array_filter(array_map(
+            static function (string $entry): ?array {
+                $entry = trim($entry);
+                if ($entry === '') {
+                    return null;
+                }
+
+                [$nodeId, $url] = array_pad(explode('|', $entry, 2), 2, null);
+                if (! filled($nodeId) || ! filled($url)) {
+                    return null;
+                }
+
+                return [
+                    'node_id' => trim((string) $nodeId),
+                    'url' => trim((string) $url),
+                ];
+            },
+            explode(',', (string) env('SIMPLE_L1_RUNTIME_NODE_OBSERVATIONS', ''))
+        ))),
         'timeout' => (int) env('SIMPLE_L1_RUNTIME_STATUS_TIMEOUT', 10),
     ],
 

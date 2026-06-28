@@ -4,7 +4,7 @@
     @php
         $statusClass = function (?string $status): string {
             return match (strtoupper((string) $status)) {
-                'OK', 'PASS' => 'text-green-700 dark:text-green-400',
+                'OK', 'PASS', 'CONVERGED' => 'text-green-700 dark:text-green-400',
                 'FAIL', 'FAILED', 'ERROR', 'DIVERGED' => 'text-red-700 dark:text-red-400',
                 default => 'text-neutral-500',
             };
@@ -93,6 +93,43 @@
                     <div class="text-[10px] uppercase tracking-widest text-neutral-400">Source: {{ data_get($snapshot, 'verification.source') }}</div>
                 </div>
             </div>
+        </div>
+
+        <div class="p-5 border-[3px] border-black">
+            <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Mesh Convergence Evidence</div>
+            <div class="space-y-2 font-mono text-sm">
+                <div>
+                    <span class="text-neutral-500">Result:</span>
+                    <span class="{{ $statusClass(data_get($snapshot, 'mesh_convergence.result')) }}">
+                        {{ data_get($snapshot, 'mesh_convergence.result') }}
+                    </span>
+                </div>
+                <div><span class="text-neutral-500">Scope:</span> {{ data_get($snapshot, 'mesh_convergence.scope') }}</div>
+                <div><span class="text-neutral-500">Contract:</span> {{ data_get($snapshot, 'mesh_convergence.comparison_contract_ref') }}</div>
+                <div><span class="text-neutral-500">Reason:</span> {{ data_get($snapshot, 'mesh_convergence.reason') }}</div>
+                <div><span class="text-neutral-500">Authority:</span> {{ data_get($snapshot, 'mesh_convergence.authority') }}</div>
+                <div><span class="text-neutral-500">Source:</span> {{ data_get($snapshot, 'mesh_convergence.source') }}</div>
+                <div class="text-[10px] uppercase tracking-widest text-neutral-400">Derived evidence artifact, not mesh health or consensus.</div>
+            </div>
+
+            @if (count(data_get($snapshot, 'runtime_observations', [])) > 0)
+                <div class="mt-4 space-y-3">
+                    @foreach (data_get($snapshot, 'runtime_observations', []) as $observation)
+                        <div class="p-3 border-[2px] border-neutral-300 bg-neutral-50">
+                            <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-2">
+                                Runtime Observation: {{ data_get($observation, 'node_id') }}
+                            </div>
+                            <div class="space-y-1 font-mono text-xs">
+                                <div><span class="text-neutral-500">History head kind:</span> {{ data_get($observation, 'history_head_kind') }}</div>
+                                <div><span class="text-neutral-500">History head:</span> {{ data_get($observation, 'history_head') }}</div>
+                                <div><span class="text-neutral-500">State root:</span> {{ data_get($observation, 'state_root') }}</div>
+                                <div><span class="text-neutral-500">Event count:</span> {{ data_get($observation, 'event_count', 'UNKNOWN') }}</div>
+                                <div><span class="text-neutral-500">Reachable:</span> {{ data_get($observation, 'reachable') ? 'true' : 'false' }}</div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
         </div>
 
         <div class="p-5 border-[3px] border-neutral-400 bg-neutral-50">
