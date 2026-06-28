@@ -42,6 +42,9 @@ test('realm operations snapshot uses conservative unknown defaults without evide
         ->and($snapshot['verification']['semantic_health'])->toBe('UNKNOWN')
         ->and($snapshot['verification']['shadow_verify'])->toBe('UNKNOWN')
         ->and($snapshot['verification']['conformance'])->toBe('UNKNOWN')
+        ->and($snapshot['verification']['result'])->toBe(RealmOperationsService::VERIFICATION_RESULT_UNKNOWN)
+        ->and($snapshot['verification']['result_contract_ref'])->toBe(RealmOperationsService::VERIFIER_SEMANTIC_BOUNDARY_CONTRACT_REF)
+        ->and($snapshot['verification']['result_reason_code'])->toBe('VERIFIER_UNREACHABLE')
         ->and($snapshot['process_health']['status'])->toBe('UNKNOWN')
         ->and($snapshot['mesh_convergence']['result'])->toBe('UNKNOWN')
         ->and($snapshot['mesh_convergence']['scope'])->toBe('runtime_observation_equivalence');
@@ -113,6 +116,9 @@ test('realm operations snapshot aggregates sealed evidence and runtime probe', f
         ->and($snapshot['verification']['semantic_health'])->toBe('OK')
         ->and($snapshot['verification']['shadow_verify'])->toBe('OK')
         ->and($snapshot['verification']['conformance'])->toBe('OK')
+        ->and($snapshot['verification']['result'])->toBe(RealmOperationsService::VERIFICATION_RESULT_SUPPORTED)
+        ->and($snapshot['verification']['result_contract_ref'])->toBe(RealmOperationsService::VERIFIER_SEMANTIC_BOUNDARY_CONTRACT_REF)
+        ->and($snapshot['verification']['result_reason_code'])->toBeNull()
         ->and($snapshot['process_health']['status'])->toBe('OK')
         ->and($snapshot['evidence_refs']['package_count'])->toBe(1);
 });
@@ -159,6 +165,9 @@ test('realm operations snapshot reads runtime causality from identity realm stat
         ->and($snapshot['runtime']['reachable'])->toBeTrue()
         ->and($snapshot['verification']['semantic_health'])->toBe('UNKNOWN')
         ->and($snapshot['verification']['shadow_verify'])->toBe('UNKNOWN')
+        ->and($snapshot['verification']['result'])->toBe(RealmOperationsService::VERIFICATION_RESULT_BLOCKED)
+        ->and($snapshot['verification']['result_contract_ref'])->toBe(RealmOperationsService::VERIFIER_SEMANTIC_BOUNDARY_CONTRACT_REF)
+        ->and($snapshot['verification']['result_reason_code'])->toBe('UNSUPPORTED_HISTORY_CONTRACT')
         ->and($snapshot['verification']['verifier'])->toBe('rust-shadow')
         ->and($snapshot['verification']['reason'])->toBe('UNSUPPORTED_HISTORY_CONTRACT:NO_CANONICAL_REALM_EVENTS')
         ->and($snapshot['verification']['raw_event_count'])->toBe(5)
@@ -180,6 +189,8 @@ test('realm operations page renders read-only evidence surface', function () {
         ->assertSee('Aggregate', false)
         ->assertSee('Display', false)
         ->assertSee('Semantic health')
+        ->assertSee('Verification result', false)
+        ->assertSee('Verification contract', false)
         ->assertSee('Process Health (Not Semantic Health)');
 });
 
@@ -757,6 +768,43 @@ test('evidence graph validator rejects control-plane relations', function () {
 
     expect($result['valid'])->toBeFalse()
         ->and($codes)->toContain('FORBIDDEN_EDGE_RELATION');
+});
+
+test('verification result projection stays within verifier semantic boundary', function () {
+    config([
+        'sovereign.realm_operations.runtime_status_urls' => ['http://runtime.test'],
+    ]);
+
+    Http::fake([
+        'http://runtime.test/api/sl1e/runtime/status' => Http::response([
+            'identity_realm' => ['state_root' => 'root-a', 'event_count' => 5],
+        ], 200),
+        'http://runtime.test/api/sl1e/runtime/verification/shadow' => Http::response([
+            'verifier' => 'rust-shadow',
+            'status' => 'UNSUPPORTED',
+            'semantic_health' => 'UNKNOWN',
+            'reason' => 'UNSUPPORTED_HISTORY_CONTRACT:NO_CANONICAL_REALM_EVENTS',
+        ], 200),
+    ]);
+
+    $snapshot = app(RealmOperationsService::class)->snapshot($this->team->id);
+    $verification = $snapshot['verification'];
+
+    expect($verification['result'])->toBe(RealmOperationsService::VERIFICATION_RESULT_BLOCKED)
+        ->and($verification['result_contract_ref'])->toBe(RealmOperationsService::VERIFIER_SEMANTIC_BOUNDARY_CONTRACT_REF)
+        ->and($verification['result_reason_code'])->toBe('UNSUPPORTED_HISTORY_CONTRACT')
+        ->and(in_array($verification['result'], [
+            RealmOperationsService::VERIFICATION_RESULT_SUPPORTED,
+            RealmOperationsService::VERIFICATION_RESULT_BLOCKED,
+            RealmOperationsService::VERIFICATION_RESULT_UNKNOWN,
+        ], true))->toBeTrue();
+
+    $forbiddenKeys = ['action', 'repair', 'elect', 'promote', 'authority_change', 'governance_outcome'];
+    foreach ($forbiddenKeys as $key) {
+        expect($verification)->not->toHaveKey($key);
+    }
+
+    expect($verification['result'])->not->toBeIn(['HEALTHY', 'SAFE', 'SHOULD_REPAIR', 'INVALID']);
 });
 
 test('realm operations status normalization is conservative', function () {

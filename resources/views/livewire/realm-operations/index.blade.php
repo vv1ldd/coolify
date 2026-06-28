@@ -82,6 +82,16 @@
                         </span>
                     </div>
                     <div>
+                        <span class="text-neutral-500">Verification result:</span>
+                        <span class="{{ $statusClass(data_get($snapshot, 'verification.result')) }}">
+                            {{ data_get($snapshot, 'verification.result') }}
+                        </span>
+                    </div>
+                    <div><span class="text-neutral-500">Verification contract:</span> {{ data_get($snapshot, 'verification.result_contract_ref') }}</div>
+                    @if (data_get($snapshot, 'verification.result_reason_code'))
+                        <div><span class="text-neutral-500">Result reason code:</span> {{ data_get($snapshot, 'verification.result_reason_code') }}</div>
+                    @endif
+                    <div>
                         <span class="text-neutral-500">Certification:</span>
                         <span class="{{ $statusClass(data_get($snapshot, 'verification.conformance')) }}">
                             {{ data_get($snapshot, 'verification.conformance') }}

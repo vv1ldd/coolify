@@ -22,6 +22,14 @@ class RealmOperationsService
 
     public const STATUS_FAIL = 'FAIL';
 
+    public const VERIFICATION_RESULT_SUPPORTED = 'SUPPORTED';
+
+    public const VERIFICATION_RESULT_BLOCKED = 'BLOCKED';
+
+    public const VERIFICATION_RESULT_UNKNOWN = 'UNKNOWN';
+
+    public const VERIFIER_SEMANTIC_BOUNDARY_CONTRACT_REF = 'VerifierSemanticBoundary:v0.1';
+
     public function __construct(
         private readonly MeshConvergenceEvidenceProjection $meshConvergence = new MeshConvergenceEvidenceProjection,
         private readonly EvidenceGraphProjection $evidenceGraph = new EvidenceGraphProjection,
@@ -153,14 +161,21 @@ class RealmOperationsService
     private function verificationSection(array $evidence, array $verificationProbe): array
     {
         $remote = is_array($verificationProbe['remote'] ?? null) ? $verificationProbe['remote'] : [];
+        $rawStatus = $evidence['shadow_verify'] ?? $evidence['shadow_verification'] ?? $remote['status'] ?? null;
+        $shadowVerify = $this->normalizeStatus($rawStatus);
+        $reason = $remote['reason'] ?? null;
+        $result = $this->classifyVerificationResult($verificationProbe, $shadowVerify, $rawStatus, $reason);
 
         return [
             'semantic_health' => $this->normalizeStatus($evidence['semantic_health'] ?? $remote['semantic_health'] ?? null),
-            'shadow_verify' => $this->normalizeStatus($evidence['shadow_verify'] ?? $evidence['shadow_verification'] ?? $remote['status'] ?? null),
+            'shadow_verify' => $shadowVerify,
             'conformance' => $this->normalizeConformanceStatus($evidence['conformance'] ?? $evidence['certification_status'] ?? null),
+            'result' => $result['result'],
+            'result_contract_ref' => $result['result_contract_ref'],
+            'result_reason_code' => $result['result_reason_code'],
             'verifier' => $this->stringOrUnknown($remote['verifier'] ?? null),
             'checked_at' => $this->stringOrUnknown($remote['checked_at'] ?? null),
-            'reason' => $this->stringOrUnknown($remote['reason'] ?? null),
+            'reason' => $this->stringOrUnknown($reason),
             'observed_state_root' => $this->stringOrUnknown($remote['observed_state_root'] ?? null),
             'observed_history_head' => $this->stringOrUnknown($remote['observed_history_head'] ?? null),
             'raw_event_count' => $remote['raw_event_count'] ?? null,
@@ -168,6 +183,76 @@ class RealmOperationsService
             'reachable' => (bool) ($verificationProbe['reachable'] ?? false),
             'source' => 'Verifier',
         ];
+    }
+
+    /**
+     * Classify verifier output under VerifierSemanticBoundary:v0.1.
+     *
+     * Projection-only: describes proof state, not policy or governance action.
+     *
+     * @return array{result: string, result_contract_ref: string, result_reason_code: string|null}
+     */
+    private function classifyVerificationResult(
+        array $verificationProbe,
+        string $shadowVerify,
+        mixed $rawStatus,
+        mixed $reason,
+    ): array {
+        $contractRef = self::VERIFIER_SEMANTIC_BOUNDARY_CONTRACT_REF;
+
+        if (! ($verificationProbe['reachable'] ?? false)) {
+            return [
+                'result' => self::VERIFICATION_RESULT_UNKNOWN,
+                'result_contract_ref' => $contractRef,
+                'result_reason_code' => 'VERIFIER_UNREACHABLE',
+            ];
+        }
+
+        if ($shadowVerify === self::STATUS_OK) {
+            return [
+                'result' => self::VERIFICATION_RESULT_SUPPORTED,
+                'result_contract_ref' => $contractRef,
+                'result_reason_code' => null,
+            ];
+        }
+
+        if ($shadowVerify === self::STATUS_FAIL || $this->isBlockedProofCondition($rawStatus, $reason)) {
+            return [
+                'result' => self::VERIFICATION_RESULT_BLOCKED,
+                'result_contract_ref' => $contractRef,
+                'result_reason_code' => $this->extractReasonCode($reason) ?? 'PROOF_CONDITION_FAILED',
+            ];
+        }
+
+        return [
+            'result' => self::VERIFICATION_RESULT_UNKNOWN,
+            'result_contract_ref' => $contractRef,
+            'result_reason_code' => $this->extractReasonCode($reason) ?? 'INSUFFICIENT_PROOF',
+        ];
+    }
+
+    private function isBlockedProofCondition(mixed $rawStatus, mixed $reason): bool
+    {
+        $rawStatusUpper = strtoupper((string) ($rawStatus ?? ''));
+        $reasonUpper = strtoupper((string) ($reason ?? ''));
+
+        if (in_array($rawStatusUpper, ['UNSUPPORTED', 'BLOCKED', 'FAIL', 'FAILED', 'ERROR'], true)) {
+            return true;
+        }
+
+        return str_contains($reasonUpper, 'UNSUPPORTED_HISTORY_CONTRACT')
+            || str_contains($reasonUpper, 'NO_CANONICAL_REALM_EVENTS');
+    }
+
+    private function extractReasonCode(mixed $reason): ?string
+    {
+        if ($reason === null || $reason === '') {
+            return null;
+        }
+
+        $parts = explode(':', (string) $reason, 2);
+
+        return strtoupper(trim($parts[0]));
     }
 
     /**
