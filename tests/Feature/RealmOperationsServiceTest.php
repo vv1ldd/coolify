@@ -397,19 +397,51 @@ test('realm operations evidence graph exposes navigable nodes and edges', functi
         ->and($graph['schema_ref'])->toBe('EvidenceGraphSchema:v0.3')
         ->and($snapshot['graph_validation']['valid'])->toBeTrue()
         ->and($snapshot['graph_validation']['schema_ref'])->toBe('EvidenceGraphSchema:v0.3')
-        ->and($snapshot['graph_validation']['checked_nodes'])->toBe(9)
-        ->and($snapshot['graph_validation']['checked_edges'])->toBe(5)
+        ->and($snapshot['graph_validation']['checked_nodes'])->toBe(13)
+        ->and($snapshot['graph_validation']['checked_edges'])->toBe(11)
         ->and(collect($graph['nodes'])->pluck('id'))->toContain(
             'artifact',
+            'deployment-evidence',
             'protocol-identity',
             'runtime-observation:lena',
             'runtime-observation:lena-1-gcl',
+            'history-anchor:lena',
+            'history-anchor:lena-1-gcl',
+            'replay-input:lena',
             'mesh-convergence-evidence',
             'RuntimeComparisonContract:v0.1',
             'verification-report',
             'semantic-health',
             'process-health',
         );
+
+    $lineageChain = [
+        ['from' => 'artifact', 'to' => 'deployment-evidence', 'relation' => 'produced_by'],
+        ['from' => 'deployment-evidence', 'to' => 'runtime-observation:lena', 'relation' => 'resulted_in'],
+        ['from' => 'runtime-observation:lena', 'to' => 'history-anchor:lena', 'relation' => 'anchored_by'],
+        ['from' => 'history-anchor:lena', 'to' => 'replay-input:lena', 'relation' => 'provides_input_for'],
+        ['from' => 'replay-input:lena', 'to' => 'verification-report', 'relation' => 'evaluated_by'],
+    ];
+
+    foreach ($lineageChain as $expectedEdge) {
+        expect(collect($graph['edges'])->contains(
+            fn (array $edge): bool => $edge['from'] === $expectedEdge['from']
+                && $edge['to'] === $expectedEdge['to']
+                && $edge['relation'] === $expectedEdge['relation']
+        ))->toBeTrue();
+    }
+
+    $relations = collect($graph['edges'])->pluck('relation')->all();
+    expect($relations)->not->toContain('controls', 'owns', 'authorizes');
+
+    $deploymentNode = collect($graph['nodes'])->firstWhere('id', 'deployment-evidence');
+    expect($deploymentNode['details'])->toHaveKeys(['artifact_id', 'deployment_id', 'evidence_source'])
+        ->and($deploymentNode['details'])->not->toHaveKeys(['owner', 'controller', 'desired_state', 'authority']);
+
+    expect(collect($graph['edges'])->contains(
+        fn (array $edge): bool => str_starts_with((string) ($edge['from'] ?? ''), 'replay-input:')
+            && ($edge['to'] ?? null) === 'semantic-health'
+    ))->toBeFalse();
 
     $meshNode = collect($graph['nodes'])->firstWhere('id', 'mesh-convergence-evidence');
     expect($meshNode['value'])->toBe('DIVERGED')
@@ -475,6 +507,9 @@ test('realm operations evidence graph projection is deterministic over same evid
     $stripVolatile = function (array $graph): array {
         $graph['nodes'] = array_map(function (array $node): array {
             unset($node['observed_at']);
+            if (isset($node['details']['captured_at'])) {
+                unset($node['details']['captured_at']);
+            }
 
             return $node;
         }, $graph['nodes']);

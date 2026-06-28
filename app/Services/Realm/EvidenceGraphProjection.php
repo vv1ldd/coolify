@@ -31,8 +31,11 @@ class EvidenceGraphProjection
         $this->addProtocolNode($snapshot['protocol'] ?? []);
         $this->addRuntimeObservationNodes($snapshot['runtime_observations'] ?? []);
         $this->addMeshConvergenceNodes($snapshot['mesh_convergence'] ?? []);
-        $this->addVerificationNodes($snapshot['verification'] ?? [], $snapshot['runtime'] ?? []);
+        $this->addVerificationNodes($snapshot['verification'] ?? []);
         $this->addProcessHealthNode($snapshot['process_health'] ?? []);
+        $this->attachDeploymentEvidenceLineage($snapshot['artifact'] ?? []);
+        $this->attachHistoryAnchorLineage($snapshot['runtime_observations'] ?? []);
+        $this->attachReplayInputLineage($snapshot['verification'] ?? [], $snapshot['runtime'] ?? []);
 
         return [
             'schema_ref' => EvidenceGraphSchema::SCHEMA_REF,
@@ -181,15 +184,13 @@ class EvidenceGraphProjection
 
     /**
      * @param  array<string, mixed>  $verification
-     * @param  array<string, mixed>  $runtime
      */
-    private function addVerificationNodes(array $verification, array $runtime): void
+    private function addVerificationNodes(array $verification): void
     {
         $verificationNodeId = 'verification-report';
         $semanticNodeId = 'semantic-health';
         $reachable = (bool) ($verification['reachable'] ?? false);
         $semanticHealth = (string) ($verification['semantic_health'] ?? RealmOperationsService::STATUS_UNKNOWN);
-        $primaryRuntimeNodeId = $this->firstReachableRuntimeObservationNodeId();
 
         $this->addNode([
             'id' => $verificationNodeId,
@@ -224,17 +225,6 @@ class EvidenceGraphProjection
                 'conformance' => $verification['conformance'] ?? RealmOperationsService::STATUS_UNKNOWN,
             ],
         ]);
-
-        if ($primaryRuntimeNodeId !== null && ($runtime['reachable'] ?? false) === true) {
-            $this->addEdge([
-                'from' => $primaryRuntimeNodeId,
-                'to' => $verificationNodeId,
-                'edge_kind' => EvidenceGraphSchema::EDGE_KIND_LINEAGE,
-                'relation' => 'observed_from',
-                'reason' => 'Shadow verification consumes runtime observation as replay input.',
-                'evidence_ref' => 'verification-report:shadow',
-            ]);
-        }
 
         if ($reachable && $semanticHealth === RealmOperationsService::STATUS_OK) {
             $this->addEdge([
@@ -282,6 +272,170 @@ class EvidenceGraphProjection
         ]);
     }
 
+    /**
+     * @param  array<string, mixed>  $artifact
+     */
+    private function attachDeploymentEvidenceLineage(array $artifact): void
+    {
+        $imageRef = (string) ($artifact['image_ref'] ?? RealmOperationsService::STATUS_UNKNOWN);
+        $imageDigest = (string) ($artifact['image_digest'] ?? RealmOperationsService::STATUS_UNKNOWN);
+        $deploymentId = $imageDigest !== RealmOperationsService::STATUS_UNKNOWN
+            ? $imageDigest
+            : $imageRef;
+
+        $this->addNode([
+            'id' => 'deployment-evidence',
+            'kind' => 'DeploymentEvidence',
+            'value' => $deploymentId,
+            'trust_state' => $this->trustStateFromValue($deploymentId),
+            'authority' => 'Deployment',
+            'source' => (string) ($artifact['source'] ?? 'Console'),
+            'evidence_ref' => 'deployment-evidence:artifact',
+            'observed_at' => null,
+            'details' => [
+                'artifact_id' => 'artifact',
+                'deployment_id' => $deploymentId,
+                'evidence_source' => (string) ($artifact['source'] ?? 'Console'),
+            ],
+        ]);
+
+        $this->addEdge([
+            'from' => 'artifact',
+            'to' => 'deployment-evidence',
+            'edge_kind' => EvidenceGraphSchema::EDGE_KIND_LINEAGE,
+            'relation' => 'produced_by',
+            'reason' => 'Deployment evidence is produced from the deployed artifact reference.',
+            'evidence_ref' => 'deployment-evidence:artifact',
+        ]);
+
+        foreach ($this->runtimeObservationNodeIds() as $runtimeNodeId) {
+            $this->addEdge([
+                'from' => 'deployment-evidence',
+                'to' => $runtimeNodeId,
+                'edge_kind' => EvidenceGraphSchema::EDGE_KIND_LINEAGE,
+                'relation' => 'resulted_in',
+                'reason' => 'Runtime observation records the state produced by deployment evidence.',
+                'evidence_ref' => 'deployment-evidence:artifact',
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $observations
+     */
+    private function attachHistoryAnchorLineage(array $observations): void
+    {
+        foreach ($observations as $observation) {
+            $nodeId = (string) ($observation['node_id'] ?? 'unknown');
+            $runtimeNodeId = 'runtime-observation:'.$nodeId;
+            $historyAnchorId = 'history-anchor:'.$nodeId;
+
+            if (! $this->hasNode($runtimeNodeId)) {
+                continue;
+            }
+
+            $historyHead = (string) ($observation['history_head'] ?? RealmOperationsService::STATUS_UNKNOWN);
+            $historyHeadKind = (string) ($observation['history_head_kind'] ?? RealmOperationsService::STATUS_UNKNOWN);
+
+            $this->addNode([
+                'id' => $historyAnchorId,
+                'kind' => 'HistoryAnchor',
+                'value' => $historyHead,
+                'trust_state' => $this->trustStateFromValue($historyHead),
+                'authority' => 'Runtime',
+                'source' => (string) ($observation['source'] ?? 'Runtime Endpoint'),
+                'evidence_ref' => 'history-anchor:'.$nodeId,
+                'observed_at' => $observation['observed_at'] ?? null,
+                'details' => [
+                    'history_head' => $historyHead,
+                    'history_head_kind' => $historyHeadKind,
+                    'event_count' => $observation['event_count'] ?? null,
+                    'captured_at' => $observation['observed_at'] ?? null,
+                ],
+            ]);
+
+            $this->addEdge([
+                'from' => $runtimeNodeId,
+                'to' => $historyAnchorId,
+                'edge_kind' => EvidenceGraphSchema::EDGE_KIND_LINEAGE,
+                'relation' => 'anchored_by',
+                'reason' => 'Runtime observation is anchored to the history point captured at observation time.',
+                'evidence_ref' => 'history-anchor:'.$nodeId,
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $verification
+     * @param  array<string, mixed>  $runtime
+     */
+    private function attachReplayInputLineage(array $verification, array $runtime): void
+    {
+        $primaryRuntimeNodeId = $this->firstReachableRuntimeObservationNodeId();
+        if ($primaryRuntimeNodeId === null || ($runtime['reachable'] ?? false) !== true) {
+            return;
+        }
+
+        $nodeId = str_replace('runtime-observation:', '', $primaryRuntimeNodeId);
+        $historyAnchorId = 'history-anchor:'.$nodeId;
+        $replayInputId = 'replay-input:'.$nodeId;
+
+        if (! $this->hasNode($historyAnchorId)) {
+            return;
+        }
+
+        $this->addNode([
+            'id' => $replayInputId,
+            'kind' => 'ReplayInput',
+            'value' => $historyAnchorId,
+            'trust_state' => RealmOperationsService::STATUS_OK,
+            'authority' => 'Runtime',
+            'source' => 'Runtime Endpoint',
+            'evidence_ref' => 'replay-input:'.$nodeId,
+            'observed_at' => $verification['checked_at'] ?? null,
+            'details' => [
+                'source_runtime_observation' => $primaryRuntimeNodeId,
+                'source_history_anchor' => $historyAnchorId,
+            ],
+        ]);
+
+        $this->addEdge([
+            'from' => $historyAnchorId,
+            'to' => $replayInputId,
+            'edge_kind' => EvidenceGraphSchema::EDGE_KIND_LINEAGE,
+            'relation' => 'provides_input_for',
+            'reason' => 'History anchor provides replay input for shadow verification.',
+            'evidence_ref' => 'replay-input:'.$nodeId,
+        ]);
+
+        $this->addEdge([
+            'from' => $replayInputId,
+            'to' => 'verification-report',
+            'edge_kind' => EvidenceGraphSchema::EDGE_KIND_EXPLANATION,
+            'relation' => 'evaluated_by',
+            'reason' => 'Shadow verification evaluates replay input; replay is input, not proof output.',
+            'evidence_ref' => 'verification-report:shadow',
+        ]);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function runtimeObservationNodeIds(): array
+    {
+        return collect($this->nodes)
+            ->filter(fn (array $node): bool => ($node['kind'] ?? null) === 'RuntimeObservation')
+            ->pluck('id')
+            ->map(fn (mixed $id): string => (string) $id)
+            ->values()
+            ->all();
+    }
+
+    private function hasNode(string $nodeId): bool
+    {
+        return collect($this->nodes)->contains(fn (array $node): bool => ($node['id'] ?? null) === $nodeId);
+    }
+
     private function firstReachableRuntimeObservationNodeId(): ?string
     {
         foreach ($this->nodes as $node) {
@@ -321,6 +475,9 @@ class EvidenceGraphProjection
             'evaluated_by',
             'observed_from',
             'produced_by',
+            'resulted_in',
+            'anchored_by',
+            'provides_input_for',
         ];
 
         $indexByTarget = [];

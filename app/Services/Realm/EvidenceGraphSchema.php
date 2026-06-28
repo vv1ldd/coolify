@@ -27,8 +27,11 @@ class EvidenceGraphSchema
             'schema_ref' => self::SCHEMA_REF,
             'node_kinds' => [
                 'Artifact',
+                'DeploymentEvidence',
                 'ProtocolIdentity',
                 'RuntimeObservation',
+                'HistoryAnchor',
+                'ReplayInput',
                 'MeshConvergenceEvidence',
                 'ComparisonContract',
                 'VerificationReport',
@@ -65,8 +68,11 @@ class EvidenceGraphSchema
             ],
             'authority_bearing_node_kinds' => [
                 'Artifact',
+                'DeploymentEvidence',
                 'ProtocolIdentity',
                 'RuntimeObservation',
+                'HistoryAnchor',
+                'ReplayInput',
                 'MeshConvergenceEvidence',
                 'ComparisonContract',
                 'VerificationReport',
