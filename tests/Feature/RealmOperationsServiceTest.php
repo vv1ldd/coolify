@@ -56,6 +56,14 @@ test('realm operations snapshot aggregates sealed evidence and runtime probe', f
             ],
             'history_head' => 'head-from-runtime',
         ], 200),
+        'http://runtime.test/api/sl1e/runtime/verification/shadow' => Http::response([
+            'verifier' => 'rust-shadow',
+            'status' => 'OK',
+            'semantic_health' => 'OK',
+            'checked_at' => '2026-06-27T00:02:00.000Z',
+            'observed_state_root' => 'root-from-runtime',
+            'observed_history_head' => 'head-from-runtime',
+        ], 200),
     ]);
 
     SimpleL1EvidencePackage::create([
@@ -124,6 +132,17 @@ test('realm operations snapshot reads runtime causality from identity realm stat
                 ],
             ],
         ], 200),
+        'http://runtime.test/api/sl1e/runtime/verification/shadow' => Http::response([
+            'verifier' => 'rust-shadow',
+            'status' => 'UNSUPPORTED',
+            'semantic_health' => 'UNKNOWN',
+            'checked_at' => '2026-06-27T00:02:00.000Z',
+            'raw_event_count' => 5,
+            'canonical_event_count' => 0,
+            'reason' => 'UNSUPPORTED_HISTORY_CONTRACT:NO_CANONICAL_REALM_EVENTS',
+            'observed_state_root' => 'root-from-runtime',
+            'observed_history_head' => 'event-log-head',
+        ], 200),
     ]);
 
     $snapshot = app(RealmOperationsService::class)->snapshot($this->team->id);
@@ -133,7 +152,13 @@ test('realm operations snapshot reads runtime causality from identity realm stat
         ->and($snapshot['runtime']['last_transition'])->toBe('ACCOUNT_PROVENANCE_ADMISSION')
         ->and($snapshot['runtime']['state_root'])->toBe('root-from-runtime')
         ->and($snapshot['runtime']['event_count'])->toBe(5)
-        ->and($snapshot['runtime']['reachable'])->toBeTrue();
+        ->and($snapshot['runtime']['reachable'])->toBeTrue()
+        ->and($snapshot['verification']['semantic_health'])->toBe('UNKNOWN')
+        ->and($snapshot['verification']['shadow_verify'])->toBe('UNKNOWN')
+        ->and($snapshot['verification']['verifier'])->toBe('rust-shadow')
+        ->and($snapshot['verification']['reason'])->toBe('UNSUPPORTED_HISTORY_CONTRACT:NO_CANONICAL_REALM_EVENTS')
+        ->and($snapshot['verification']['raw_event_count'])->toBe(5)
+        ->and($snapshot['verification']['canonical_event_count'])->toBe(0);
 });
 
 test('realm operations page renders read-only evidence surface', function () {

@@ -29,6 +29,7 @@ class RealmOperationsService
     {
         $evidence = $this->latestEvidenceMetadata($teamId);
         $runtimeProbe = $this->probeRuntimeStatus();
+        $verificationProbe = $this->probeShadowVerification();
         $processHealth = $this->latestProcessHealth($teamId);
 
         return [
@@ -47,12 +48,13 @@ class RealmOperationsService
             'artifact' => $this->artifactSection($evidence),
             'protocol' => $this->protocolSection($evidence),
             'runtime' => $this->runtimeSection($evidence, $runtimeProbe),
-            'verification' => $this->verificationSection($evidence),
+            'verification' => $this->verificationSection($evidence, $verificationProbe),
             'process_health' => $processHealth,
             'evidence_refs' => [
                 'package_count' => $this->evidencePackageCount($teamId),
                 'latest_package_sealed_at' => $this->latestEvidenceSealedAt($teamId),
                 'runtime_checked_url' => $runtimeProbe['checked_url'] ?? null,
+                'verifier_checked_url' => $verificationProbe['checked_url'] ?? null,
             ],
         ];
     }
@@ -129,12 +131,22 @@ class RealmOperationsService
      * @param  array<string, mixed>  $evidence
      * @return array<string, mixed>
      */
-    private function verificationSection(array $evidence): array
+    private function verificationSection(array $evidence, array $verificationProbe): array
     {
+        $remote = is_array($verificationProbe['remote'] ?? null) ? $verificationProbe['remote'] : [];
+
         return [
-            'semantic_health' => $this->normalizeStatus($evidence['semantic_health'] ?? null),
-            'shadow_verify' => $this->normalizeStatus($evidence['shadow_verify'] ?? $evidence['shadow_verification'] ?? null),
+            'semantic_health' => $this->normalizeStatus($evidence['semantic_health'] ?? $remote['semantic_health'] ?? null),
+            'shadow_verify' => $this->normalizeStatus($evidence['shadow_verify'] ?? $evidence['shadow_verification'] ?? $remote['status'] ?? null),
             'conformance' => $this->normalizeConformanceStatus($evidence['conformance'] ?? $evidence['certification_status'] ?? null),
+            'verifier' => $this->stringOrUnknown($remote['verifier'] ?? null),
+            'checked_at' => $this->stringOrUnknown($remote['checked_at'] ?? null),
+            'reason' => $this->stringOrUnknown($remote['reason'] ?? null),
+            'observed_state_root' => $this->stringOrUnknown($remote['observed_state_root'] ?? null),
+            'observed_history_head' => $this->stringOrUnknown($remote['observed_history_head'] ?? null),
+            'raw_event_count' => $remote['raw_event_count'] ?? null,
+            'canonical_event_count' => $remote['canonical_event_count'] ?? null,
+            'reachable' => (bool) ($verificationProbe['reachable'] ?? false),
             'source' => 'Verifier',
         ];
     }
@@ -184,6 +196,44 @@ class RealmOperationsService
                 $response = Http::timeout((int) config('sovereign.realm_operations.timeout', 10))
                     ->acceptJson()
                     ->get($baseUrl.'/api/sl1e/runtime/status');
+
+                if ($response->ok()) {
+                    $payload = $response->json();
+
+                    return [
+                        'reachable' => true,
+                        'checked_url' => $baseUrl,
+                        'remote' => is_array($payload) ? $payload : [],
+                        'errors' => $errors,
+                    ];
+                }
+
+                $errors[$baseUrl] = 'HTTP '.$response->status();
+            } catch (\Throwable $error) {
+                $errors[$baseUrl] = $error->getMessage();
+            }
+        }
+
+        return [
+            'reachable' => false,
+            'checked_url' => null,
+            'remote' => [],
+            'errors' => $errors,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function probeShadowVerification(): array
+    {
+        $errors = [];
+
+        foreach ($this->runtimeStatusUrls() as $baseUrl) {
+            try {
+                $response = Http::timeout((int) config('sovereign.realm_operations.timeout', 10))
+                    ->acceptJson()
+                    ->get($baseUrl.'/api/sl1e/runtime/verification/shadow');
 
                 if ($response->ok()) {
                     $payload = $response->json();

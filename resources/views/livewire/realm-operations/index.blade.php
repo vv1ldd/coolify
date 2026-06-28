@@ -87,6 +87,9 @@
                             {{ data_get($snapshot, 'verification.conformance') }}
                         </span>
                     </div>
+                    <div><span class="text-neutral-500">Verifier:</span> {{ data_get($snapshot, 'verification.verifier') }}</div>
+                    <div><span class="text-neutral-500">Reason:</span> {{ data_get($snapshot, 'verification.reason') }}</div>
+                    <div><span class="text-neutral-500">Checked at:</span> {{ data_get($snapshot, 'verification.checked_at') }}</div>
                     <div class="text-[10px] uppercase tracking-widest text-neutral-400">Source: {{ data_get($snapshot, 'verification.source') }}</div>
                 </div>
             </div>
