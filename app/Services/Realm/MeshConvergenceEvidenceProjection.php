@@ -212,13 +212,22 @@ class MeshConvergenceEvidenceProjection
         string $reason,
         string $reasonCode,
     ): array {
-        $nodeIds = collect($observations)
-            ->pluck('node_id')
-            ->filter()
+        // evidence_ref must be content-derived, not time-derived, so that the
+        // same evidence set yields the same identity (Law of Independent Projection).
+        $fingerprint = collect($observations)
+            ->map(fn (array $observation): string => implode(':', [
+                (string) ($observation['node_id'] ?? 'unknown'),
+                (string) ($observation['history_head_kind'] ?? ''),
+                (string) ($observation['history_head'] ?? ''),
+                (string) ($observation['state_root'] ?? ''),
+                (string) ($observation['event_count'] ?? ''),
+                ($observation['reachable'] ?? false) ? '1' : '0',
+            ]))
+            ->sort()
             ->values()
-            ->all();
+            ->implode('|');
 
-        $evidenceRef = 'runtime-observation-set:'.sha1(implode('|', $nodeIds).':'.$observedAt);
+        $evidenceRef = 'runtime-observation-set:'.sha1($fingerprint);
 
         return [
             'id' => 'mesh-convergence:'.sha1($evidenceRef.':'.$result),

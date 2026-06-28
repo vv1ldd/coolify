@@ -351,6 +351,130 @@ test('realm operations mesh convergence stays unknown when one node is unreachab
         ->and($snapshot['runtime_observations'][1]['reachable'])->toBeFalse();
 });
 
+test('realm operations evidence graph exposes navigable nodes and edges', function () {
+    config([
+        'sovereign.realm_operations.runtime_status_urls' => ['http://lena.test'],
+        'sovereign.realm_operations.runtime_node_observations' => [
+            ['node_id' => 'lena', 'url' => 'http://lena.test'],
+            ['node_id' => 'lena-1-gcl', 'url' => 'http://lena-1-gcl.test'],
+        ],
+    ]);
+
+    $runtimePayload = [
+        'identity_realm' => [
+            'state_root' => 'root-a',
+            'event_count' => 5,
+            'history_head' => 'head-a',
+            'history_head_kind' => 'event_log_hash',
+        ],
+    ];
+
+    Http::fake([
+        'http://lena.test/api/sl1e/runtime/status' => Http::response($runtimePayload, 200),
+        'http://lena-1-gcl.test/api/sl1e/runtime/status' => Http::response([
+            'identity_realm' => [
+                'state_root' => 'root-b',
+                'event_count' => 5,
+                'history_head' => 'head-b',
+                'history_head_kind' => 'event_log_hash',
+            ],
+        ], 200),
+        'http://lena.test/api/sl1e/runtime/verification/shadow' => Http::response([
+            'verifier' => 'rust-shadow',
+            'status' => 'UNSUPPORTED',
+            'semantic_health' => 'UNKNOWN',
+            'reason' => 'UNSUPPORTED_HISTORY_CONTRACT:NO_CANONICAL_REALM_EVENTS',
+        ], 200),
+        'http://lena-1-gcl.test/api/sl1e/runtime/verification/shadow' => Http::response([], 404),
+    ]);
+
+    $snapshot = app(RealmOperationsService::class)->snapshot($this->team->id);
+    $graph = $snapshot['evidence_graph'];
+
+    expect($graph)->toHaveKeys(['nodes', 'edges'])
+        ->and(collect($graph['nodes'])->pluck('id'))->toContain(
+            'artifact',
+            'protocol-identity',
+            'runtime-observation:lena',
+            'runtime-observation:lena-1-gcl',
+            'mesh-convergence-evidence',
+            'RuntimeComparisonContract:v0.1',
+            'verification-report',
+            'semantic-health',
+            'process-health',
+        );
+
+    $meshNode = collect($graph['nodes'])->firstWhere('id', 'mesh-convergence-evidence');
+    expect($meshNode['value'])->toBe('DIVERGED')
+        ->and($meshNode['derived_from'])->toContain('runtime-observation:lena', 'runtime-observation:lena-1-gcl');
+
+    $semanticNode = collect($graph['nodes'])->firstWhere('id', 'semantic-health');
+    expect($semanticNode['trust_state'])->toBe('UNKNOWN');
+
+    $blockedEdge = collect($graph['edges'])->first(
+        fn (array $edge): bool => $edge['from'] === 'semantic-health'
+            && $edge['to'] === 'verification-report'
+            && $edge['relation'] === 'blocked_by'
+    );
+    expect($blockedEdge)->not->toBeNull()
+        ->and($blockedEdge['reason'])->toContain('UNSUPPORTED_HISTORY_CONTRACT');
+});
+
+test('realm operations evidence graph projection is deterministic over same evidence', function () {
+    config([
+        'sovereign.realm_operations.runtime_status_urls' => ['http://lena.test'],
+        'sovereign.realm_operations.runtime_node_observations' => [
+            ['node_id' => 'lena', 'url' => 'http://lena.test'],
+            ['node_id' => 'lena-1-gcl', 'url' => 'http://lena-1-gcl.test'],
+        ],
+    ]);
+
+    $lena = [
+        'identity_realm' => [
+            'state_root' => 'root-a',
+            'event_count' => 5,
+            'history_head' => 'head-a',
+            'history_head_kind' => 'event_log_hash',
+        ],
+    ];
+    $lena1 = [
+        'identity_realm' => [
+            'state_root' => 'root-b',
+            'event_count' => 5,
+            'history_head' => 'head-b',
+            'history_head_kind' => 'event_log_hash',
+        ],
+    ];
+
+    Http::fake([
+        'http://lena.test/api/sl1e/runtime/status' => Http::response($lena, 200),
+        'http://lena-1-gcl.test/api/sl1e/runtime/status' => Http::response($lena1, 200),
+        'http://lena.test/api/sl1e/runtime/verification/shadow' => Http::response([], 404),
+        'http://lena-1-gcl.test/api/sl1e/runtime/verification/shadow' => Http::response([], 404),
+    ]);
+
+    $this->travelTo(now()->startOfMinute());
+    $graphFirst = app(RealmOperationsService::class)->snapshot($this->team->id)['evidence_graph'];
+
+    // Cross a wall-clock boundary to prove the graph identity is content-derived,
+    // not time-derived (Law of Independent Projection over the whole structure).
+    $this->travel(90)->seconds();
+    $graphSecond = app(RealmOperationsService::class)->snapshot($this->team->id)['evidence_graph'];
+    $this->travelBack();
+
+    $stripVolatile = function (array $graph): array {
+        $graph['nodes'] = array_map(function (array $node): array {
+            unset($node['observed_at']);
+
+            return $node;
+        }, $graph['nodes']);
+
+        return $graph;
+    };
+
+    expect($stripVolatile($graphFirst))->toEqual($stripVolatile($graphSecond));
+});
+
 test('realm operations status normalization is conservative', function () {
     $service = app(RealmOperationsService::class);
 

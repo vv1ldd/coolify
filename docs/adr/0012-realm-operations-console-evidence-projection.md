@@ -187,6 +187,73 @@ scope: runtime_observation_equivalence
 does not imply global Realm health. It only claims that compared runtime fields
 matched under an explicit comparison contract.
 
+**Law of Independent Projection**
+
+Independent projections over the same evidence and the same comparison contract
+must produce the same derived conclusion.
+
+```text
+same evidence + same contract + different conclusion
+  -> projection defect
+```
+
+A disagreement between projection instances is not Realm disagreement. It means
+the projection logic is no longer deterministic over evidence.
+
+**Law of Explanation Preservation**
+
+A derived conclusion should preserve the path needed to explain how it was
+produced.
+
+It is not enough to keep only:
+
+```json
+{
+  "result": "DIVERGED"
+}
+```
+
+A projection should also expose the inputs and contract that allowed the result:
+
+```json
+{
+  "result": "DIVERGED",
+  "derived_from": [
+    "runtime-observation-lena",
+    "runtime-observation-lena-1-gcl"
+  ],
+  "contract": "RuntimeComparisonContract:v0.1"
+}
+```
+
+**Law of Causal Navigation**
+
+A projection should allow navigation from conclusion back to its supporting
+evidence.
+
+```text
+Explanation Preservation = the path exists
+Causal Navigation        = the path is traversable
+```
+
+Every conclusion node must expose derivation edges such as `derived_from`,
+`evaluated_by`, or `blocked_by`. Unknown conclusions are not dead ends; they
+should identify the missing proof path.
+
+```text
+SemanticHealth UNKNOWN
+  -> blocked_by VerificationReport missing
+  -> blocked_by Replay not executed
+  -> derived_from Runtime history evidence
+```
+
+The UI boundary is:
+
+```text
+Blade may traverse.
+Blade may not infer.
+```
+
 ### Evolution principle
 
 This is a product-development rule, not a data invariant.

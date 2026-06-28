@@ -24,6 +24,7 @@ class RealmOperationsService
 
     public function __construct(
         private readonly MeshConvergenceEvidenceProjection $meshConvergence = new MeshConvergenceEvidenceProjection,
+        private readonly EvidenceGraphProjection $evidenceGraph = new EvidenceGraphProjection,
     ) {}
 
     /**
@@ -38,7 +39,7 @@ class RealmOperationsService
         $processHealth = $this->latestProcessHealth($teamId);
         $meshConvergence = $this->meshConvergence->project($runtimeObservations);
 
-        return [
+        $snapshot = [
             'generated_at' => now()->toIso8601String(),
             'boundary' => [
                 'rule' => 'Observe -> Aggregate -> Display',
@@ -66,6 +67,10 @@ class RealmOperationsService
                 'mesh_convergence_evidence_ref' => $meshConvergence['evidence_ref'] ?? null,
             ],
         ];
+
+        $snapshot['evidence_graph'] = $this->evidenceGraph->project($snapshot);
+
+        return $snapshot;
     }
 
     /**

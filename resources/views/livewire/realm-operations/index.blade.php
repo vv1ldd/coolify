@@ -149,6 +149,44 @@
         </div>
 
         <div class="p-5 border-[3px] border-neutral-300">
+            <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Evidence Graph Navigation</div>
+            <div class="text-[10px] uppercase tracking-widest text-neutral-400 mb-4">Blade traverses. Blade does not infer.</div>
+
+            @if (count(data_get($snapshot, 'evidence_graph.nodes', [])) > 0)
+                <div class="space-y-3">
+                    @foreach (data_get($snapshot, 'evidence_graph.nodes', []) as $node)
+                        <div class="p-3 border-[2px] border-neutral-300 bg-neutral-50">
+                            <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-2">
+                                {{ data_get($node, 'kind') }}: {{ data_get($node, 'id') }}
+                            </div>
+                            <div class="space-y-1 font-mono text-xs">
+                                <div><span class="text-neutral-500">Value:</span> {{ data_get($node, 'value') }}</div>
+                                <div><span class="text-neutral-500">Trust:</span> {{ data_get($node, 'trust_state') }}</div>
+                                <div><span class="text-neutral-500">Authority:</span> {{ data_get($node, 'authority') }}</div>
+                                <div><span class="text-neutral-500">Source:</span> {{ data_get($node, 'source') }}</div>
+                                @if (count(data_get($node, 'derived_from', [])) > 0)
+                                    <div><span class="text-neutral-500">Derived from:</span> {{ implode(', ', data_get($node, 'derived_from', [])) }}</div>
+                                @endif
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+
+                <div class="mt-4 space-y-2">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500">Evidence Edges</div>
+                    @foreach (data_get($snapshot, 'evidence_graph.edges', []) as $edge)
+                        <div class="p-2 border border-neutral-200 font-mono text-xs">
+                            <span class="text-neutral-500">{{ data_get($edge, 'from') }}</span>
+                            <span class="text-neutral-400"> --{{ data_get($edge, 'relation') }}--> </span>
+                            <span class="text-neutral-500">{{ data_get($edge, 'to') }}</span>
+                            <div class="pt-1 text-neutral-400">{{ data_get($edge, 'reason') }}</div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+
+        <div class="p-5 border-[3px] border-neutral-300">
             <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Evidence References</div>
             <pre class="p-3 overflow-auto text-xs font-mono bg-neutral-100 dark:bg-neutral-900">{{ json_encode(data_get($snapshot, 'evidence_refs', []), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
             <div class="pt-2 text-[10px] font-mono uppercase tracking-widest text-neutral-400">
