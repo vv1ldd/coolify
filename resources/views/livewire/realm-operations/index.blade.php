@@ -177,13 +177,30 @@
                     @foreach (data_get($snapshot, 'evidence_graph.edges', []) as $edge)
                         <div class="p-2 border border-neutral-200 font-mono text-xs">
                             <span class="text-neutral-500">{{ data_get($edge, 'from') }}</span>
-                            <span class="text-neutral-400"> --{{ data_get($edge, 'relation') }}--> </span>
+                            <span class="text-neutral-400"> --{{ data_get($edge, 'relation') }} / {{ data_get($edge, 'edge_kind') }}--> </span>
                             <span class="text-neutral-500">{{ data_get($edge, 'to') }}</span>
                             <div class="pt-1 text-neutral-400">{{ data_get($edge, 'reason') }}</div>
                         </div>
                     @endforeach
                 </div>
             @endif
+        </div>
+
+        <div class="p-5 border-[3px] border-neutral-300">
+            <div class="text-[10px] font-black uppercase tracking-widest text-neutral-500 mb-3">Evidence Graph Validation</div>
+            <div class="space-y-2 font-mono text-sm">
+                <div>
+                    <span class="text-neutral-500">Valid:</span>
+                    <span class="{{ data_get($snapshot, 'graph_validation.valid') ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400' }}">
+                        {{ data_get($snapshot, 'graph_validation.valid') ? 'true' : 'false' }}
+                    </span>
+                </div>
+                <div><span class="text-neutral-500">Schema:</span> {{ data_get($snapshot, 'graph_validation.schema_ref') }}</div>
+                <div><span class="text-neutral-500">Validator:</span> {{ data_get($snapshot, 'graph_validation.validator_version') }}</div>
+                <div><span class="text-neutral-500">Checked nodes:</span> {{ data_get($snapshot, 'graph_validation.checked_nodes') }}</div>
+                <div><span class="text-neutral-500">Checked edges:</span> {{ data_get($snapshot, 'graph_validation.checked_edges') }}</div>
+                <div class="text-[10px] uppercase tracking-widest text-neutral-400">Valid graph means honest explanation structure, not valid Realm.</div>
+            </div>
         </div>
 
         <div class="p-5 border-[3px] border-neutral-300">

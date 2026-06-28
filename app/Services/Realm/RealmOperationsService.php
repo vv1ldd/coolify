@@ -25,6 +25,7 @@ class RealmOperationsService
     public function __construct(
         private readonly MeshConvergenceEvidenceProjection $meshConvergence = new MeshConvergenceEvidenceProjection,
         private readonly EvidenceGraphProjection $evidenceGraph = new EvidenceGraphProjection,
+        private readonly EvidenceGraphValidator $evidenceGraphValidator = new EvidenceGraphValidator,
     ) {}
 
     /**
@@ -69,6 +70,10 @@ class RealmOperationsService
         ];
 
         $snapshot['evidence_graph'] = $this->evidenceGraph->project($snapshot);
+        $snapshot['graph_validation'] = $this->evidenceGraphValidator->validate(
+            $snapshot['evidence_graph'],
+            EvidenceGraphSchema::v03(),
+        );
 
         return $snapshot;
     }

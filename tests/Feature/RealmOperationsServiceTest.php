@@ -6,6 +6,8 @@ use App\Models\SimpleL1EvidencePackage;
 use App\Models\SimpleL1NodeObservation;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Realm\EvidenceGraphSchema;
+use App\Services\Realm\EvidenceGraphValidator;
 use App\Services\Realm\RealmOperationsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -391,7 +393,12 @@ test('realm operations evidence graph exposes navigable nodes and edges', functi
     $snapshot = app(RealmOperationsService::class)->snapshot($this->team->id);
     $graph = $snapshot['evidence_graph'];
 
-    expect($graph)->toHaveKeys(['nodes', 'edges'])
+    expect($graph)->toHaveKeys(['schema_ref', 'nodes', 'edges'])
+        ->and($graph['schema_ref'])->toBe('EvidenceGraphSchema:v0.3')
+        ->and($snapshot['graph_validation']['valid'])->toBeTrue()
+        ->and($snapshot['graph_validation']['schema_ref'])->toBe('EvidenceGraphSchema:v0.3')
+        ->and($snapshot['graph_validation']['checked_nodes'])->toBe(9)
+        ->and($snapshot['graph_validation']['checked_edges'])->toBe(5)
         ->and(collect($graph['nodes'])->pluck('id'))->toContain(
             'artifact',
             'protocol-identity',
@@ -407,6 +414,9 @@ test('realm operations evidence graph exposes navigable nodes and edges', functi
     $meshNode = collect($graph['nodes'])->firstWhere('id', 'mesh-convergence-evidence');
     expect($meshNode['value'])->toBe('DIVERGED')
         ->and($meshNode['derived_from'])->toContain('runtime-observation:lena', 'runtime-observation:lena-1-gcl');
+
+    $meshEdges = collect($graph['edges'])->where('to', 'mesh-convergence-evidence');
+    expect($meshEdges->pluck('edge_kind')->unique()->values()->all())->toBe(['explanation']);
 
     $semanticNode = collect($graph['nodes'])->firstWhere('id', 'semantic-health');
     expect($semanticNode['trust_state'])->toBe('UNKNOWN');
@@ -473,6 +483,245 @@ test('realm operations evidence graph projection is deterministic over same evid
     };
 
     expect($stripVolatile($graphFirst))->toEqual($stripVolatile($graphSecond));
+});
+
+test('independent validators over the same graph produce the same structural verdict', function () {
+    config([
+        'sovereign.realm_operations.runtime_status_urls' => ['http://lena.test'],
+        'sovereign.realm_operations.runtime_node_observations' => [
+            ['node_id' => 'lena', 'url' => 'http://lena.test'],
+            ['node_id' => 'lena-1-gcl', 'url' => 'http://lena-1-gcl.test'],
+        ],
+    ]);
+
+    Http::fake([
+        'http://lena.test/api/sl1e/runtime/status' => Http::response([
+            'identity_realm' => ['state_root' => 'root-a', 'event_count' => 5, 'history_head' => 'head-a', 'history_head_kind' => 'event_log_hash'],
+        ], 200),
+        'http://lena-1-gcl.test/api/sl1e/runtime/status' => Http::response([
+            'identity_realm' => ['state_root' => 'root-b', 'event_count' => 5, 'history_head' => 'head-b', 'history_head_kind' => 'event_log_hash'],
+        ], 200),
+        'http://lena.test/api/sl1e/runtime/verification/shadow' => Http::response([], 404),
+        'http://lena-1-gcl.test/api/sl1e/runtime/verification/shadow' => Http::response([], 404),
+    ]);
+
+    $graph = app(RealmOperationsService::class)->snapshot($this->team->id)['evidence_graph'];
+
+    // Two independent validator instances, each with its own state, over the same
+    // graph + same schema_ref + same validator_version. The structural verdict
+    // (valid / errors / schema_ref / validator_version) must be identical.
+    // This extends the Law of Independent Projection to the validation layer.
+    $first = (new EvidenceGraphValidator())->validate($graph, EvidenceGraphSchema::v03());
+    $second = (new EvidenceGraphValidator())->validate($graph, EvidenceGraphSchema::v03());
+
+    $stripObservationTime = function (array $result): array {
+        // validated_at is observation metadata, not part of the structural verdict.
+        unset($result['validated_at']);
+
+        return $result;
+    };
+
+    expect($stripObservationTime($first))->toEqual($stripObservationTime($second))
+        ->and($first['validator_version'])->toBe(EvidenceGraphValidator::VALIDATOR_VERSION)
+        ->and($first['schema_ref'])->toBe(EvidenceGraphSchema::SCHEMA_REF)
+        ->and($first['valid'])->toBe($second['valid']);
+});
+
+test('evidence graph validator accepts valid lineage edge', function () {
+    $graph = [
+        'schema_ref' => 'EvidenceGraphSchema:v0.3',
+        'nodes' => [
+            [
+                'id' => 'runtime-observation:lena',
+                'kind' => 'RuntimeObservation',
+                'value' => 'root-a',
+                'trust_state' => 'OK',
+                'authority' => 'Runtime',
+                'source' => 'Runtime Endpoint',
+                'evidence_ref' => 'runtime-observation:lena',
+                'observed_at' => null,
+                'details' => [],
+                'derived_from' => [],
+            ],
+            [
+                'id' => 'verification-report',
+                'kind' => 'VerificationReport',
+                'value' => 'UNKNOWN',
+                'trust_state' => 'UNKNOWN',
+                'authority' => 'Verifier',
+                'source' => 'Verifier',
+                'evidence_ref' => 'verification-report:shadow',
+                'observed_at' => null,
+                'details' => [],
+                'derived_from' => [],
+            ],
+        ],
+        'edges' => [
+            [
+                'from' => 'runtime-observation:lena',
+                'to' => 'verification-report',
+                'edge_kind' => 'lineage',
+                'relation' => 'observed_from',
+                'reason' => 'Shadow verification consumes runtime observation as replay input.',
+                'evidence_ref' => 'verification-report:shadow',
+            ],
+        ],
+    ];
+
+    $result = app(EvidenceGraphValidator::class)->validate($graph, EvidenceGraphSchema::v03());
+
+    expect($result['valid'])->toBeTrue()
+        ->and($result['errors'])->toBe([]);
+});
+
+test('evidence graph validator rejects supports relation on lineage edge', function () {
+    $graph = [
+        'schema_ref' => 'EvidenceGraphSchema:v0.3',
+        'nodes' => [
+            [
+                'id' => 'runtime-observation:lena',
+                'kind' => 'RuntimeObservation',
+                'value' => 'root-a',
+                'trust_state' => 'OK',
+                'authority' => 'Runtime',
+                'source' => 'Runtime Endpoint',
+                'evidence_ref' => 'runtime-observation:lena',
+                'observed_at' => null,
+                'details' => [],
+                'derived_from' => [],
+            ],
+            [
+                'id' => 'semantic-health',
+                'kind' => 'SemanticHealth',
+                'value' => 'OK',
+                'trust_state' => 'OK',
+                'authority' => 'Verifier',
+                'source' => 'OperationsProjection',
+                'evidence_ref' => 'semantic-health:projection',
+                'observed_at' => null,
+                'details' => [],
+                'derived_from' => [],
+            ],
+        ],
+        'edges' => [
+            [
+                'from' => 'runtime-observation:lena',
+                'to' => 'semantic-health',
+                'edge_kind' => 'lineage',
+                'relation' => 'supports',
+                'reason' => 'Invalid shortcut from runtime observation to semantic health.',
+                'evidence_ref' => 'invalid:test',
+            ],
+        ],
+    ];
+
+    $result = app(EvidenceGraphValidator::class)->validate($graph, EvidenceGraphSchema::v03());
+    $codes = collect($result['errors'])->pluck('code')->all();
+
+    expect($result['valid'])->toBeFalse()
+        ->and($codes)->toContain('INVALID_EDGE_SEMANTICS');
+});
+
+test('evidence graph validator rejects semantic health without derivation path', function () {
+    $graph = [
+        'schema_ref' => 'EvidenceGraphSchema:v0.3',
+        'nodes' => [
+            [
+                'id' => 'semantic-health',
+                'kind' => 'SemanticHealth',
+                'value' => 'UNKNOWN',
+                'trust_state' => 'UNKNOWN',
+                'authority' => 'Verifier',
+                'source' => 'OperationsProjection',
+                'evidence_ref' => 'semantic-health:projection',
+                'observed_at' => null,
+                'details' => [],
+                'derived_from' => [],
+            ],
+        ],
+        'edges' => [],
+    ];
+
+    $result = app(EvidenceGraphValidator::class)->validate($graph, EvidenceGraphSchema::v03());
+    $codes = collect($result['errors'])->pluck('code')->all();
+
+    expect($result['valid'])->toBeFalse()
+        ->and($codes)->toContain('MISSING_DERIVATION_PATH');
+});
+
+test('evidence graph validator rejects authority-bearing node without authority declaration', function () {
+    $graph = [
+        'schema_ref' => 'EvidenceGraphSchema:v0.3',
+        'nodes' => [
+            [
+                'id' => 'runtime-observation:lena',
+                'kind' => 'RuntimeObservation',
+                'value' => 'root-a',
+                'trust_state' => 'OK',
+                'authority' => 'UNKNOWN',
+                'source' => 'Runtime Endpoint',
+                'evidence_ref' => 'runtime-observation:lena',
+                'observed_at' => null,
+                'details' => [],
+                'derived_from' => [],
+            ],
+        ],
+        'edges' => [],
+    ];
+
+    $result = app(EvidenceGraphValidator::class)->validate($graph, EvidenceGraphSchema::v03());
+    $codes = collect($result['errors'])->pluck('code')->all();
+
+    expect($result['valid'])->toBeFalse()
+        ->and($codes)->toContain('MISSING_AUTHORITY_DECLARATION');
+});
+
+test('evidence graph validator rejects control-plane relations', function () {
+    $graph = [
+        'schema_ref' => 'EvidenceGraphSchema:v0.3',
+        'nodes' => [
+            [
+                'id' => 'runtime-observation:lena',
+                'kind' => 'RuntimeObservation',
+                'value' => 'root-a',
+                'trust_state' => 'OK',
+                'authority' => 'Runtime',
+                'source' => 'Runtime Endpoint',
+                'evidence_ref' => 'runtime-observation:lena',
+                'observed_at' => null,
+                'details' => [],
+                'derived_from' => [],
+            ],
+            [
+                'id' => 'realm-decision',
+                'kind' => 'SemanticHealth',
+                'value' => 'OK',
+                'trust_state' => 'OK',
+                'authority' => 'Verifier',
+                'source' => 'OperationsProjection',
+                'evidence_ref' => 'realm-decision:hidden',
+                'observed_at' => null,
+                'details' => [],
+                'derived_from' => [],
+            ],
+        ],
+        'edges' => [
+            [
+                'from' => 'runtime-observation:lena',
+                'to' => 'realm-decision',
+                'edge_kind' => 'explanation',
+                'relation' => 'grants_authority',
+                'reason' => 'Hidden control-plane escalation.',
+                'evidence_ref' => 'invalid:control-plane',
+            ],
+        ],
+    ];
+
+    $result = app(EvidenceGraphValidator::class)->validate($graph, EvidenceGraphSchema::v03());
+    $codes = collect($result['errors'])->pluck('code')->all();
+
+    expect($result['valid'])->toBeFalse()
+        ->and($codes)->toContain('FORBIDDEN_EDGE_RELATION');
 });
 
 test('realm operations status normalization is conservative', function () {

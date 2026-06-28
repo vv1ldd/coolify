@@ -254,6 +254,173 @@ Blade may traverse.
 Blade may not infer.
 ```
 
+### Evidence graph language (v0.3)
+
+v0 made evidence visible. v0.1 made evidence comparable. v0.2 made evidence
+navigable. v0.3 makes the evidence graph accountable for its own language.
+
+```text
+v0    Evidence visibility
+v0.1  Evidence comparison
+v0.2  Evidence explanation / navigation
+v0.3  Evidence language validity
+```
+
+The pipeline becomes:
+
+```text
+EvidenceGraph (v0.2)
+  -> EvidenceGraphSchema:v0.3
+  -> EvidenceGraphValidator
+  -> GraphValidationResult
+  -> Projection
+```
+
+The validator checks whether an explanation is expressed in legal language. It
+does not check Realm correctness.
+
+```text
+VALID graph = the explanation structure is honest
+VALID graph != VALID Realm
+VALID graph != VALID protocol state
+VALID graph != VALID authority decision
+```
+
+**Law of Typed Causality**
+
+Every edge declares an `edge_kind`. Lineage and explanation are distinct edge
+kinds and may not be silently mixed.
+
+```text
+lineage     = origin     (how a fact came to exist)
+explanation = justification (how a conclusion is supported)
+
+origin != justification
+```
+
+**Law of Edge Semantics**
+
+A `relation` is legal only for its declared `edge_kind`, under the schema.
+
+```text
+observed_from + lineage      -> legal
+supports      + lineage      -> INVALID_EDGE_SEMANTICS
+```
+
+**Law of Explicit Derivation**
+
+A conclusion node (for example `SemanticHealth`, `MeshConvergenceEvidence`) must
+expose an explicit derivation or blocking path.
+
+```text
+SemanticHealth without derivation path -> MISSING_DERIVATION_PATH
+```
+
+No hidden conclusion.
+
+**Law of Declared Authority**
+
+An authority-bearing node must declare its authority domain. An orphan authority
+is rejected.
+
+```text
+RuntimeObservation authority UNKNOWN -> MISSING_AUTHORITY_DECLARATION
+```
+
+No orphan authority.
+
+**Law of Non-Decision (Control-Plane Closure)**
+
+The graph may explain. The graph may not command. Control-plane relations are
+forbidden by the schema and rejected by the validator.
+
+```text
+grants_authority -> FORBIDDEN_EDGE_RELATION
+repairs, elects, promotes, synchronizes, decides -> rejected
+```
+
+This closes the most dangerous degradation path:
+
+```text
+evidence graph -> control plane    (forbidden)
+
+Graph explains.
+Graph does not command.
+```
+
+**Law of Validator Non-Participation**
+
+The validator is not a participant in the proof. It adds no meaning, repairs no
+graph, and adds no edges.
+
+```text
+GraphValidator does not add meaning.
+GraphValidator checks that meaning is expressed legally.
+```
+
+An invalid graph does not make the system invalid. It only means the explanation
+artifact is malformed.
+
+```text
+invalid graph -> the explanation artifact is malformed
+invalid graph -> NOT system invalid
+```
+
+**Law of Validation as Evidence**
+
+`GraphValidationResult` is itself evidence: the graph is `evaluated_by` the
+validator. But it proves only structure, never reality.
+
+```text
+EvidenceGraph -- evaluated_by --> GraphValidationResult
+
+GraphValidationResult proves graph structure, not reality.
+```
+
+**Law of Independent Validation**
+
+The Law of Independent Projection extends to the validation layer. Independent
+validators over the same graph must produce the same structural verdict.
+
+```text
+same graph + same schema_ref + same validator_version
+  -> same GraphValidationResult
+```
+
+`validated_at` is observation metadata, not part of the structural verdict. A
+disagreement between validator instances is a validator defect, not Realm
+disagreement.
+
+**Law of Versioned Graph Semantics**
+
+The graph declares the `schema_ref` used to interpret its relations. Graph
+language semantics may change only by bumping the schema version (for example
+`EvidenceGraphSchema:v0.4`). No semantic drift without a schema version bump.
+
+```text
+EvidenceGraph without schema_ref -> MISSING_OR_MISMATCHED_SCHEMA_REF
+```
+
+The v0.3 boundary, in one line:
+
+```text
+Graph may reject dishonest explanation.
+Graph may not decide reality.
+```
+
+The full responsibility chain after v0.3:
+
+```text
+Protocol defines meaning.
+Runtime reports reality.
+Evidence preserves facts.
+Schema defines expression.
+Validator protects structure.
+Verifier proves interpretation.
+Projection exposes navigation.
+Human decides.
+```
+
 ### Evolution principle
 
 This is a product-development rule, not a data invariant.
@@ -359,6 +526,8 @@ Examples:
 | Lineage visualization      | Operations Console                 |
 | Multi-verifier comparison  | Operations Console                 |
 | Mesh convergence evidence| Operations Console                 |
+| Evidence graph navigation  | Operations Console                 |
+| Evidence graph schema/validation | Operations Console           |
 | Replay request workflow    | Protocol-aware workflow            |
 
 ### Review checklist

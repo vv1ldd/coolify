@@ -35,6 +35,7 @@ class EvidenceGraphProjection
         $this->addProcessHealthNode($snapshot['process_health'] ?? []);
 
         return [
+            'schema_ref' => EvidenceGraphSchema::SCHEMA_REF,
             'nodes' => $this->withDerivedFromIndex($this->nodes),
             'edges' => $this->edges,
         ];
@@ -159,18 +160,22 @@ class EvidenceGraphProjection
             $this->addEdge([
                 'from' => $from,
                 'to' => $meshNodeId,
+                'edge_kind' => EvidenceGraphSchema::EDGE_KIND_EXPLANATION,
                 'relation' => 'compared_against',
                 'reason' => 'Runtime observation participates in mesh convergence comparison under '.$contractRef.'.',
                 'evidence_ref' => $evidenceRef,
+                'contract_ref' => $contractRef,
             ]);
         }
 
         $this->addEdge([
             'from' => $meshNodeId,
             'to' => $contractRef,
+            'edge_kind' => EvidenceGraphSchema::EDGE_KIND_EXPLANATION,
             'relation' => 'evaluated_by',
             'reason' => 'Mesh convergence result produced under explicit runtime comparison contract.',
             'evidence_ref' => $contractRef,
+            'contract_ref' => $contractRef,
         ]);
     }
 
@@ -224,6 +229,7 @@ class EvidenceGraphProjection
             $this->addEdge([
                 'from' => $primaryRuntimeNodeId,
                 'to' => $verificationNodeId,
+                'edge_kind' => EvidenceGraphSchema::EDGE_KIND_LINEAGE,
                 'relation' => 'observed_from',
                 'reason' => 'Shadow verification consumes runtime observation as replay input.',
                 'evidence_ref' => 'verification-report:shadow',
@@ -234,6 +240,7 @@ class EvidenceGraphProjection
             $this->addEdge([
                 'from' => $verificationNodeId,
                 'to' => $semanticNodeId,
+                'edge_kind' => EvidenceGraphSchema::EDGE_KIND_EXPLANATION,
                 'relation' => 'derived_from',
                 'reason' => 'Semantic health is projected from verifier report evidence.',
                 'evidence_ref' => 'semantic-health:projection',
@@ -246,6 +253,7 @@ class EvidenceGraphProjection
             $this->addEdge([
                 'from' => $semanticNodeId,
                 'to' => $verificationNodeId,
+                'edge_kind' => EvidenceGraphSchema::EDGE_KIND_EXPLANATION,
                 'relation' => 'blocked_by',
                 'reason' => $blockedReason,
                 'evidence_ref' => 'semantic-health:projection',
