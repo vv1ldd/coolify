@@ -341,3 +341,15 @@ The verifier's role after v0.3:
 It does not determine reality.
 It classifies whether the available evidence path supports a bounded claim.
 ```
+
+## Relationship to ADR 0014 and platform ADR-0095
+
+The general composition law — each layer publishes a stable contract and
+downstream layers consume only that contract — is owned by platform
+**ADR-0095 (Layer Composition Boundary)** in `simple-l1`. The verifier's
+`VerificationReport` under `VerifierSemanticBoundary:v0.1` is the interpretation
+layer's published artifact; decision and execution layers must not bypass it.
+
+This fork adopts that canon through ADR 0014.
+
+See [ADR 0014](0014-layer-composition-boundary.md).
