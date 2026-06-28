@@ -569,6 +569,14 @@ ADR 0012 extends the same discipline to Realm Operations Console projections:
 - deployment success does not imply verification success
 - summarized console output does not substitute sealed evidence
 
+## Relationship to ADR 0013
+
+ADR 0013 defines the verifier semantic boundary after v0.3 bounded claim
+language. Graph validation checks structural honesty; verifier evaluation checks
+bounded proof interpretation. Neither layer authorizes Realm action.
+
+See [ADR 0013](0013-verifier-semantic-boundary.md).
+
 ## Consequences
 
 The console may grow rich explainability features (timelines, drill-downs,
