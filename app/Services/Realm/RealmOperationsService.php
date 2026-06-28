@@ -98,6 +98,13 @@ class RealmOperationsService
             'history_head' => $this->stringOrUnknown(
                 $evidence['history_head']
                     ?? $remote['history_head']
+                    ?? $identityRealm['history_head']
+                    ?? null
+            ),
+            'history_head_kind' => $this->stringOrUnknown(
+                $evidence['history_head_kind']
+                    ?? $remote['history_head_kind']
+                    ?? $identityRealm['history_head_kind']
                     ?? null
             ),
             'state_root' => $this->stringOrUnknown(
@@ -105,8 +112,10 @@ class RealmOperationsService
                     ?? $identityRealm['state_root']
                     ?? null
             ),
-            'last_transition' => $this->stringOrUnknown(
+            'last_transition' => $this->transitionLabel(
                 $evidence['last_transition']
+                    ?? $remote['last_transition']
+                    ?? $identityRealm['last_transition']
                     ?? $evidence['last_event_type']
                     ?? null
             ),
@@ -327,5 +336,14 @@ class RealmOperationsService
         }
 
         return (string) $value;
+    }
+
+    private function transitionLabel(mixed $value): string
+    {
+        if (is_array($value)) {
+            return $this->stringOrUnknown($value['type'] ?? $value['id'] ?? null);
+        }
+
+        return $this->stringOrUnknown($value);
     }
 }

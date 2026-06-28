@@ -105,6 +105,37 @@ test('realm operations snapshot aggregates sealed evidence and runtime probe', f
         ->and($snapshot['evidence_refs']['package_count'])->toBe(1);
 });
 
+test('realm operations snapshot reads runtime causality from identity realm status', function () {
+    config([
+        'sovereign.realm_operations.runtime_status_urls' => ['http://runtime.test'],
+    ]);
+
+    Http::fake([
+        'http://runtime.test/api/sl1e/runtime/status' => Http::response([
+            'identity_realm' => [
+                'state_root' => 'root-from-runtime',
+                'event_count' => 5,
+                'history_head' => 'event-log-head',
+                'history_head_kind' => 'event_log_hash',
+                'last_transition' => [
+                    'type' => 'ACCOUNT_PROVENANCE_ADMISSION',
+                    'id' => 'provadm_test',
+                    'timestamp' => '2026-06-27T00:01:00.000Z',
+                ],
+            ],
+        ], 200),
+    ]);
+
+    $snapshot = app(RealmOperationsService::class)->snapshot($this->team->id);
+
+    expect($snapshot['runtime']['history_head'])->toBe('event-log-head')
+        ->and($snapshot['runtime']['history_head_kind'])->toBe('event_log_hash')
+        ->and($snapshot['runtime']['last_transition'])->toBe('ACCOUNT_PROVENANCE_ADMISSION')
+        ->and($snapshot['runtime']['state_root'])->toBe('root-from-runtime')
+        ->and($snapshot['runtime']['event_count'])->toBe(5)
+        ->and($snapshot['runtime']['reachable'])->toBeTrue();
+});
+
 test('realm operations page renders read-only evidence surface', function () {
     config([
         'sovereign.realm_operations.runtime_status_urls' => [],
