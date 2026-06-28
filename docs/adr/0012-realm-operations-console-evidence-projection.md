@@ -128,6 +128,38 @@ Semantic Health: OK
                      └── Artifact
 ```
 
+**Law of Evidence Quality**
+
+The console may expose uncertainty, but it must not convert missing evidence
+into confidence.
+
+```text
+UNKNOWN + explanation  >  false OK
+```
+
+Never fix a red indicator by changing the indicator. Fix the evidence source.
+
+**Law of Evidence Separation**
+
+Process evidence, runtime evidence, and semantic evidence must remain
+distinguishable. The console must not collapse them into a single aggregated
+status such as `overall_status = green`.
+
+```text
+Process Health   = execution surface responds
+Runtime Reality  = Realm-derived state is observable
+Semantic Health  = meaning is independently verified
+```
+
+**Law of Projection Closure**
+
+Every projection must be complete enough that the UI never needs to derive
+protocol meaning. `RealmOperationsService` is responsible for producing
+semantically complete projections; the UI must not reconstruct evidence.
+
+If a Blade template needs an `if`-statement about meaning, the projection is
+incomplete.
+
 ### Evolution principle
 
 This is a product-development rule, not a data invariant.
