@@ -11,11 +11,13 @@ return [
     'catalog_source_url' => env('CATALOG_SOURCE_URL'),
     'catalog_source_auth_token' => env('CATALOG_SOURCE_AUTH_TOKEN', env('DIGITAL_GOODS_SOURCE_PLATFORM_TOKEN')),
     'edge_mode' => (bool) env('DGS_EDGE_MODE', false),
+    'ezpin_sandbox' => filter_var(env('EZPIN_SANDBOX', false), FILTER_VALIDATE_BOOL),
     'providers' => [
         'ezpin' => [
             'base_url' => env('EZPIN_BASE_URL'),
             'client_id' => env('EZPIN_CLIENT_ID'),
             'secret_key' => env('EZPIN_SECRET_KEY'),
+            'sandbox' => filter_var(env('EZPIN_SANDBOX', false), FILTER_VALIDATE_BOOL),
         ],
         'fazer' => [
             'base_url' => env('FAZER_BASE_URL'),
