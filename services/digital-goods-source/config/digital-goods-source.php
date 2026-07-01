@@ -8,6 +8,9 @@ return [
     'platform_token' => env('DIGITAL_GOODS_SOURCE_PLATFORM_TOKEN', env('WILDFLOW_KERNEL_PLATFORM_TOKEN')),
     'financial_secret' => env('DIGITAL_GOODS_SOURCE_FINANCIAL_SECRET', env('WILDFLOW_KERNEL_FINANCIAL_SECRET')),
     'signature_tolerance_seconds' => (int) env('DIGITAL_GOODS_SOURCE_SIGNATURE_TOLERANCE', env('WILDFLOW_KERNEL_SIGNATURE_TOLERANCE', 300)),
+    'catalog_source_url' => env('CATALOG_SOURCE_URL'),
+    'catalog_source_auth_token' => env('CATALOG_SOURCE_AUTH_TOKEN', env('DIGITAL_GOODS_SOURCE_PLATFORM_TOKEN')),
+    'edge_mode' => (bool) env('DGS_EDGE_MODE', false),
     'providers' => [
         'ezpin' => [
             'base_url' => env('EZPIN_BASE_URL'),

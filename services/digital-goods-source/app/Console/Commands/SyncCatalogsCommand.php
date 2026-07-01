@@ -28,13 +28,23 @@ class SyncCatalogsCommand extends Command
         }
 
         foreach ($providers as $provider) {
-            $source = $this->option('source') ?: data_get($provider->settings, 'catalog_source_url');
+            $source = $this->option('source')
+                ?: data_get($provider->settings, 'catalog_source_url')
+                ?: config('digital-goods-source.catalog_source_url');
             if (! $source) {
                 $this->line("Provider {$provider->type}: no catalog source configured; skipping.");
+
                 continue;
             }
 
-            $response = Http::timeout(120)->acceptJson()->get($source);
+            $request = Http::timeout(120)->acceptJson();
+            $authToken = data_get($provider->settings, 'catalog_source_auth_token')
+                ?: config('digital-goods-source.catalog_source_auth_token');
+            if (filled($authToken)) {
+                $request = $request->withHeaders(['X-Auth-Token' => (string) $authToken]);
+            }
+
+            $response = $request->get($source);
             if ($response->failed()) {
                 $this->error("Provider {$provider->type}: failed to fetch catalog source.");
 
