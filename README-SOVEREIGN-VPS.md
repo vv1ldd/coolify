@@ -136,6 +136,9 @@ The `simple-l1` service:
   WebAuthn proves passkey possession
 - health-checks `http://127.0.0.1:3000/healthcheck`
 - exposes Traefik routers for `SIMPLE_L1_DOMAIN`, defaulting to `simplel1.online`
+- when ADR-0030 ceremony delegation is enabled, also routes
+  `SIMPLE_L1_CEREMONY_DOMAIN` (for example `connect.identity.meanly.one`) and
+  passes `SL1_ISSUER_CEREMONY_MAP` into the `simple-l1` container environment
 - exposes an HTTP-only `/healthcheck` route before HTTPS redirect so peer nodes
   can probe `http://NODE_IP/healthcheck` with `Host: simplel1.online`
 
